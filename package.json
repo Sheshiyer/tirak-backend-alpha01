@@ -1,0 +1,46 @@
+{
+  "name": "tirak-backend",
+  "version": "1.0.0",
+  "description": "Tirak companion booking platform backend API",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy:staging": "./scripts/deploy.sh staging",
+    "deploy:production": "./scripts/deploy.sh production",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest --watch",
+    "test:ui": "vitest --ui",
+    "db:migrate": "wrangler d1 migrations apply tirak-development",
+    "db:migrate:staging": "wrangler d1 migrations apply tirak-staging --env staging",
+    "db:migrate:production": "wrangler d1 migrations apply tirak-production --env production",
+    "db:seed": "wrangler d1 execute tirak-development --file ./scripts/seed-data.sql",
+    "logs": "wrangler tail --format pretty",
+    "logs:staging": "wrangler tail --env staging --format pretty",
+    "logs:production": "wrangler tail --env production --format pretty"
+  },
+  "keywords": ["cloudflare", "workers", "api", "backend", "tirak"],
+  "author": "Tirak Team",
+  "license": "MIT",
+  "dependencies": {
+    "@hono/zod-validator": "^0.7.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.9",
+    "bcryptjs": "^3.0.2",
+    "hono": "^4.7.11",
+    "jsonwebtoken": "^9.0.2",
+    "zod": "^3.25.56"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250607.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22.8.6",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.3",
+    "@vitest/coverage-v8": "^1.6.0",
+    "happy-dom": "^12.10.3",
+    "wrangler": "^4.19.1"
+  }
+}

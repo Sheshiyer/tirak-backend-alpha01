@@ -1,0 +1,201 @@
+name = "tirak-backend"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Development environment (default)
+[env.development]
+name = "tirak-backend-dev"
+
+# Staging environment
+[env.staging]
+name = "tirak-backend-staging"
+
+# Production environment
+[env.production]
+name = "tirak-backend-production"
+
+# D1 Database bindings
+[[d1_databases]]
+binding = "DB"
+database_name = "tirak-development"
+database_id = "placeholder-dev-db-id"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "tirak-staging"
+database_id = "placeholder-staging-db-id"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "tirak-production"
+database_id = "placeholder-production-db-id"
+
+# R2 Storage bindings
+[[r2_buckets]]
+binding = "STORAGE"
+bucket_name = "tirak-storage-dev"
+
+[[env.staging.r2_buckets]]
+binding = "STORAGE"
+bucket_name = "tirak-storage-staging"
+
+[[env.production.r2_buckets]]
+binding = "STORAGE"
+bucket_name = "tirak-storage-production"
+
+# KV Namespaces
+[[kv_namespaces]]
+binding = "CACHE"
+id = "placeholder-cache-dev-id"
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "placeholder-sessions-dev-id"
+
+[[env.staging.kv_namespaces]]
+binding = "CACHE"
+id = "placeholder-cache-staging-id"
+
+[[env.staging.kv_namespaces]]
+binding = "SESSIONS"
+id = "placeholder-sessions-staging-id"
+
+[[env.production.kv_namespaces]]
+binding = "CACHE"
+id = "placeholder-cache-production-id"
+
+[[env.production.kv_namespaces]]
+binding = "SESSIONS"
+id = "placeholder-sessions-production-id"
+
+# Queue bindings
+[[queues.producers]]
+binding = "MODERATION_QUEUE"
+queue = "tirak-moderation-dev"
+
+[[queues.producers]]
+binding = "ANALYTICS_QUEUE"
+queue = "tirak-analytics-dev"
+
+[[queues.producers]]
+binding = "NOTIFICATION_QUEUE"
+queue = "tirak-notification-dev"
+
+[[env.staging.queues.producers]]
+binding = "MODERATION_QUEUE"
+queue = "tirak-moderation-staging"
+
+[[env.staging.queues.producers]]
+binding = "ANALYTICS_QUEUE"
+queue = "tirak-analytics-staging"
+
+[[env.staging.queues.producers]]
+binding = "NOTIFICATION_QUEUE"
+queue = "tirak-notification-staging"
+
+[[env.production.queues.producers]]
+binding = "MODERATION_QUEUE"
+queue = "tirak-moderation-production"
+
+[[env.production.queues.producers]]
+binding = "ANALYTICS_QUEUE"
+queue = "tirak-analytics-production"
+
+[[env.production.queues.producers]]
+binding = "NOTIFICATION_QUEUE"
+queue = "tirak-notification-production"
+
+# Queue consumers
+[[queues.consumers]]
+queue = "tirak-moderation-dev"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "tirak-moderation-dlq-dev"
+
+[[queues.consumers]]
+queue = "tirak-analytics-dev"
+max_batch_size = 50
+max_batch_timeout = 60
+max_retries = 3
+dead_letter_queue = "tirak-analytics-dlq-dev"
+
+[[queues.consumers]]
+queue = "tirak-notification-dev"
+max_batch_size = 20
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "tirak-notification-dlq-dev"
+
+[[env.staging.queues.consumers]]
+queue = "tirak-moderation-staging"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "tirak-moderation-dlq-staging"
+
+[[env.staging.queues.consumers]]
+queue = "tirak-analytics-staging"
+max_batch_size = 50
+max_batch_timeout = 60
+max_retries = 3
+dead_letter_queue = "tirak-analytics-dlq-staging"
+
+[[env.staging.queues.consumers]]
+queue = "tirak-notification-staging"
+max_batch_size = 20
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "tirak-notification-dlq-staging"
+
+[[env.production.queues.consumers]]
+queue = "tirak-moderation-production"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "tirak-moderation-dlq-production"
+
+[[env.production.queues.consumers]]
+queue = "tirak-analytics-production"
+max_batch_size = 50
+max_batch_timeout = 60
+max_retries = 3
+dead_letter_queue = "tirak-analytics-dlq-production"
+
+[[env.production.queues.consumers]]
+queue = "tirak-notification-production"
+max_batch_size = 20
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "tirak-notification-dlq-production"
+
+# Durable Objects
+[[durable_objects.bindings]]
+name = "CHAT_ROOM"
+class_name = "ChatRoom"
+
+[[durable_objects.bindings]]
+name = "NOTIFICATION_SERVICE"
+class_name = "NotificationService"
+
+# Durable Object migrations
+[[migrations]]
+tag = "v1"
+new_classes = ["ChatRoom", "NotificationService"]
+
+# Environment variables (secrets will be set via wrangler secret)
+[vars]
+ENVIRONMENT = "development"
+FRONTEND_URLS = "http://localhost:3000,http://localhost:5173"
+JWT_SECRET = "dev-jwt-secret-change-in-production"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+FRONTEND_URLS = "https://staging.tirak.app"
+JWT_SECRET = "staging-jwt-secret"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+FRONTEND_URLS = "https://tirak.app,https://www.tirak.app"
+JWT_SECRET = "production-jwt-secret"
