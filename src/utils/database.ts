@@ -8,8 +8,11 @@ export async function createUser(userData: {
   email: string;
   phone: string;
   passwordHash: string;
-  userType: 'customer' | 'supplier';
+  userType: 'customer' | 'supplier' | 'admin';
   preferredLanguage?: string;
+  status?: 'active' | 'suspended' | 'pending';
+  phoneVerified?: boolean;
+  emailVerified?: boolean;
 }, db: D1Database): Promise<User> {
   const user = {
     id: userData.id,
@@ -17,9 +20,9 @@ export async function createUser(userData: {
     phone: userData.phone,
     passwordHash: userData.passwordHash,
     userType: userData.userType,
-    status: 'pending' as const,
-    emailVerified: false,
-    phoneVerified: false,
+    status: userData.status || 'pending' as const,
+    emailVerified: userData.emailVerified || false,
+    phoneVerified: userData.phoneVerified || false,
     preferredLanguage: (userData.preferredLanguage || 'en') as 'en' | 'th',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

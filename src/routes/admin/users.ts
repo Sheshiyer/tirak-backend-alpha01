@@ -23,7 +23,15 @@ const userSearchSchema = z.object({
   status: z.enum(['active', 'suspended', 'pending']).optional(),
   verified: z.boolean().optional(),
   sortBy: z.enum(['created_at', 'last_login_at', 'email']).default('created_at'),
-  sortOrder: z.enum(['asc', 'desc']).default('desc')
+  sortOrder: z.enum(['asc', 'desc']).default('desc'),
+  page: z.string().optional().transform(val => val ? parseInt(val, 10) : 1),
+  limit: z.string().optional().transform(val => val ? parseInt(val, 10) : 20)
+}).refine(data => data.page > 0, {
+  message: 'Page must be greater than 0',
+  path: ['page']
+}).refine(data => data.limit > 0 && data.limit <= 100, {
+  message: 'Limit must be between 1 and 100',
+  path: ['limit']
 });
 
 const userUpdateSchema = z.object({
@@ -39,12 +47,112 @@ const bulkActionSchema = z.object({
   reason: z.string().optional()
 });
 
+// Stats query schema
+const statsQuerySchema = z.object({
+  userType: z.string().optional().transform(val => {
+    // Validate if provided, but make it optional
+    if (val && ['customer', 'supplier', 'admin'].includes(val)) {
+      return val;
+    }
+    return undefined;
+  })
+});
+
+/**
+ * Get user stats grouped by user type or filtered by specific user type
+ */
+users.get('/stats', async (c) => {
+  // Get userType query param directly
+  const userType = c.req.query('userType');
+  
+  try {
+    // Base WHERE clause
+    let whereClause = '';
+    const params: any[] = [];
+    
+    if (userType) {
+      whereClause = 'WHERE user_type = ?';
+      params.push(userType);
+    }
+    
+    // Get user counts by status
+    const userStatusStats = await c.env.DB.prepare(`
+      SELECT 
+        user_type,
+        status,
+        COUNT(*) as count
+      FROM users
+      ${whereClause}
+      GROUP BY user_type, status
+    `).bind(...params).all();
+
+    // Get user verification stats
+    const verificationStats = await c.env.DB.prepare(`
+      SELECT 
+        user_type,
+        COUNT(CASE WHEN email_verified = TRUE THEN 1 END) as email_verified_count,
+        COUNT(CASE WHEN phone_verified = TRUE THEN 1 END) as phone_verified_count,
+        COUNT(*) as total_count
+      FROM users
+      ${whereClause}
+      GROUP BY user_type
+    `).bind(...params).all();
+
+    // Get activity stats
+    const activityStats = await c.env.DB.prepare(`
+      SELECT 
+        user_type,
+        COUNT(CASE WHEN last_login_at >= datetime('now', '-7 days') THEN 1 END) as active_last_week,
+        COUNT(CASE WHEN last_login_at >= datetime('now', '-30 days') THEN 1 END) as active_last_month,
+        COUNT(*) as total
+      FROM users
+      ${whereClause}
+      GROUP BY user_type
+    `).bind(...params).all();
+
+    // Get supplier specific stats if requested
+    let supplierStats = null;
+    if (userType === 'supplier' || !userType) {
+      supplierStats = await c.env.DB.prepare(`
+        SELECT 
+          verification_status,
+          subscription_status,
+          COUNT(*) as count
+        FROM supplier_profiles
+        GROUP BY verification_status, subscription_status
+      `).all();
+    }
+
+    // Get customer specific stats if requested
+    let customerStats = null;
+    if (userType === 'customer' || !userType) {
+      customerStats = await c.env.DB.prepare(`
+        SELECT 
+          COUNT(*) as total,
+          AVG(loyalty_points) as avg_loyalty_points
+        FROM customer_profiles
+      `).first();
+    }
+
+    return jsonSuccess(c, {
+      statusStats: userStatusStats.results || [],
+      verificationStats: verificationStats.results || [],
+      activityStats: activityStats.results || [],
+      supplierStats: supplierStats?.results || [],
+      customerStats: customerStats || {}
+    }, 'User statistics retrieved successfully');
+
+  } catch (error) {
+    console.error('User stats error:', error);
+    return jsonError(c, 'Failed to retrieve user statistics', 'An error occurred while retrieving user statistics', 500);
+  }
+});
+
 /**
  * Get all users with filtering and pagination
  */
-users.get('/', validatePagination(), zValidator('query', userSearchSchema), async (c) => {
-  const { page, limit } = c.req.valid('query');
-  const { search, userType, status, verified, sortBy, sortOrder } = c.req.valid('query');
+users.get('/', zValidator('query', userSearchSchema), async (c) => {
+  const { page, limit, search, userType, status, verified, sortBy, sortOrder } = c.req.valid('query');
   
   try {
     // Build WHERE clause
@@ -338,5 +446,6 @@ users.post('/bulk-action', zValidator('json', bulkActionSchema), async (c) => {
     return jsonError(c, 'Bulk action failed', 'An error occurred while performing bulk action', 500);
   }
 });
+
 
 export { users as userManagementRoutes };

@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { jwt } from 'hono/jwt';
+import { debugLogger } from './middleware/debug';
+import { defaultHandler } from './utils/defaultHandler';
 import { authRoutes } from './routes/auth';
 import { userRoutes } from './routes/users';
 import { supplierRoutes } from './routes/suppliers';
@@ -55,17 +57,34 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 // WebSocket service instance
 let webSocketService: WebSocketService;
 
+// Debug middleware (remove in production)
+app.use('*', debugLogger());
+
 // Global middleware
 app.use('*', cors({
+  // During development, allow all origins to rule out CORS issues
   origin: (origin, c) => {
+    // For development environments, allow all origins
+    if (c.env.ENVIRONMENT === 'development') {
+      console.log("[CORS] Development mode - allowing origin:", origin);
+      return origin || '*';
+    }
+    
+    // For production, use the configured allowed origins
     const allowedOrigins = c.env.FRONTEND_URLS?.split(',') || [];
+    console.log("[CORS] Checking origin:", origin, "Against allowed origins:", allowedOrigins);
+    
     if (allowedOrigins.includes(origin) || origin?.startsWith('tirak://')) {
       return origin;
     }
+    
+    // Log rejected origin
+    console.log("[CORS] Rejected origin:", origin);
     return null;
   },
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowHeaders: ['Content-Type', 'Authorization'],
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true
 }));
 
 // Initialize WebSocket service
@@ -104,7 +123,11 @@ app.get('/health', (c) => {
 });
 
 // Auth routes (no JWT required)
-app.route('/api/auth', authRoutes);
+// Add defaultHandler middleware to fix 204 responses
+const authApp = new Hono<{ Bindings: Env; Variables: Variables }>();
+authApp.use('*', defaultHandler());
+authApp.route('/', authRoutes);
+app.route('/api/auth', authApp);
 
 // Public routes (no authentication required)
 app.route('/api/public', publicRoutes);

@@ -219,7 +219,7 @@ dashboard.get('/health', async (c) => {
  * Get platform metrics for a specific time range
  */
 dashboard.get('/metrics', validateDateRange(), async (c) => {
-  const { startDate, endDate } = c.req.valid('query');
+  const { startDate, endDate } = c.get('validatedQuery');
   
   try {
     // User registration metrics
@@ -258,12 +258,29 @@ dashboard.get('/metrics', validateDateRange(), async (c) => {
       GROUP BY DATE(created_at)
       ORDER BY date DESC
     `).bind(startDate, endDate).all();
+    
+    // Regional activity metrics
+    const regionalMetrics = await c.env.DB.prepare(`
+      SELECT 
+        r.name_en as region,
+        0 as customers,
+        COUNT(DISTINCT sp.user_id) as suppliers,
+        COUNT(b.id) as activity
+      FROM regions r
+      LEFT JOIN supplier_profiles sp ON JSON_EXTRACT(sp.regions, '$[0]') = r.id
+      LEFT JOIN bookings b ON b.supplier_id = sp.user_id
+        AND DATE(b.created_at) BETWEEN ? AND ?
+      GROUP BY r.id, r.name_en
+      ORDER BY activity DESC
+      LIMIT 10
+    `).bind(startDate, endDate).all();
 
     return jsonSuccess(c, {
       dateRange: { startDate, endDate },
       users: userMetrics.results || [],
       bookings: bookingMetrics.results || [],
-      chat: chatMetrics.results || []
+      chat: chatMetrics.results || [],
+      regional: regionalMetrics.results || []
     }, 'Platform metrics retrieved successfully');
 
   } catch (error) {

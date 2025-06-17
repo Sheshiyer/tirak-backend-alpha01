@@ -72,14 +72,17 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
     const passwordHash = await hashPassword(password);
     const userId = crypto.randomUUID();
     
-    // Create user
+    // Create user with appropriate status (auto-activate admin accounts)
+    const initialStatus = userType === 'admin' ? 'active' : 'pending';
     const user = await createUser({
       id: userId,
       email: normalizedEmail,
       phone: normalizedPhone,
       passwordHash,
       userType,
-      preferredLanguage
+      preferredLanguage,
+      status: initialStatus,
+      phoneVerified: userType === 'admin' // Auto-verify admins
     }, c.env.DB);
 
     // Create user profile based on type
@@ -88,27 +91,30 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
         userId,
         displayName: normalizedEmail.split('@')[0] || 'User', // Default display name
       }, c.env.DB);
-    } else {
+    } else if (userType === 'customer') {
       await createCustomerProfile({
         userId,
         displayName: normalizedEmail.split('@')[0] || 'User', // Default display name
       }, c.env.DB);
+    } 
+    // Admin users don't need specific profiles
+
+    // Generate OTP for phone verification (not needed for admins)
+    if (userType !== 'admin') {
+      const otpData = createOTPData();
+      await c.env.CACHE.put(`otp:${normalizedPhone}`, JSON.stringify(otpData), { expirationTtl: 600 }); // 10 minutes
+
+      // Send OTP via SMS
+      try {
+        const smsConfig = createSMSConfig(c.env);
+        await sendOTPSMS(smsConfig, normalizedPhone, otpData.code);
+      } catch (error) {
+        console.error('Failed to send OTP SMS:', error);
+        // Continue with registration even if SMS fails
+      }
+
+      console.log(`OTP for ${normalizedPhone}: ${otpData.code}`); // Development only
     }
-
-    // Generate OTP for phone verification
-    const otpData = createOTPData();
-    await c.env.CACHE.put(`otp:${normalizedPhone}`, JSON.stringify(otpData), { expirationTtl: 600 }); // 10 minutes
-
-    // Send OTP via SMS
-    try {
-      const smsConfig = createSMSConfig(c.env);
-      await sendOTPSMS(smsConfig, normalizedPhone, otpData.code);
-    } catch (error) {
-      console.error('Failed to send OTP SMS:', error);
-      // Continue with registration even if SMS fails
-    }
-
-    console.log(`OTP for ${normalizedPhone}: ${otpData.code}`); // Development only
     
     // Generate tokens
     const tokens = await generateTokens(user, c.env.JWT_SECRET);

@@ -12,8 +12,8 @@ export const registerSchema = z.object({
   email: z.string().email('Invalid email format'),
   phone: z.string().min(10, 'Phone number must be at least 10 digits'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  userType: z.enum(['customer', 'supplier'], {
-    errorMap: () => ({ message: 'User type must be either customer or supplier' })
+  userType: z.enum(['customer', 'supplier', 'admin'], {
+    errorMap: () => ({ message: 'User type must be either customer, supplier or admin' })
   }),
   preferredLanguage: z.enum(['en', 'th']).default('en')
 });
@@ -166,10 +166,10 @@ export function validateFileUpload(options: {
 
       // Parse form data
       const formData = await c.req.formData();
-      const files: File[] = [];
+      const files: any[] = [];
 
       for (const [key, value] of formData.entries()) {
-        if (value instanceof File) {
+        if (typeof value === 'object' && 'arrayBuffer' in value && 'type' in value) {
           files.push(value);
         }
       }

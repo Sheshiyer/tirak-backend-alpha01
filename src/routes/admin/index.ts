@@ -8,6 +8,7 @@ import { userManagementRoutes } from './users';
 import { moderationRoutes } from './moderation';
 import { analyticsRoutes } from './analytics';
 import { subscriptionRoutes } from './subscriptions';
+import { safetyRoutes } from './safety';
 import type { Env, Variables } from '../../index';
 
 const admin = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -28,7 +29,8 @@ admin.get('/', (c) => {
       users: '/api/admin/users',
       moderation: '/api/admin/moderation',
       analytics: '/api/admin/analytics',
-      subscriptions: '/api/admin/subscriptions'
+      subscriptions: '/api/admin/subscriptions',
+      safety: '/api/admin/safety'
     },
     adminUser: {
       id: c.get('userId'),
@@ -43,5 +45,6 @@ admin.route('/users', userManagementRoutes);
 admin.route('/moderation', moderationRoutes);
 admin.route('/analytics', analyticsRoutes);
 admin.route('/subscriptions', subscriptionRoutes);
+admin.route('/safety', safetyRoutes);
 
 export { admin as adminRoutes };
