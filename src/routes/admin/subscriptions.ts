@@ -96,7 +96,7 @@ subscriptions.get('/overview', async (c) => {
  * Get all subscriptions with filtering
  */
 subscriptions.get('/', validatePagination(), async (c) => {
-  const { page, limit } = c.req.valid('query');
+  const { page, limit } = c.get('validatedQuery');
   const status = c.req.query('status');
   const tier = c.req.query('tier');
   const search = c.req.query('search');
@@ -307,7 +307,7 @@ subscriptions.post('/:userId/billing', validateUUID('userId'), zValidator('json'
     }
 
     // Process the billing action
-    let result = {};
+    let result: Record<string, any> = {};
 
     switch (action) {
       case 'extend':
@@ -315,7 +315,15 @@ subscriptions.post('/:userId/billing', validateUUID('userId'), zValidator('json'
           return jsonError(c, 'Days required', 'Number of days is required for extend action', 400);
         }
         
-        const currentExpiry = new Date(subscription.subscription_expires_at || Date.now());
+        // Ensure we have a valid date value
+        let currentExpiry: Date;
+        if (subscription.subscription_expires_at && 
+            typeof subscription.subscription_expires_at === 'string' && 
+            subscription.subscription_expires_at.trim() !== '') {
+          currentExpiry = new Date(subscription.subscription_expires_at);
+        } else {
+          currentExpiry = new Date();
+        }
         const newExpiry = new Date(currentExpiry.getTime() + days * 24 * 60 * 60 * 1000);
         
         await c.env.DB.prepare(`

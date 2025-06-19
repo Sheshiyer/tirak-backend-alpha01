@@ -9,6 +9,10 @@ import { moderationRoutes } from './moderation';
 import { analyticsRoutes } from './analytics';
 import { subscriptionRoutes } from './subscriptions';
 import { safetyRoutes } from './safety';
+import { chatRoutes } from './chat';
+import { regionsRoutes } from './regions';
+import { supportRoutes } from './support';
+import { reportsRoutes } from './reports';
 import type { Env, Variables } from '../../index';
 
 const admin = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -30,7 +34,11 @@ admin.get('/', (c) => {
       moderation: '/api/admin/moderation',
       analytics: '/api/admin/analytics',
       subscriptions: '/api/admin/subscriptions',
-      safety: '/api/admin/safety'
+      safety: '/api/admin/safety',
+      chat: '/api/admin/chat',
+      regions: '/api/admin/regions',
+      support: '/api/admin/support',
+      reports: '/api/admin/reports'
     },
     adminUser: {
       id: c.get('userId'),
@@ -46,5 +54,9 @@ admin.route('/moderation', moderationRoutes);
 admin.route('/analytics', analyticsRoutes);
 admin.route('/subscriptions', subscriptionRoutes);
 admin.route('/safety', safetyRoutes);
+admin.route('/chat', chatRoutes);
+admin.route('/regions', regionsRoutes);
+admin.route('/support', supportRoutes);
+admin.route('/reports', reportsRoutes);
 
 export { admin as adminRoutes };
