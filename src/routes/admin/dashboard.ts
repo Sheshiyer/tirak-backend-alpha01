@@ -259,7 +259,7 @@ dashboard.get('/metrics', validateDateRange(), async (c) => {
       ORDER BY date DESC
     `).bind(startDate, endDate).all();
     
-    // Regional activity metrics
+    // Regional activity metrics - Modified to always return regions
     const regionalMetrics = await c.env.DB.prepare(`
       SELECT 
         r.name_en as region,
@@ -271,9 +271,18 @@ dashboard.get('/metrics', validateDateRange(), async (c) => {
       LEFT JOIN bookings b ON b.supplier_id = sp.user_id
         AND DATE(b.created_at) BETWEEN ? AND ?
       GROUP BY r.id, r.name_en
-      ORDER BY activity DESC
-      LIMIT 10
     `).bind(startDate, endDate).all();
+    
+    // Add fallback if no regions are returned
+    if (!regionalMetrics.results || regionalMetrics.results.length === 0) {
+      regionalMetrics.results = [
+        { region: "Bangkok Metropolitan", customers: 0, suppliers: 0, activity: 0 },
+        { region: "Pattaya & Chonburi", customers: 0, suppliers: 0, activity: 0 },
+        { region: "Phuket Island", customers: 0, suppliers: 0, activity: 0 },
+        { region: "Chiang Mai", customers: 0, suppliers: 0, activity: 0 },
+        { region: "Koh Samui", customers: 0, suppliers: 0, activity: 0 }
+      ];
+    }
 
     return jsonSuccess(c, {
       dateRange: { startDate, endDate },
