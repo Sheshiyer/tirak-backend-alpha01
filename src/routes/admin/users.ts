@@ -6,6 +6,7 @@ import { createRateLimit } from '../../middleware/rateLimit';
 import { adminCors } from '../../middleware/cors';
 import { jsonSuccess, jsonError, jsonPaginated, createPagination } from '../../utils/response';
 import { validatePagination, validateUUID } from '../../middleware/validation';
+import { hashPassword } from '../../utils/auth';
 import type { Env, Variables } from '../../index';
 
 const users = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -20,7 +21,7 @@ users.use('*', createRateLimit('admin'));
 const userSearchSchema = z.object({
   search: z.string().optional(),
   userType: z.enum(['customer', 'supplier', 'admin']).optional(),
-  status: z.enum(['active', 'suspended', 'pending']).optional(),
+  status: z.enum(['active', 'suspended', 'pending', 'inactive']).optional(),
   verified: z.boolean().optional(),
   sortBy: z.enum(['created_at', 'last_login_at', 'email']).default('created_at'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
@@ -35,10 +36,27 @@ const userSearchSchema = z.object({
 });
 
 const userUpdateSchema = z.object({
-  status: z.enum(['active', 'suspended', 'pending']).optional(),
+  status: z.enum(['active', 'suspended', 'pending', 'inactive']).optional(),
   emailVerified: z.boolean().optional(),
   phoneVerified: z.boolean().optional(),
-  preferredLanguage: z.enum(['en', 'th']).optional()
+  preferredLanguage: z.enum(['en', 'th']).optional(),
+  // Additional fields for customer/supplier profile updates
+  name: z.string().optional(),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+  location: z.string().optional()
+});
+
+const userCreateSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  email: z.string().email("Invalid email format"),
+  phone: z.string().min(1, "Phone is required"),
+  userType: z.enum(['customer', 'supplier', 'admin']),
+  status: z.enum(['active', 'suspended', 'pending', 'inactive']).default('active'),
+  verificationStatus: z.enum(['verified', 'pending', 'rejected']).optional(),
+  location: z.string().optional(),
+  category: z.string().optional(),
+  subscription: z.enum(['basic', 'premium']).optional()
 });
 
 const bulkActionSchema = z.object({
@@ -240,6 +258,106 @@ users.get('/', zValidator('query', userSearchSchema), async (c) => {
 });
 
 /**
+ * Create a new user
+ */
+users.post('/', zValidator('json', userCreateSchema), async (c) => {
+  const userData = c.req.valid('json');
+  const adminUserId = c.get('userId');
+  
+  try {
+    // Check if user with this email already exists
+    const existingUser = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(userData.email).first();
+    if (existingUser) {
+      return jsonError(c, 'User already exists', 'A user with this email already exists', 409);
+    }
+    
+    // Generate a UUID for the new user
+    const userId = crypto.randomUUID();
+    
+    // Generate a random temporary password and hash it
+    const tempPassword = `Temp${Math.random().toString(36).substring(2, 10)}${Math.floor(Math.random() * 10000)}!`;
+    const passwordHash = await hashPassword(tempPassword);
+    
+    // Insert the new user
+    await c.env.DB.prepare(`
+      INSERT INTO users (
+        id, 
+        email, 
+        phone, 
+        user_type, 
+        status, 
+        email_verified, 
+        phone_verified, 
+        preferred_language,
+        password_hash,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).bind(
+      userId,
+      userData.email,
+      userData.phone,
+      userData.userType,
+      userData.status,
+      false, // email_verified
+      false, // phone_verified
+      'en',  // preferred_language
+      passwordHash // password_hash
+    ).run();
+    
+    // Insert additional profile data based on user type
+    if (userData.userType === 'customer') {
+      await c.env.DB.prepare(`
+        INSERT INTO customer_profiles (
+          user_id,
+          display_name,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).bind(
+        userId,
+        userData.name
+      ).run();
+    } else if (userData.userType === 'supplier') {
+      await c.env.DB.prepare(`
+        INSERT INTO supplier_profiles (
+          user_id,
+          display_name,
+          verification_status,
+          subscription_status,
+          subscription_tier,
+          categories,
+          regions,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).bind(
+        userId,
+        userData.name,
+        userData.verificationStatus || 'pending',
+        'active',
+        userData.subscription || 'basic',
+        userData.category ? JSON.stringify([userData.category]) : '[]',
+        userData.location ? JSON.stringify([userData.location]) : '[]'
+      ).run();
+    }
+    
+    // Log admin action
+    console.log(`Admin ${adminUserId} created new user ${userId} of type ${userData.userType}`);
+    
+    return jsonSuccess(c, { 
+      id: userId,
+      ...userData,
+      tempPassword: tempPassword // Include the temporary password in the response
+    }, 'User created successfully with temporary password');
+    
+  } catch (error) {
+    console.error('Error creating user:', error);
+    return jsonError(c, 'Failed to create user', 'An error occurred while creating the user', 500);
+  }
+});
+
+/**
  * Get specific user details
  */
 users.get('/:userId', validateUUID('userId'), async (c) => {
@@ -334,58 +452,175 @@ users.patch('/:userId', validateUUID('userId'), zValidator('json', userUpdateSch
   const adminUserId = c.get('userId');
   
   try {
-    // Check if user exists
-    const existingUser = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first();
+    // Check if user exists and get user type
+    const existingUser = await c.env.DB.prepare('SELECT id, user_type FROM users WHERE id = ?').bind(userId).first();
     if (!existingUser) {
       return jsonError(c, 'User not found', 'The specified user does not exist', 404);
     }
 
-    // Build update query
-    const updateFields = [];
-    const params = [];
+    // Build update query for users table
+    const userUpdateFields = [];
+    const userParams = [];
 
     if (updates.status !== undefined) {
-      updateFields.push('status = ?');
-      params.push(updates.status);
+      userUpdateFields.push('status = ?');
+      userParams.push(updates.status);
     }
 
     if (updates.emailVerified !== undefined) {
-      updateFields.push('email_verified = ?');
-      params.push(updates.emailVerified);
+      userUpdateFields.push('email_verified = ?');
+      userParams.push(updates.emailVerified);
     }
 
     if (updates.phoneVerified !== undefined) {
-      updateFields.push('phone_verified = ?');
-      params.push(updates.phoneVerified);
+      userUpdateFields.push('phone_verified = ?');
+      userParams.push(updates.phoneVerified);
     }
 
     if (updates.preferredLanguage !== undefined) {
-      updateFields.push('preferred_language = ?');
-      params.push(updates.preferredLanguage);
+      userUpdateFields.push('preferred_language = ?');
+      userParams.push(updates.preferredLanguage);
     }
 
-    if (updateFields.length === 0) {
-      return jsonError(c, 'No updates provided', 'At least one field must be updated', 400);
+    if (updates.email !== undefined) {
+      userUpdateFields.push('email = ?');
+      userParams.push(updates.email);
     }
 
-    updateFields.push('updated_at = CURRENT_TIMESTAMP');
-    params.push(userId);
+    if (updates.phone !== undefined) {
+      userUpdateFields.push('phone = ?');
+      userParams.push(updates.phone);
+    }
 
-    // Update user
-    await c.env.DB.prepare(`
-      UPDATE users 
-      SET ${updateFields.join(', ')}
-      WHERE id = ?
-    `).bind(...params).run();
+    // Update user table if there are fields to update
+    if (userUpdateFields.length > 0) {
+      userUpdateFields.push('updated_at = CURRENT_TIMESTAMP');
+      userParams.push(userId);
 
-    // Log admin action (you might want to create an admin_actions table)
+      await c.env.DB.prepare(`
+        UPDATE users 
+        SET ${userUpdateFields.join(', ')}
+        WHERE id = ?
+      `).bind(...userParams).run();
+    }
+
+    // Update profile table based on user type
+    if (updates.name !== undefined || updates.location !== undefined) {
+      if (existingUser.user_type === 'customer') {
+        // Update customer profile
+        const profileUpdateFields = [];
+        const profileParams = [];
+
+        if (updates.name !== undefined) {
+          profileUpdateFields.push('display_name = ?');
+          profileParams.push(updates.name);
+        }
+
+        // Note: customer_profiles table doesn't have a location column
+        // We'll store location in preferences as JSON if needed in the future
+
+        if (profileUpdateFields.length > 0) {
+          profileUpdateFields.push('updated_at = CURRENT_TIMESTAMP');
+          profileParams.push(userId);
+
+          await c.env.DB.prepare(`
+            UPDATE customer_profiles 
+            SET ${profileUpdateFields.join(', ')}
+            WHERE user_id = ?
+          `).bind(...profileParams).run();
+        }
+      } else if (existingUser.user_type === 'supplier') {
+        // Update supplier profile
+        const profileUpdateFields = [];
+        const profileParams = [];
+
+        if (updates.name !== undefined) {
+          profileUpdateFields.push('display_name = ?');
+          profileParams.push(updates.name);
+        }
+
+        if (updates.location !== undefined) {
+          profileUpdateFields.push('regions = ?');
+          profileParams.push(JSON.stringify([updates.location]));
+        }
+
+        if (profileUpdateFields.length > 0) {
+          profileUpdateFields.push('updated_at = CURRENT_TIMESTAMP');
+          profileParams.push(userId);
+
+          await c.env.DB.prepare(`
+            UPDATE supplier_profiles 
+            SET ${profileUpdateFields.join(', ')}
+            WHERE user_id = ?
+          `).bind(...profileParams).run();
+        }
+      }
+    }
+
+    // Log admin action
     console.log(`Admin ${adminUserId} updated user ${userId}:`, updates);
 
-    return jsonSuccess(c, { userId, updates }, 'User updated successfully');
+    return jsonSuccess(c, { 
+      userId, 
+      updates,
+      userType: existingUser.user_type
+    }, 'User updated successfully');
 
   } catch (error) {
     console.error('Admin user update error:', error);
     return jsonError(c, 'Failed to update user', 'An error occurred while updating the user', 500);
+  }
+});
+
+/**
+ * Delete a user
+ */
+users.delete('/:userId', validateUUID('userId'), async (c) => {
+  const userId = c.req.param('userId');
+  const adminUserId = c.get('userId');
+  
+  try {
+    // Check if user exists
+    const existingUser = await c.env.DB.prepare('SELECT id, user_type FROM users WHERE id = ?').bind(userId).first();
+    if (!existingUser) {
+      return jsonError(c, 'User not found', 'The specified user does not exist', 404);
+    }
+
+    // Start a transaction
+    const userType = existingUser.user_type;
+    
+    // Delete user's profile data based on user type
+    if (userType === 'customer') {
+      await c.env.DB.prepare('DELETE FROM customer_profiles WHERE user_id = ?').bind(userId).run();
+    } else if (userType === 'supplier') {
+      await c.env.DB.prepare('DELETE FROM supplier_profiles WHERE user_id = ?').bind(userId).run();
+    }
+    
+    // Delete user's sessions
+    await c.env.DB.prepare('DELETE FROM user_sessions WHERE user_id = ?').bind(userId).run();
+    
+    // Delete the user
+    await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
+
+    // Log admin action
+    console.log(`Admin ${adminUserId} deleted user ${userId} of type ${userType}`);
+    
+    // Queue analytics event
+    if (c.env.ANALYTICS_QUEUE) {
+      await c.env.ANALYTICS_QUEUE.send({
+        action: 'user_deleted',
+        userId: userId,
+        adminId: adminUserId,
+        userType: userType,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    return jsonSuccess(c, { userId }, 'User deleted successfully');
+
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    return jsonError(c, 'Failed to delete user', 'An error occurred while deleting the user', 500);
   }
 });
 
