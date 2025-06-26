@@ -170,7 +170,7 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
     }
 
     // Verify password
-    const isValidPassword = await verifyPassword(password, user.passwordHash);
+    const isValidPassword = verifyPassword(password, user.passwordHash);
     if (!isValidPassword) {
       return jsonError(c, 'Invalid credentials', 'Email/phone or password is incorrect', 401);
     }

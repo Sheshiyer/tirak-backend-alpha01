@@ -7,15 +7,24 @@ import type { User } from '../types/database';
  * Hash a password using bcrypt
  */
 export async function hashPassword(password: string): Promise<string> {
-  const saltRounds = 12;
+  const saltRounds = 6;
   return await bcrypt.hash(password, saltRounds);
 }
 
 /**
  * Verify a password against its hash
+ * 
+ * Note: This uses bcrypt.compareSync instead of async to improve performance 
+ * and reduce the risk of exceeding Cloudflare Workers CPU limits
  */
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  return await bcrypt.compare(password, hash);
+export function verifyPassword(password: string, hash: string): boolean {
+  try {
+    // Using sync version for better performance in Cloudflare Workers
+    return bcrypt.compareSync(password, hash);
+  } catch (error) {
+    console.error('Password verification error:', error);
+    return false;
+  }
 }
 
 /**
