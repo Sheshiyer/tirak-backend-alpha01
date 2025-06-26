@@ -27,14 +27,14 @@ export async function generateTokens(user: any, jwtSecret: string): Promise<Toke
     email: user.email,
     userType: user.userType,
     iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + (60 * 60), // 1 hour
+    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24), // 24 hours (increased from 1 hour)
   };
 
   const refreshPayload = {
     sub: user.id,
     tokenId: crypto.randomUUID(),
     iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 7), // 7 days
+    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 30), // 30 days (increased from 7 days)
   };
 
   const accessToken = jwt.sign(payload, jwtSecret);
@@ -43,7 +43,7 @@ export async function generateTokens(user: any, jwtSecret: string): Promise<Toke
   return {
     accessToken,
     refreshToken,
-    expiresIn: 3600, // 1 hour in seconds
+    expiresIn: 86400, // 24 hours in seconds (increased from 3600)
   };
 }
 
