@@ -1,7 +1,9 @@
+account_id = "2c0c96c68f0ee73b6d980054557bca5b"
 name = "tirak-backend"
 main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = true
 
 # Development environment (default)
 [env.development]
@@ -199,4 +201,3 @@ JWT_SECRET = "staging-jwt-secret"
 ENVIRONMENT = "production"
 FRONTEND_URLS = "https://tirak.app,https://www.tirak.app"
 JWT_SECRET = "production-jwt-secret"
-workers_dev = true
