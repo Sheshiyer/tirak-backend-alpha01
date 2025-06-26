@@ -104,7 +104,11 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
       const otpData = createOTPData();
       await c.env.CACHE.put(`otp:${normalizedPhone}`, JSON.stringify(otpData), { expirationTtl: 600 }); // 10 minutes
 
-      // Send OTP via SMS
+      // For development, just log the OTP instead of sending SMS
+      console.log(`OTP for ${normalizedPhone}: ${otpData.code}`); // Development only
+      
+      // Comment out SMS sending since it's not properly configured
+      /* 
       try {
         const smsConfig = createSMSConfig(c.env);
         await sendOTPSMS(smsConfig, normalizedPhone, otpData.code);
@@ -112,14 +116,14 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
         console.error('Failed to send OTP SMS:', error);
         // Continue with registration even if SMS fails
       }
-
-      console.log(`OTP for ${normalizedPhone}: ${otpData.code}`); // Development only
+      */
     }
     
     // Generate tokens
     const tokens = await generateTokens(user, c.env.JWT_SECRET);
 
-    // Track registration event
+    // Comment out analytics queue since it's not available on the free plan
+    /*
     await c.env.ANALYTICS_QUEUE.send({
       eventType: 'user_registration',
       userId: user.id,
@@ -129,6 +133,7 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
       },
       timestamp: new Date().toISOString()
     });
+    */
 
     return jsonSuccess(c, {
       user: {
@@ -187,7 +192,8 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
       'UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?'
     ).bind(user.id).run();
 
-    // Track login activity
+    // Comment out analytics queue since it's not available on the free plan
+    /*
     await c.env.ANALYTICS_QUEUE.send({
       eventType: 'user_login',
       userId: user.id,
@@ -198,6 +204,7 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
       },
       timestamp: new Date().toISOString()
     });
+    */
 
     return jsonSuccess(c, {
       user: {
@@ -263,12 +270,15 @@ auth.post('/verify-phone', zValidator('json', phoneVerificationSchema), async (c
     // Track verification event
     const user = await getUserByPhone(normalizedPhone, c.env.DB);
     if (user) {
+      // Comment out analytics queue since it's not available on the free plan
+      /*
       await c.env.ANALYTICS_QUEUE.send({
         eventType: 'phone_verification',
         userId: user.id,
         properties: { phone: normalizedPhone },
         timestamp: new Date().toISOString()
       });
+      */
     }
 
     return jsonSuccess(c, { verified: true }, 'Phone number verified successfully');
@@ -305,6 +315,11 @@ auth.post('/resend-otp', async (c) => {
     const otpData = createOTPData();
     await c.env.CACHE.put(`otp:${normalizedPhone}`, JSON.stringify(otpData), { expirationTtl: 600 }); // 10 minutes
 
+    // For development, just log the OTP instead of sending SMS
+    console.log(`New OTP for ${normalizedPhone}: ${otpData.code}`); // Development only
+
+    // Comment out SMS sending since it's not properly configured
+    /*
     // Send OTP via SMS
     try {
       const smsConfig = createSMSConfig(c.env);
@@ -313,8 +328,7 @@ auth.post('/resend-otp', async (c) => {
       console.error('Failed to send OTP SMS:', error);
       // Continue even if SMS fails
     }
-
-    console.log(`New OTP for ${normalizedPhone}: ${otpData.code}`); // Development only
+    */
 
     return jsonSuccess(c, { sent: true }, 'Verification code sent successfully');
 
@@ -395,12 +409,15 @@ auth.post('/reset-password', zValidator('json', passwordResetSchema), async (c) 
     // Delete reset token
     await c.env.CACHE.delete(`reset:${token}`);
 
+    // Comment out analytics queue since it's not available on the free plan
+    /*
     // Track password reset event
     await c.env.ANALYTICS_QUEUE.send({
       eventType: 'password_reset',
       userId,
       timestamp: new Date().toISOString()
     });
+    */
 
     return jsonSuccess(c, { reset: true }, 'Password reset successfully');
 
@@ -422,11 +439,14 @@ auth.post('/logout', async (c) => {
 
     const userId = c.get('userId');
     if (userId) {
+      // Comment out analytics queue since it's not available on the free plan
+      /*
       await c.env.ANALYTICS_QUEUE.send({
         eventType: 'user_logout',
         userId,
         timestamp: new Date().toISOString()
       });
+      */
     }
 
     return jsonSuccess(c, { loggedOut: true }, 'Logged out successfully');

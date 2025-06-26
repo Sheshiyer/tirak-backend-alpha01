@@ -160,7 +160,7 @@ export default app;
 export { ChatRoom } from './durable-objects/ChatRoom';
 export { NotificationService } from './durable-objects/NotificationService';
 
-// Export queue consumers
-export { handleModerationQueue } from './background/moderation';
-export { handleAnalyticsQueue } from './background/analytics';
-export { handleNotificationQueue } from './background/notifications';
+// Export queue consumers - Commented out since queues need a paid plan
+// export { handleModerationQueue } from './background/moderation';
+// export { handleAnalyticsQueue } from './background/analytics';
+// export { handleNotificationQueue } from './background/notifications';
