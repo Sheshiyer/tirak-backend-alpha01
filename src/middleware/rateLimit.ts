@@ -27,7 +27,7 @@ export const rateLimitConfigs = {
   // Authentication endpoints (stricter)
   auth: {
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // 5 attempts per 15 minutes
+    max: 30, // Increased from 5 to 30 for development/testing
     message: 'Too many authentication attempts'
   },
   
