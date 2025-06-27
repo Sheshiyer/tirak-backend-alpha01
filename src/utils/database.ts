@@ -8,7 +8,7 @@ export async function createUser(userData: {
   email: string;
   phone: string;
   passwordHash: string;
-  userType: 'customer' | 'supplier' | 'admin';
+  userType: 'customer' | 'supplier' | 'admin' | 'companion';
   preferredLanguage?: string;
   status?: 'active' | 'suspended' | 'pending';
   phoneVerified?: boolean;
@@ -58,7 +58,7 @@ export async function getUserByEmail(email: string, db: D1Database): Promise<Use
     email: result.email as string,
     phone: result.phone as string,
     passwordHash: result.password_hash as string,
-    userType: result.user_type as 'customer' | 'supplier' | 'admin',
+    userType: result.user_type as 'customer' | 'supplier' | 'admin' | 'companion',
     status: result.status as 'active' | 'suspended' | 'pending',
     emailVerified: Boolean(result.email_verified),
     phoneVerified: Boolean(result.phone_verified),
@@ -84,7 +84,7 @@ export async function getUserByPhone(phone: string, db: D1Database): Promise<Use
     email: result.email as string,
     phone: result.phone as string,
     passwordHash: result.password_hash as string,
-    userType: result.user_type as 'customer' | 'supplier' | 'admin',
+    userType: result.user_type as 'customer' | 'supplier' | 'admin' | 'companion',
     status: result.status as 'active' | 'suspended' | 'pending',
     emailVerified: Boolean(result.email_verified),
     phoneVerified: Boolean(result.phone_verified),
@@ -110,7 +110,7 @@ export async function getUserById(id: string, db: D1Database): Promise<User | nu
     email: result.email as string,
     phone: result.phone as string,
     passwordHash: result.password_hash as string,
-    userType: result.user_type as 'customer' | 'supplier' | 'admin',
+    userType: result.user_type as 'customer' | 'supplier' | 'admin' | 'companion',
     status: result.status as 'active' | 'suspended' | 'pending',
     emailVerified: Boolean(result.email_verified),
     phoneVerified: Boolean(result.phone_verified),

@@ -72,8 +72,8 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
     const passwordHash = await hashPassword(password);
     const userId = crypto.randomUUID();
     
-    // Create user with appropriate status (auto-activate admin accounts)
-    const initialStatus = userType === 'admin' ? 'active' : 'pending';
+    // Create user with active status (auto-verify all users)
+    const initialStatus = 'active'; // All users start as active
     const user = await createUser({
       id: userId,
       email: normalizedEmail,
@@ -82,7 +82,7 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
       userType,
       preferredLanguage,
       status: initialStatus,
-      phoneVerified: userType === 'admin' || userType === 'companion' || userType === 'supplier' || userType === 'customer' // Auto-verify admins
+      phoneVerified: true // Auto-verify all users
     }, c.env.DB);
 
     // Create user profile based on type
@@ -98,26 +98,6 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
       }, c.env.DB);
     } 
     // Admin users don't need specific profiles
-
-    // Generate OTP for phone verification (not needed for admins)
-    if (userType !== 'admin') {
-      const otpData = createOTPData();
-      await c.env.CACHE.put(`otp:${normalizedPhone}`, JSON.stringify(otpData), { expirationTtl: 600 }); // 10 minutes
-
-      // For development, just log the OTP instead of sending SMS
-      console.log(`OTP for ${normalizedPhone}: ${otpData.code}`); // Development only
-      
-      // Comment out SMS sending since it's not properly configured
-      /* 
-      try {
-        const smsConfig = createSMSConfig(c.env);
-        await sendOTPSMS(smsConfig, normalizedPhone, otpData.code);
-      } catch (error) {
-        console.error('Failed to send OTP SMS:', error);
-        // Continue with registration even if SMS fails
-      }
-      */
-    }
     
     // Generate tokens
     const tokens = await generateTokens(user, c.env.JWT_SECRET);
@@ -146,7 +126,7 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
         phoneVerified: user.phoneVerified
       },
       ...tokens
-    }, 'Registration successful. Please verify your phone number.', 201);
+    }, 'Registration successful.', 201);
 
   } catch (error) {
     console.error('Registration error:', error);
@@ -178,10 +158,6 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
     // Check account status
     if (user.status === 'suspended') {
       return jsonError(c, 'Account suspended', 'Your account has been suspended', 403);
-    }
-
-    if (user.status === 'pending') {
-      return jsonError(c, 'Account pending', 'Please verify your phone number to activate your account', 403);
     }
 
     // Generate tokens
@@ -222,119 +198,6 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
   } catch (error) {
     console.error('Login error:', error);
     return jsonError(c, 'Login failed', 'An error occurred during login', 500);
-  }
-});
-
-/**
- * Phone verification endpoint
- */
-auth.post('/verify-phone', zValidator('json', phoneVerificationSchema), async (c) => {
-  const { phone, otp } = c.req.valid('json');
-
-  try {
-    const normalizedPhone = normalizePhone(phone);
-
-    // Get stored OTP data
-    const storedOtpData = await c.env.CACHE.get(`otp:${normalizedPhone}`);
-
-    if (!storedOtpData) {
-      return jsonError(c, 'Invalid OTP', 'No verification code found for this phone number', 400);
-    }
-
-    const otpData = JSON.parse(storedOtpData);
-
-    // Increment attempts
-    otpData.attempts += 1;
-    await c.env.CACHE.put(`otp:${normalizedPhone}`, JSON.stringify(otpData), { expirationTtl: 600 });
-
-    if (!isOTPValid(otpData, otp)) {
-      if (otpData.attempts >= 3) {
-        await c.env.CACHE.delete(`otp:${normalizedPhone}`);
-        return jsonError(c, 'Too many attempts', 'Maximum verification attempts exceeded', 429);
-      }
-      return jsonError(c, 'Invalid OTP', 'The verification code is incorrect or has expired', 400);
-    }
-
-    // Update user's phone verification status
-    const result = await c.env.DB.prepare(
-      'UPDATE users SET phone_verified = TRUE, status = ? WHERE phone = ? AND status = ?'
-    ).bind('active', normalizedPhone, 'pending').run();
-
-    if (!result.success) {
-      return jsonError(c, 'Verification failed', 'User not found or already verified', 400);
-    }
-
-    // Clear OTP from cache
-    await c.env.CACHE.delete(`otp:${normalizedPhone}`);
-
-    // Track verification event
-    const user = await getUserByPhone(normalizedPhone, c.env.DB);
-    if (user) {
-      // Comment out analytics queue since it's not available on the free plan
-      /*
-      await c.env.ANALYTICS_QUEUE.send({
-        eventType: 'phone_verification',
-        userId: user.id,
-        properties: { phone: normalizedPhone },
-        timestamp: new Date().toISOString()
-      });
-      */
-    }
-
-    return jsonSuccess(c, { verified: true }, 'Phone number verified successfully');
-
-  } catch (error) {
-    console.error('Phone verification error:', error);
-    return jsonError(c, 'Verification failed', 'An error occurred during verification', 500);
-  }
-});
-
-/**
- * Resend OTP endpoint
- */
-auth.post('/resend-otp', async (c) => {
-  try {
-    const { phone } = await c.req.json();
-    const normalizedPhone = normalizePhone(phone);
-    
-    if (!isValidPhone(normalizedPhone)) {
-      return jsonError(c, 'Invalid phone format', 'Please provide a valid phone number', 400);
-    }
-
-    // Check if user exists
-    const user = await getUserByPhone(normalizedPhone, c.env.DB);
-    if (!user) {
-      return jsonError(c, 'User not found', 'No account found with this phone number', 404);
-    }
-
-    if (user.phoneVerified) {
-      return jsonError(c, 'Already verified', 'Phone number is already verified', 400);
-    }
-
-    // Generate new OTP
-    const otpData = createOTPData();
-    await c.env.CACHE.put(`otp:${normalizedPhone}`, JSON.stringify(otpData), { expirationTtl: 600 }); // 10 minutes
-
-    // For development, just log the OTP instead of sending SMS
-    console.log(`New OTP for ${normalizedPhone}: ${otpData.code}`); // Development only
-
-    // Comment out SMS sending since it's not properly configured
-    /*
-    // Send OTP via SMS
-    try {
-      const smsConfig = createSMSConfig(c.env);
-      await sendOTPSMS(smsConfig, normalizedPhone, otpData.code);
-    } catch (error) {
-      console.error('Failed to send OTP SMS:', error);
-      // Continue even if SMS fails
-    }
-    */
-
-    return jsonSuccess(c, { sent: true }, 'Verification code sent successfully');
-
-  } catch (error) {
-    console.error('Resend OTP error:', error);
-    return jsonError(c, 'Failed to send OTP', 'An error occurred while sending verification code', 500);
   }
 });
 

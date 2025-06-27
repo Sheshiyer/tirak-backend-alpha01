@@ -5,7 +5,7 @@ export interface User {
   email: string;
   phone: string;
   passwordHash: string;
-  userType: 'customer' | 'supplier' | 'admin';
+  userType: 'customer' | 'supplier' | 'admin' | 'companion';
   status: 'active' | 'suspended' | 'pending';
   emailVerified: boolean;
   phoneVerified: boolean;
