@@ -321,39 +321,55 @@ moderation.get('/reports', validatePagination(), async (c) => {
 });
 
 /**
- * Simplified endpoint for supplier verification
- * This endpoint is more forgiving in its validation requirements
+ * Simplified endpoint specifically for supplier verification
+ * This endpoint is more forgiving with validation and provides better error handling
  */
 moderation.post('/verify-supplier/:supplierId', validateUUID('supplierId'), async (c) => {
+  const supplierId = c.req.param('supplierId');
+  const moderatorId = c.get('userId');
+  
+  // Get request body if it exists, otherwise use default values
+  let action = 'approve';
+  let reason = 'Standard verification process';
+  
   try {
-    const supplierId = c.req.param('supplierId');
-    const moderatorId = c.get('userId');
-    
-    // Log received data for debugging
-    console.log(`Verify supplier request for ${supplierId}`, {
-      body: await c.req.json().catch(() => ({})),
-      headers: Object.fromEntries(c.req.raw.headers),
-      url: c.req.url,
-      method: c.req.method
-    });
-    
-    // Parse body with fallback values
-    let body;
-    try {
-      body = supplierVerificationSchema.parse(await c.req.json().catch(() => ({})));
-    } catch (validationError) {
-      console.error('Validation error:', validationError);
-      return jsonError(c, 'Invalid request data', 'Please provide a valid action: "approve" or "reject"', 400);
+    // Try to parse the body, but don't fail if it's empty or invalid
+    const contentType = c.req.header('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      try {
+        const body = await c.req.json();
+        if (body) {
+          // Validate action enum manually
+          if (body.action === 'approve' || body.action === 'reject') {
+            action = body.action;
+          }
+          // Use reason if provided
+          if (body.reason && typeof body.reason === 'string') {
+            reason = body.reason;
+          }
+        }
+      } catch (parseError) {
+        console.log('Error parsing request body, using defaults:', parseError);
+      }
+    } else {
+      console.log('No JSON content-type, using default values');
     }
     
-    const { action, reason } = body;
+    console.log(`Processing supplier verification for ${supplierId}`, { action, reason });
     
-    // Update supplier verification status
+    // For supplier verification, update the verification status
     if (action === 'approve') {
       await c.env.DB.prepare(`
         UPDATE supplier_profiles 
         SET verification_status = 'verified', updated_at = CURRENT_TIMESTAMP 
         WHERE user_id = ?
+      `).bind(supplierId).run();
+      
+      // Also update the user's status to active if it was pending
+      await c.env.DB.prepare(`
+        UPDATE users 
+        SET status = 'active' 
+        WHERE id = ? AND status = 'pending'
       `).bind(supplierId).run();
     } else if (action === 'reject') {
       await c.env.DB.prepare(`
@@ -362,17 +378,25 @@ moderation.post('/verify-supplier/:supplierId', validateUUID('supplierId'), asyn
         WHERE user_id = ?
       `).bind(supplierId).run();
     }
-    
+
+    // Log moderation action
+    console.log(`Supplier verification by ${moderatorId}:`, {
+      supplierId,
+      action,
+      reason,
+      timestamp: new Date().toISOString()
+    });
+
     return jsonSuccess(c, {
       supplierId,
       action,
       moderatorId,
       timestamp: new Date().toISOString()
-    }, `Supplier ${action === 'approve' ? 'approved' : 'rejected'} successfully`);
-    
+    }, `Supplier successfully ${action === 'approve' ? 'verified' : 'rejected'}`);
+
   } catch (error) {
     console.error('Supplier verification error:', error);
-    return jsonError(c, 'Verification failed', 'An error occurred during supplier verification', 500);
+    return jsonError(c, 'Verification action failed', 'An error occurred while processing the supplier verification', 500);
   }
 });
 

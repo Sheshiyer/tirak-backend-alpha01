@@ -12,7 +12,7 @@ export const registerSchema = z.object({
   email: z.string().email('Invalid email format'),
   phone: z.string().min(10, 'Phone number must be at least 10 digits'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  userType: z.enum(['customer', 'supplier', 'admin','companion'], {
+  userType: z.enum(['customer', 'supplier', 'admin', 'companion'], {
     errorMap: () => ({ message: 'User type must be either customer, supplier, admin or companion' })
   }),
   preferredLanguage: z.enum(['en', 'th']).default('en')
@@ -57,7 +57,8 @@ export const supplierProfileSchema = z.object({
   categories: z.array(z.string()).min(1, 'At least one category is required').max(10, 'Too many categories'),
   regions: z.array(z.string()).min(1, 'At least one region is required').max(20, 'Too many regions'),
   spokenLanguages: z.array(z.string()).min(1, 'At least one language is required').max(10, 'Too many languages'),
-  profileImages: z.array(z.string().url()).max(10, 'Too many images').optional()
+  profileImages: z.array(z.string().url()).max(10, 'Too many images').optional(),
+  supplierType: z.enum(['standard', 'companion']).default('standard')
 });
 
 // Service creation schema
@@ -145,6 +146,7 @@ export const idParamSchema = z.object({
 
 /**
  * Validate file uploads
+ * @deprecated Use the validateFileUpload middleware from ../middleware/validation instead
  */
 export function validateFileUpload(options: {
   maxSize?: number;
@@ -152,7 +154,7 @@ export function validateFileUpload(options: {
   required?: boolean;
   maxFiles?: number;
 }) {
-  return async (c: Context<{ Bindings: Env; Variables: Variables; }>, next: Next) => {
+  return async (c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) => {
     try {
       const contentType = c.req.header('Content-Type');
 
@@ -262,6 +264,9 @@ export function validatePasswordStrength(password: string): { isValid: boolean; 
 
 /**
  * Sanitize HTML content
+ * @deprecated Use the sanitizeHtml function from ../middleware/validation instead
+ * @param input The HTML string to sanitize
+ * @returns The sanitized HTML string
  */
 export function sanitizeHtml(input: string): string {
   return input
@@ -282,6 +287,9 @@ export function normalizeEmail(email: string): string {
 
 /**
  * Validate file extension
+ * @param fileName The name of the file to validate
+ * @param allowedExtensions Array of allowed file extensions without the dot (e.g., ['jpg', 'png'])
+ * @returns Whether the file extension is allowed
  */
 export function validateFileExtension(fileName: string, allowedExtensions: string[]): boolean {
   const extension = fileName.split('.').pop()?.toLowerCase();
@@ -340,6 +348,10 @@ export function isValidDateRange(startDate: string, endDate: string): boolean {
 
 /**
  * Rate limiting validation
+ * @param requests The number of requests made in the current window
+ * @param windowMs The time window in milliseconds
+ * @param limit The maximum number of requests allowed in the window
+ * @returns Object with allowed status and reset time
  */
 export function validateRateLimit(
   requests: number,
