@@ -74,6 +74,53 @@ export const serviceSchema = z.object({
   path: ['priceMax']
 });
 
+// Companion experience schema
+export const experienceSchema = z.object({
+  title: z.string().min(3, 'Title must be at least 3 characters').max(255, 'Title too long'),
+  description: z.string().min(10, 'Description must be at least 10 characters').max(2000, 'Description too long').optional(),
+  durationMinutes: z.number().min(30, 'Minimum duration is 30 minutes').max(1440, 'Maximum duration is 24 hours'),
+  keywords: z.array(z.string()).max(20, 'Too many keywords').optional(),
+  price: z.number().min(0, 'Price cannot be negative'),
+  currency: z.enum(['THB', 'USD', 'EUR']).default('THB')
+});
+
+// Companion location schema
+export const locationSchema = z.object({
+  city: z.string().min(3, 'City must be at least 3 characters').max(100, 'City name too long'),
+  region: z.string().min(3, 'Region must be at least 3 characters').max(100, 'Region name too long'),
+  isPopular: z.boolean().default(false),
+  description: z.string().max(500, 'Description too long').optional()
+});
+
+// Companion availability schema
+export const availabilitySchema = z.object({
+  dayOfWeek: z.number().min(0, 'Day must be between 0 and 6').max(6, 'Day must be between 0 and 6'),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Start time must be in HH:MM format'),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be in HH:MM format'),
+  isAvailable: z.boolean()
+});
+
+// Enhanced booking schema with customer preferences
+export const enhancedBookingSchema = z.object({
+  companionId: z.string().uuid('Invalid companion ID'),
+  serviceId: z.string().uuid('Invalid service ID').optional(),
+  experienceId: z.string().uuid('Invalid experience ID').optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Start time must be in HH:MM format'),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be in HH:MM format'),
+  duration: z.number().min(30, 'Minimum duration is 30 minutes').max(1440, 'Maximum duration is 24 hours'),
+  location: z.string().max(500, 'Location too long').optional(),
+  customerPreferences: z.object({
+    title: z.string().max(255, 'Title too long').optional(),
+    description: z.string().max(1000, 'Description too long').optional()
+  }).optional(),
+  specialRequests: z.string().max(1000, 'Special requests too long').optional(),
+  preferredLanguage: z.string().max(50, 'Language name too long').optional(),
+  groupComposition: z.string().max(255, 'Group composition too long').optional(),
+  dietaryRequirements: z.string().max(500, 'Dietary requirements too long').optional(),
+  paymentMethodId: z.string().uuid('Invalid payment method ID')
+});
+
 // Supplier search schema
 export const supplierSearchSchema = z.object({
   region: z.string().optional(),
@@ -162,8 +209,7 @@ export function validateFileUpload(options: {
         if (options.required) {
           return jsonError(c, 'File upload required', 'No file provided', 400);
         }
-        await next();
-        return;
+        return await next();
       }
 
       // Parse form data
@@ -198,7 +244,7 @@ export function validateFileUpload(options: {
       }
 
       c.set('uploadedFiles', files);
-      await next();
+      return await next();
     } catch (error) {
       console.error('File validation error:', error);
       return jsonError(c, 'File validation failed', 'Invalid file upload', 400);

@@ -5,6 +5,7 @@ import { validateUUID, validatePagination } from '../middleware/validation';
 import { authMiddleware } from '../middleware/auth';
 import { createRateLimit } from '../middleware/rateLimit';
 import { jsonSuccess, jsonError, jsonPaginated, createPagination } from '../utils/response';
+import { enhancedBookingSchema } from '../utils/validation';
 import type { Env, Variables } from '../index';
 
 const bookings = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -13,10 +14,11 @@ const bookings = new Hono<{ Bindings: Env; Variables: Variables }>();
 bookings.use('*', authMiddleware);
 bookings.use('*', createRateLimit('booking'));
 
-// Booking creation schema
+// Original booking creation schema (for backward compatibility)
 const createBookingSchema = z.object({
   companionId: z.string().uuid('Invalid companion ID'),
   serviceId: z.string().uuid('Invalid service ID').optional(),
+  experienceId: z.string().uuid('Invalid experience ID').optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
   startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Start time must be in HH:MM format'),
   endTime: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be in HH:MM format'),
@@ -35,9 +37,9 @@ const updateBookingStatusSchema = z.object({
 });
 
 /**
- * Create new booking
+ * Create new booking with enhanced customer preferences
  */
-bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
+bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
   const userId = c.get('userId');
   const userType = c.get('userType');
   const bookingData = c.req.valid('json');
@@ -51,18 +53,33 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
     // Validate companion exists and is available
     const companion = await c.env.DB.prepare(`
       SELECT sp.user_id, sp.display_name, sp.verification_status, sp.subscription_status,
-             u.status as user_status
+             u.status as user_status, u.user_type
       FROM supplier_profiles sp
       JOIN users u ON sp.user_id = u.id
       WHERE sp.user_id = ? AND sp.verification_status = 'verified' 
         AND sp.subscription_status = 'active' AND u.status = 'active'
+        AND u.user_type IN ('supplier', 'companion')
     `).bind(bookingData.companionId).first();
 
     if (!companion) {
       return jsonError(c, 'Companion not found', 'The selected companion is not available', 404);
     }
 
-    // Validate service if provided
+    // Validate experience if provided (for companions)
+    let experience = null;
+    if (bookingData.experienceId) {
+      experience = await c.env.DB.prepare(`
+        SELECT id, title, price, currency, duration_minutes
+        FROM companion_experiences
+        WHERE id = ? AND companion_id = ? AND is_active = TRUE
+      `).bind(bookingData.experienceId, bookingData.companionId).first();
+
+      if (!experience) {
+        return jsonError(c, 'Experience not found', 'The selected experience is not available', 404);
+      }
+    }
+
+    // Validate service if provided (for suppliers)
     let service = null;
     if (bookingData.serviceId) {
       service = await c.env.DB.prepare(`
@@ -99,7 +116,15 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
     }
 
     // Calculate pricing
-    const basePrice = service ? service.price_min : 1000; // Default rate if no service
+    let basePrice = 0;
+    if (experience) {
+      basePrice = Number(experience.price) || 0;
+    } else if (service) {
+      basePrice = Number(service.price_min) || 0;
+    } else {
+      basePrice = 1000; // Default rate
+    }
+
     const serviceFee = Math.round(basePrice * 0.1); // 10% platform fee
     const totalAmount = basePrice + serviceFee;
 
@@ -109,14 +134,17 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
 
     await c.env.DB.prepare(`
       INSERT INTO bookings (
-        id, customer_id, companion_id, service_id, date, start_time, end_time,
-        duration, location, special_requests, status, total_amount, service_fee,
+        id, customer_id, companion_id, service_id, experience_id, date, start_time, end_time,
+        duration, location, special_requests, customer_preferences, preferred_language,
+        group_composition, dietary_requirements, status, total_amount, service_fee,
         payment_method_id, payment_status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      bookingId, userId, bookingData.companionId, bookingData.serviceId,
+      bookingId, userId, bookingData.companionId, bookingData.serviceId, bookingData.experienceId,
       bookingData.date, bookingData.startTime, bookingData.endTime,
       bookingData.duration, bookingData.location, bookingData.specialRequests,
+      JSON.stringify(bookingData.customerPreferences || {}), bookingData.preferredLanguage,
+      bookingData.groupComposition, bookingData.dietaryRequirements,
       'pending', totalAmount, serviceFee, bookingData.paymentMethodId,
       'pending', now, now
     ).run();
@@ -135,8 +163,11 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
         bookingId,
         companionId: bookingData.companionId,
         serviceId: bookingData.serviceId,
+        experienceId: bookingData.experienceId,
         totalAmount,
-        duration: bookingData.duration
+        duration: bookingData.duration,
+        hasPreferences: !!bookingData.customerPreferences,
+        hasSpecialRequests: !!bookingData.specialRequests
       },
       timestamp: now
     });
@@ -158,12 +189,24 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
         cp.display_name as companion_name,
         cp.profile_images as companion_profile_image,
         s.title as service_name,
-        s.price_min as service_price
+        s.price_min as service_price,
+        ce.title as experience_name,
+        ce.price as experience_price
       FROM bookings b
       JOIN supplier_profiles cp ON b.companion_id = cp.user_id
       LEFT JOIN supplier_services s ON b.service_id = s.id
+      LEFT JOIN companion_experiences ce ON b.experience_id = ce.id
       WHERE b.id = ?
     `).bind(bookingId).first();
+
+    if (!createdBooking) {
+      return jsonError(c, 'Booking creation failed', 'Failed to retrieve created booking', 500);
+    }
+
+    const companionImages = createdBooking.companion_profile_image ? 
+      JSON.parse(createdBooking.companion_profile_image as string) : [];
+    const customerPrefs = createdBooking.customer_preferences ? 
+      JSON.parse(createdBooking.customer_preferences as string) : {};
 
     return jsonSuccess(c, {
       booking: {
@@ -172,7 +215,7 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
         companion: {
           id: createdBooking.companion_id,
           name: createdBooking.companion_name,
-          profileImage: JSON.parse(createdBooking.companion_profile_image || '[]')[0] || null
+          profileImage: Array.isArray(companionImages) ? companionImages[0] || null : null
         },
         customerId: createdBooking.customer_id,
         serviceId: createdBooking.service_id,
@@ -181,12 +224,22 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
           name: createdBooking.service_name,
           price: createdBooking.service_price
         } : null,
+        experienceId: createdBooking.experience_id,
+        experience: createdBooking.experience_id ? {
+          id: createdBooking.experience_id,
+          name: createdBooking.experience_name,
+          price: createdBooking.experience_price
+        } : null,
         date: createdBooking.date,
         startTime: createdBooking.start_time,
         endTime: createdBooking.end_time,
         duration: createdBooking.duration,
         location: createdBooking.location,
         specialRequests: createdBooking.special_requests,
+        customerPreferences: customerPrefs,
+        preferredLanguage: createdBooking.preferred_language,
+        groupComposition: createdBooking.group_composition,
+        dietaryRequirements: createdBooking.dietary_requirements,
         status: createdBooking.status,
         totalAmount: createdBooking.total_amount,
         serviceFee: createdBooking.service_fee,
@@ -203,12 +256,180 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
 });
 
 /**
+ * Create booking with backward compatibility (original schema)
+ */
+bookings.post('/simple', zValidator('json', createBookingSchema), async (c) => {
+  const userId = c.get('userId');
+  const userType = c.get('userType');
+  const bookingData = c.req.valid('json');
+  
+  try {
+    // Only customers can create bookings
+    if (userType !== 'customer') {
+      return jsonError(c, 'Access denied', 'Only customers can create bookings', 403);
+    }
+
+    // Transform to enhanced booking format
+    const enhancedData = {
+      ...bookingData,
+      customerPreferences: undefined,
+      preferredLanguage: undefined,
+      groupComposition: undefined,
+      dietaryRequirements: undefined
+    };
+
+    // Reuse the main booking creation logic
+    return await bookings.fetch(
+      new Request(c.req.url.replace('/simple', ''), {
+        method: 'POST',
+        headers: c.req.raw.headers,
+        body: JSON.stringify(enhancedData)
+      }),
+      c.env
+    );
+
+  } catch (error) {
+    console.error('Create simple booking error:', error);
+    return jsonError(c, 'Booking failed', 'An error occurred while creating the booking', 500);
+  }
+});
+
+/**
+ * Get booking summary with all details
+ */
+bookings.get('/:id/summary', validateUUID('id'), async (c) => {
+  const bookingId = c.req.param('id');
+  const userId = c.get('userId');
+
+  try {
+    const booking = await c.env.DB.prepare(`
+      SELECT
+        b.*,
+        cp.display_name as companion_name,
+        cp.profile_images as companion_images,
+        cp.user_id as companion_user_id,
+        cu.phone as companion_phone,
+        cp.rating_average as companion_rating,
+        cust.display_name as customer_name,
+        cust.profile_images as customer_images,
+        cust.user_id as customer_user_id,
+        custu.phone as customer_phone,
+        s.title as service_name,
+        s.description as service_description,
+        s.price_min as service_price,
+        ce.title as experience_name,
+        ce.description as experience_description,
+        ce.price as experience_price,
+        ce.duration_minutes as experience_duration
+      FROM bookings b
+      JOIN supplier_profiles cp ON b.companion_id = cp.user_id
+      JOIN users cu ON cp.user_id = cu.id
+      JOIN customer_profiles cust ON b.customer_id = cust.user_id
+      JOIN users custu ON cust.user_id = custu.id
+      LEFT JOIN supplier_services s ON b.service_id = s.id
+      LEFT JOIN companion_experiences ce ON b.experience_id = ce.id
+      WHERE b.id = ? AND (b.customer_id = ? OR b.companion_id = ?)
+    `).bind(bookingId, userId, userId).first();
+
+    if (!booking) {
+      return jsonError(c, 'Booking not found', 'The requested booking does not exist or you do not have access', 404);
+    }
+
+    // Get booking timeline
+    const timeline = await c.env.DB.prepare(`
+      SELECT status, timestamp, note
+      FROM booking_timeline
+      WHERE booking_id = ?
+      ORDER BY timestamp ASC
+    `).bind(bookingId).all();
+
+    // Get payment method details
+    let paymentMethod = null;
+    if (booking.payment_method_id) {
+      const pm = await c.env.DB.prepare(`
+        SELECT type, last4 FROM payment_methods WHERE id = ?
+      `).bind(booking.payment_method_id).first();
+
+      if (pm) {
+        paymentMethod = {
+          id: booking.payment_method_id,
+          type: pm.type,
+          last4: pm.last4
+        };
+      }
+    }
+
+    const companionImages = booking.companion_images ? 
+      JSON.parse(booking.companion_images as string) : [];
+    const customerImages = booking.customer_images ? 
+      JSON.parse(booking.customer_images as string) : [];
+    const customerPrefs = booking.customer_preferences ? 
+      JSON.parse(booking.customer_preferences as string) : {};
+
+    const bookingSummary = {
+      id: booking.id,
+      companion: {
+        id: booking.companion_user_id,
+        name: booking.companion_name,
+        profileImage: Array.isArray(companionImages) ? companionImages[0] || null : null,
+        phone: booking.companion_phone,
+        rating: booking.companion_rating
+      },
+      customer: {
+        id: booking.customer_user_id,
+        name: booking.customer_name,
+        profileImage: Array.isArray(customerImages) ? customerImages[0] || null : null,
+        phone: booking.customer_phone
+      },
+      service: booking.service_id ? {
+        id: booking.service_id,
+        name: booking.service_name,
+        description: booking.service_description,
+        price: booking.service_price
+      } : null,
+      experience: booking.experience_id ? {
+        id: booking.experience_id,
+        name: booking.experience_name,
+        description: booking.experience_description,
+        price: booking.experience_price,
+        durationMinutes: booking.experience_duration
+      } : null,
+      date: booking.date,
+      startTime: booking.start_time,
+      endTime: booking.end_time,
+      duration: booking.duration,
+      location: booking.location,
+      specialRequests: booking.special_requests,
+      customerPreferences: customerPrefs,
+      preferredLanguage: booking.preferred_language,
+      groupComposition: booking.group_composition,
+      dietaryRequirements: booking.dietary_requirements,
+      status: booking.status,
+      totalAmount: booking.total_amount,
+      serviceFee: booking.service_fee,
+      paymentStatus: booking.payment_status,
+      paymentMethod,
+      timeline: timeline.results,
+      createdAt: booking.created_at,
+      updatedAt: booking.updated_at
+    };
+
+    return jsonSuccess(c, { booking: bookingSummary }, 'Booking summary retrieved successfully');
+
+  } catch (error) {
+    console.error('Get booking summary error:', error);
+    return jsonError(c, 'Failed to retrieve booking summary', 'An error occurred while fetching booking summary', 500);
+  }
+});
+
+/**
  * Get user bookings
  */
 bookings.get('/', validatePagination, async (c) => {
   const userId = c.get('userId');
   const userType = c.get('userType');
-  const { page, limit } = c.get('pagination');
+  const pagination = c.get('pagination');
+  const { page, limit } = pagination || { page: 1, limit: 20 };
   const status = c.req.query('status');
   
   try {
@@ -228,11 +449,14 @@ bookings.get('/', validatePagination, async (c) => {
           ELSE b.customer_id
         END as other_party_id,
         s.title as service_name,
-        s.price_min as service_price
+        s.price_min as service_price,
+        ce.title as experience_name,
+        ce.price as experience_price
       FROM bookings b
       LEFT JOIN supplier_profiles cp ON b.companion_id = cp.user_id
       LEFT JOIN customer_profiles cust ON b.customer_id = cust.user_id
       LEFT JOIN supplier_services s ON b.service_id = s.id
+      LEFT JOIN companion_experiences ce ON b.experience_id = ce.id
       WHERE (b.customer_id = ? OR b.companion_id = ?)
     `;
 
@@ -268,6 +492,11 @@ bookings.get('/', validatePagination, async (c) => {
         id: booking.service_id,
         name: booking.service_name,
         price: booking.service_price
+      } : null,
+      experience: booking.experience_id ? {
+        id: booking.experience_id,
+        name: booking.experience_name,
+        price: booking.experience_price
       } : null,
       date: booking.date,
       startTime: booking.start_time,
@@ -310,13 +539,17 @@ bookings.get('/:id', validateUUID('id'), async (c) => {
         custu.phone as customer_phone,
         s.title as service_name,
         s.description as service_description,
-        s.price_min as service_price
+        s.price_min as service_price,
+        ce.title as experience_name,
+        ce.description as experience_description,
+        ce.price as experience_price
       FROM bookings b
       JOIN supplier_profiles cp ON b.companion_id = cp.user_id
       JOIN users cu ON cp.user_id = cu.id
       JOIN customer_profiles cust ON b.customer_id = cust.user_id
       JOIN users custu ON cust.user_id = custu.id
       LEFT JOIN supplier_services s ON b.service_id = s.id
+      LEFT JOIN companion_experiences ce ON b.experience_id = ce.id
       WHERE b.id = ? AND (b.customer_id = ? OR b.companion_id = ?)
     `).bind(bookingId, userId, userId).first();
 
@@ -354,14 +587,28 @@ bookings.get('/:id', validateUUID('id'), async (c) => {
         companion: {
           id: booking.companion_user_id,
           name: booking.companion_name,
-          profileImage: JSON.parse(booking.companion_images || '[]')[0] || null,
+          profileImage: (() => {
+            try {
+              const images = booking.companion_images ? JSON.parse(booking.companion_images as string) : [];
+              return Array.isArray(images) ? images[0] || null : null;
+            } catch {
+              return null;
+            }
+          })(),
           phone: booking.companion_phone,
           rating: booking.companion_rating
         },
         customer: {
           id: booking.customer_user_id,
           name: booking.customer_name,
-          profileImage: JSON.parse(booking.customer_images || '[]')[0] || null,
+          profileImage: (() => {
+            try {
+              const images = booking.customer_images ? JSON.parse(booking.customer_images as string) : [];
+              return Array.isArray(images) ? images[0] || null : null;
+            } catch {
+              return null;
+            }
+          })(),
           phone: booking.customer_phone
         },
         service: booking.service_id ? {
@@ -370,12 +617,28 @@ bookings.get('/:id', validateUUID('id'), async (c) => {
           description: booking.service_description,
           price: booking.service_price
         } : null,
+        experience: booking.experience_id ? {
+          id: booking.experience_id,
+          name: booking.experience_name,
+          description: booking.experience_description,
+          price: booking.experience_price
+        } : null,
         date: booking.date,
         startTime: booking.start_time,
         endTime: booking.end_time,
         duration: booking.duration,
         location: booking.location,
         specialRequests: booking.special_requests,
+        customerPreferences: (() => {
+          try {
+            return booking.customer_preferences ? JSON.parse(booking.customer_preferences as string) : {};
+          } catch {
+            return {};
+          }
+        })(),
+        preferredLanguage: booking.preferred_language,
+        groupComposition: booking.group_composition,
+        dietaryRequirements: booking.dietary_requirements,
         status: booking.status,
         totalAmount: booking.total_amount,
         serviceFee: booking.service_fee,
@@ -422,7 +685,7 @@ bookings.put('/:id/status', validateUUID('id'), zValidator('json', updateBooking
       'cancelled': []
     };
 
-    if (!validTransitions[currentStatus]?.includes(status)) {
+    if (!validTransitions[currentStatus as string]?.includes(status)) {
       return jsonError(c, 'Invalid status transition', `Cannot change status from ${currentStatus} to ${status}`, 400);
     }
 

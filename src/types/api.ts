@@ -35,7 +35,7 @@ export interface RegisterRequest {
   email: string;
   phone: string;
   password: string;
-  userType: 'customer' | 'supplier';
+  userType: 'customer' | 'supplier' | 'companion';
   preferredLanguage?: 'en' | 'th';
 }
 
@@ -123,6 +123,106 @@ export interface AvailabilityItem {
   startTime: string;
   endTime: string;
   isAvailable: boolean;
+}
+
+// Companion API types
+export interface ExperienceItem {
+  id: string;
+  title: string;
+  description?: string;
+  durationMinutes: number;
+  keywords?: string[];
+  price: number;
+  currency: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LocationItem {
+  id: string;
+  city: string;
+  region: string;
+  isPopular: boolean;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CompanionDetailResponse extends SupplierDetailResponse {
+  experiences: ExperienceItem[];
+  locations: LocationItem[];
+}
+
+export interface CreateExperienceRequest {
+  title: string;
+  description?: string;
+  durationMinutes: number;
+  keywords?: string[];
+  price: number;
+  currency?: string;
+}
+
+export interface CreateLocationRequest {
+  city: string;
+  region: string;
+  isPopular?: boolean;
+  description?: string;
+}
+
+// Enhanced booking types
+export interface CustomerPreferences {
+  title?: string;
+  description?: string;
+}
+
+export interface EnhancedBookingRequest {
+  companionId: string;
+  experienceId?: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
+  location?: string;
+  customerPreferences?: CustomerPreferences;
+  specialRequests?: string;
+  preferredLanguage?: string;
+  groupComposition?: string;
+  dietaryRequirements?: string;
+  paymentMethodId: string;
+}
+
+export interface BookingSummaryResponse {
+  id: string;
+  companion: {
+    id: string;
+    name: string;
+    profileImage?: string;
+  };
+  customer: {
+    id: string;
+    name: string;
+  };
+  experience?: {
+    id: string;
+    title: string;
+    description?: string;
+    price: number;
+  };
+  date: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
+  location?: string;
+  customerPreferences?: CustomerPreferences;
+  specialRequests?: string;
+  preferredLanguage?: string;
+  groupComposition?: string;
+  dietaryRequirements?: string;
+  status: string;
+  totalAmount: number;
+  paymentStatus: string;
+  createdAt: string;
 }
 
 // Chat API types

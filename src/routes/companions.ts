@@ -2,9 +2,10 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { validateUUID, validatePagination } from '../middleware/validation';
-import { optionalAuthMiddleware } from '../middleware/auth';
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
 import { createRateLimit } from '../middleware/rateLimit';
 import { jsonSuccess, jsonError, jsonPaginated, createPagination } from '../utils/response';
+import { experienceSchema, locationSchema, availabilitySchema } from '../utils/validation';
 import type { Env, Variables } from '../index';
 
 const companions = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -35,8 +36,8 @@ const companionSearchSchema = z.object({
  */
 companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
   const searchParams = c.req.valid('query');
-  const userId = c.get('userId'); // Optional - for distance calculation
-  
+  const userId = c.get('userId');
+
   try {
     // Build base query
     let query = `
@@ -44,32 +45,29 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
         sp.user_id as id,
         sp.display_name as name,
         sp.display_name,
-        sp.profile_images,
         sp.bio,
+        sp.profile_images,
         sp.categories,
         sp.regions,
         sp.spoken_languages as languages,
         sp.rating_average as rating,
-        sp.rating_count as reviewCount,
+        sp.rating_count,
         sp.verification_status as verified,
-        sp.subscription_status,
-        sp.created_at,
         u.status as online,
-        u.last_login_at as lastSeen,
-        MIN(ss.price_min) as price,
-        COUNT(ss.id) as serviceCount,
-        AVG(ss.duration_hours) as avgDuration
+        u.last_login_at,
+        MIN(ce.price) as price
       FROM supplier_profiles sp
       JOIN users u ON sp.user_id = u.id
-      LEFT JOIN supplier_services ss ON sp.user_id = ss.supplier_id AND ss.is_active = TRUE
-      WHERE sp.subscription_status = 'active' 
+      LEFT JOIN companion_experiences ce ON sp.user_id = ce.companion_id AND ce.is_active = TRUE
+      WHERE u.user_type = 'companion'
+        AND sp.subscription_status = 'active' 
         AND sp.verification_status = 'verified'
         AND u.status = 'active'
     `;
 
-    const queryParams: any[] = [];
+    const queryParams = [];
 
-    // Add search filters
+    // Apply filters
     if (searchParams.search) {
       query += ` AND (sp.display_name LIKE ? OR sp.bio LIKE ?)`;
       const searchTerm = `%${searchParams.search}%`;
@@ -86,11 +84,14 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
       queryParams.push(`%"${searchParams.location}"%`);
     }
 
-    if (searchParams.languages) {
-      const languages = searchParams.languages.split(',');
-      const languageConditions = languages.map(() => `JSON_EXTRACT(sp.spoken_languages, '$') LIKE ?`).join(' OR ');
-      query += ` AND (${languageConditions})`;
-      languages.forEach(lang => queryParams.push(`%"${lang.trim()}"%`));
+    if (searchParams.minPrice !== undefined) {
+      query += ` AND ce.price >= ?`;
+      queryParams.push(searchParams.minPrice);
+    }
+
+    if (searchParams.maxPrice !== undefined) {
+      query += ` AND ce.price <= ?`;
+      queryParams.push(searchParams.maxPrice);
     }
 
     if (searchParams.rating) {
@@ -98,83 +99,31 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
       queryParams.push(searchParams.rating);
     }
 
-    if (searchParams.verified !== undefined) {
-      query += ` AND sp.verification_status = ?`;
-      queryParams.push(searchParams.verified ? 'verified' : 'pending');
+    if (searchParams.languages) {
+      const langs = searchParams.languages.split(',');
+      const langConditions = langs.map(() => `JSON_EXTRACT(sp.spoken_languages, '$') LIKE ?`).join(' OR ');
+      query += ` AND (${langConditions})`;
+      langs.forEach(lang => queryParams.push(`%"${lang.trim()}"%`));
     }
 
-    // Group by supplier
+    if (searchParams.verified) {
+      query += ` AND sp.verification_status = 'verified'`;
+    }
+
+    // Group by companion
     query += ` GROUP BY sp.user_id`;
 
-    // Add price filter after grouping
-    if (searchParams.minPrice !== undefined) {
-      query += ` HAVING MIN(ss.price_min) >= ?`;
-      queryParams.push(searchParams.minPrice);
-    }
-
-    if (searchParams.maxPrice !== undefined) {
-      if (searchParams.minPrice !== undefined) {
-        query += ` AND MIN(ss.price_min) <= ?`;
-      } else {
-        query += ` HAVING MIN(ss.price_min) <= ?`;
-      }
-      queryParams.push(searchParams.maxPrice);
-    }
-
     // Add sorting
-    let orderBy = '';
-    switch (searchParams.sortBy) {
-      case 'rating':
-        orderBy = `sp.rating_average ${searchParams.sortOrder.toUpperCase()}`;
-        break;
-      case 'price':
-        orderBy = `MIN(ss.price_min) ${searchParams.sortOrder.toUpperCase()}`;
-        break;
-      case 'reviews':
-        orderBy = `sp.rating_count ${searchParams.sortOrder.toUpperCase()}`;
-        break;
-      case 'distance':
-        // For now, sort by creation date as distance calculation requires user location
-        orderBy = `sp.created_at ${searchParams.sortOrder.toUpperCase()}`;
-        break;
-      default:
-        orderBy = `sp.rating_average DESC`;
-    }
+    const sortColumn = searchParams.sortBy === 'rating' ? 'sp.rating_average' :
+                      searchParams.sortBy === 'price' ? 'price' :
+                      searchParams.sortBy === 'reviews' ? 'sp.rating_count' :
+                      'sp.created_at';
+    
+    query += ` ORDER BY ${sortColumn} ${searchParams.sortOrder.toUpperCase()}`;
 
-    query += ` ORDER BY ${orderBy}`;
-
-    // Get total count for pagination
-    const countQuery = `
-      SELECT COUNT(DISTINCT sp.user_id) as total
-      FROM supplier_profiles sp
-      JOIN users u ON sp.user_id = u.id
-      LEFT JOIN supplier_services ss ON sp.user_id = ss.supplier_id AND ss.is_active = TRUE
-      WHERE sp.subscription_status = 'active' 
-        AND sp.verification_status = 'verified'
-        AND u.status = 'active'
-    `;
-
-    // Apply same filters to count query (simplified)
-    let countQueryWithFilters = countQuery;
-    const countParams = [];
-
-    if (searchParams.search) {
-      countQueryWithFilters += ` AND (sp.display_name LIKE ? OR sp.bio LIKE ?)`;
-      const searchTerm = `%${searchParams.search}%`;
-      countParams.push(searchTerm, searchTerm);
-    }
-
-    if (searchParams.category) {
-      countQueryWithFilters += ` AND JSON_EXTRACT(sp.categories, '$') LIKE ?`;
-      countParams.push(`%"${searchParams.category}"%`);
-    }
-
-    if (searchParams.location) {
-      countQueryWithFilters += ` AND JSON_EXTRACT(sp.regions, '$') LIKE ?`;
-      countParams.push(`%"${searchParams.location}"%`);
-    }
-
-    const countResult = await c.env.DB.prepare(countQueryWithFilters).bind(...countParams).first();
+    // Get total count
+    const countQuery = `SELECT COUNT(*) as total FROM (${query})`;
+    const countResult = await c.env.DB.prepare(countQuery).bind(...queryParams).first();
     const total = countResult?.total as number || 0;
 
     // Get paginated results
@@ -198,7 +147,7 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
         gallery: profileImages,
         location: regions[0] || null,
         rating: Math.round((companion.rating || 0) * 10) / 10,
-        reviewCount: companion.reviewCount || 0,
+        reviewCount: companion.rating_count || 0,
         price: companion.price || 0,
         services: [], // Will be populated separately if needed
         languages: languages,
@@ -223,6 +172,7 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
       LEFT JOIN supplier_profiles sp ON JSON_EXTRACT(sp.categories, '$') LIKE '%"' || c.id || '"%'
         AND sp.subscription_status = 'active' 
         AND sp.verification_status = 'verified'
+      LEFT JOIN users u ON sp.user_id = u.id AND u.user_type = 'companion'
       WHERE c.is_active = TRUE
       GROUP BY c.id, c.name_en
       ORDER BY category_count DESC
@@ -237,6 +187,7 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
       LEFT JOIN supplier_profiles sp ON JSON_EXTRACT(sp.regions, '$') LIKE '%"' || r.id || '"%'
         AND sp.subscription_status = 'active' 
         AND sp.verification_status = 'verified'
+      LEFT JOIN users u ON sp.user_id = u.id AND u.user_type = 'companion'
       WHERE r.is_active = TRUE
       GROUP BY r.id, r.name_en
       ORDER BY location_count DESC
@@ -244,22 +195,24 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
 
     const priceRangeResult = await c.env.DB.prepare(`
       SELECT 
-        MIN(ss.price_min) as min_price,
-        MAX(ss.price_max) as max_price
-      FROM supplier_services ss
-      JOIN supplier_profiles sp ON ss.supplier_id = sp.user_id
-      WHERE ss.is_active = TRUE 
+        MIN(ce.price) as min_price,
+        MAX(ce.price) as max_price
+      FROM companion_experiences ce
+      JOIN supplier_profiles sp ON ce.companion_id = sp.user_id
+      JOIN users u ON sp.user_id = u.id
+      WHERE ce.is_active = TRUE 
         AND sp.subscription_status = 'active'
         AND sp.verification_status = 'verified'
+        AND u.user_type = 'companion'
     `).first();
 
     const filters = {
-      categories: filtersResult.results.map((cat: any) => ({
+      categories: (filtersResult.results || []).map((cat: any) => ({
         id: cat.category_id,
         name: cat.category_name,
         count: cat.category_count
       })),
-      locations: locationsResult.results.map((loc: any) => ({
+      locations: (locationsResult.results || []).map((loc: any) => ({
         id: loc.location_id,
         name: loc.location_name,
         count: loc.location_count
@@ -303,6 +256,7 @@ companions.get('/:id', validateUUID('id'), async (c) => {
       FROM supplier_profiles sp
       JOIN users u ON sp.user_id = u.id
       WHERE sp.user_id = ?
+        AND u.user_type = 'companion'
         AND sp.subscription_status = 'active'
         AND sp.verification_status = 'verified'
         AND u.status = 'active'
@@ -312,15 +266,20 @@ companions.get('/:id', validateUUID('id'), async (c) => {
       return jsonError(c, 'Companion not found', 'The requested companion does not exist or is not available', 404);
     }
 
-    // Get services
-    const services = await c.env.DB.prepare(`
-      SELECT
-        ss.*,
-        c.name_en as category_name
-      FROM supplier_services ss
-      LEFT JOIN categories c ON ss.category_id = c.id
-      WHERE ss.supplier_id = ? AND ss.is_active = TRUE
-      ORDER BY ss.price_min ASC
+    // Get experiences
+    const experiences = await c.env.DB.prepare(`
+      SELECT *
+      FROM companion_experiences
+      WHERE companion_id = ? AND is_active = TRUE
+      ORDER BY price ASC
+    `).bind(companionId).all();
+
+    // Get locations
+    const locations = await c.env.DB.prepare(`
+      SELECT *
+      FROM companion_locations
+      WHERE companion_id = ?
+      ORDER BY is_popular DESC, city ASC
     `).bind(companionId).all();
 
     // Get availability
@@ -338,19 +297,19 @@ companions.get('/:id', validateUUID('id'), async (c) => {
         cp.display_name as customer_name,
         cp.profile_images as customer_images
       FROM reviews r
-      JOIN customer_profiles cp ON r.customer_id = cp.user_id
-      WHERE r.companion_id = ?
+      JOIN customer_profiles cp ON r.reviewer_id = cp.user_id
+      WHERE r.reviewee_id = ?
       ORDER BY r.created_at DESC
       LIMIT 10
     `).bind(companionId).all();
 
     // Format data
-    const profileImages = JSON.parse(companion.profile_images || '[]');
-    const categories = JSON.parse(companion.categories || '[]');
-    const regions = JSON.parse(companion.regions || '[]');
-    const languages = JSON.parse(companion.spoken_languages || '[]');
+    const profileImages = companion.profile_images ? JSON.parse(companion.profile_images as string) : [];
+    const categories = companion.categories ? JSON.parse(companion.categories as string) : [];
+    const regions = companion.regions ? JSON.parse(companion.regions as string) : [];
+    const languages = companion.spoken_languages ? JSON.parse(companion.spoken_languages as string) : [];
 
-    const weeklySchedule = {
+    const weeklySchedule: Record<string, Array<{start: string, end: string}>> = {
       monday: [],
       tuesday: [],
       wednesday: [],
@@ -360,11 +319,11 @@ companions.get('/:id', validateUUID('id'), async (c) => {
       sunday: []
     };
 
-    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
-    availability.results.forEach((avail: any) => {
-      const dayName = dayNames[avail.day_of_week];
-      if (avail.is_available) {
+    (availability.results || []).forEach((avail: any) => {
+      const dayName = dayNames[avail.day_of_week] as keyof typeof weeklySchedule;
+      if (avail.is_available && dayName && weeklySchedule[dayName]) {
         weeklySchedule[dayName].push({
           start: avail.start_time,
           end: avail.end_time
@@ -379,16 +338,29 @@ companions.get('/:id', validateUUID('id'), async (c) => {
       profileImage: profileImages[0] || null,
       gallery: profileImages,
       location: regions[0] || null,
-      rating: Math.round((companion.rating_average || 0) * 10) / 10,
+      rating: Math.round((Number(companion.rating_average) || 0) * 10) / 10,
       reviewCount: companion.rating_count || 0,
-      price: 0, // Will be set from services
-      services: services.results.map((service: any) => ({
-        id: service.id,
-        name: service.title,
-        description: service.description,
-        price: service.price_min,
-        duration: `${service.duration_hours} hours`,
-        category: service.category_name || 'General'
+      price: 0, // Will be set from experiences
+      experiences: experiences.results.map((exp: any) => ({
+        id: exp.id,
+        title: exp.title,
+        description: exp.description,
+        durationMinutes: exp.duration_minutes,
+        keywords: JSON.parse(exp.keywords || '[]'),
+        price: exp.price,
+        currency: exp.currency,
+        isActive: exp.is_active,
+        createdAt: exp.created_at,
+        updatedAt: exp.updated_at
+      })),
+      locations: locations.results.map((loc: any) => ({
+        id: loc.id,
+        city: loc.city,
+        region: loc.region,
+        isPopular: loc.is_popular,
+        description: loc.description,
+        createdAt: loc.created_at,
+        updatedAt: loc.updated_at
       })),
       languages: languages,
       verified: companion.verification_status === 'verified',
@@ -407,20 +379,20 @@ companions.get('/:id', validateUUID('id'), async (c) => {
       reviews: reviews.results.map((review: any) => ({
         id: review.id,
         user: {
-          id: review.customer_id,
+          id: review.reviewer_id,
           name: review.customer_name,
           profileImage: JSON.parse(review.customer_images || '[]')[0] || null
         },
         rating: review.rating,
         comment: review.comment,
         date: review.created_at,
-        verified: review.verified
+        verified: review.is_public
       }))
     };
 
-    // Set price from cheapest service
-    if (services.results.length > 0) {
-      companionData.price = Math.min(...services.results.map((s: any) => s.price_min));
+    // Set price from cheapest experience
+    if (experiences.results.length > 0) {
+      companionData.price = Math.min(...experiences.results.map((exp: any) => exp.price));
     }
 
     return jsonSuccess(c, companionData, 'Companion details retrieved successfully');
@@ -446,8 +418,10 @@ companions.get('/:id/availability', validateUUID('id'), async (c) => {
   try {
     // Verify companion exists
     const companion = await c.env.DB.prepare(`
-      SELECT user_id FROM supplier_profiles
-      WHERE user_id = ? AND subscription_status = 'active' AND verification_status = 'verified'
+      SELECT user_id FROM supplier_profiles sp
+      JOIN users u ON sp.user_id = u.id
+      WHERE sp.user_id = ? AND u.user_type = 'companion' 
+        AND sp.subscription_status = 'active' AND sp.verification_status = 'verified'
     `).bind(companionId).first();
 
     if (!companion) {
@@ -475,64 +449,484 @@ companions.get('/:id/availability', validateUUID('id'), async (c) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
 
-    for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-      const dateStr = date.toISOString().split('T')[0];
-      const dayOfWeek = date.getDay();
-
-      // Get weekly schedule for this day
-      const daySchedule = weeklyAvailability.results.filter((avail: any) =>
-        avail.day_of_week === dayOfWeek && avail.is_available
-      );
-
-      // Get bookings for this date
-      const dayBookings = bookings.results.filter((booking: any) =>
-        booking.date === dateStr
-      );
-
-      // Generate time slots
-      const timeSlots = [];
-
-      if (daySchedule.length > 0) {
-        daySchedule.forEach((schedule: any) => {
-          // Generate hourly slots between start and end time
-          const startHour = parseInt(schedule.start_time.split(':')[0]);
-          const endHour = parseInt(schedule.end_time.split(':')[0]);
-
-          for (let hour = startHour; hour < endHour; hour++) {
-            const slotStart = `${hour.toString().padStart(2, '0')}:00`;
-            const slotEnd = `${(hour + 1).toString().padStart(2, '0')}:00`;
-
-            // Check if this slot conflicts with any booking
-            const isBooked = dayBookings.some((booking: any) => {
-              return (slotStart >= booking.start_time && slotStart < booking.end_time) ||
-                     (slotEnd > booking.start_time && slotEnd <= booking.end_time);
-            });
-
-            timeSlots.push({
-              start: slotStart,
-              end: slotEnd,
-              available: !isBooked,
-              price: 1000 // Default hourly rate
-            });
-          }
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dayOfWeek = d.getDay();
+      const dateStr = d.toISOString().split('T')[0];
+      
+      // Find weekly availability for this day
+      const dayAvailability = weeklyAvailability.results.find((wa: any) => wa.day_of_week === dayOfWeek);
+      
+      if (dayAvailability && dayAvailability.is_available) {
+        // Check for existing bookings on this date
+        const dayBookings = bookings.results.filter((booking: any) => booking.date === dateStr);
+        
+        availability.push({
+          date: dateStr,
+          available: dayBookings.length === 0, // Simplified - would need more complex logic for partial availability
+          slots: dayBookings.length === 0 ? [
+            {
+              start: dayAvailability.start_time,
+              end: dayAvailability.end_time,
+              available: true
+            }
+          ] : []
+        });
+      } else {
+        availability.push({
+          date: dateStr,
+          available: false,
+          slots: []
         });
       }
-
-      availability.push({
-        date: dateStr,
-        available: timeSlots.some(slot => slot.available),
-        timeSlots
-      });
     }
 
-    return jsonSuccess(c, {
-      availability
-    }, 'Availability retrieved successfully');
+    return jsonSuccess(c, { availability }, 'Availability retrieved successfully');
 
   } catch (error) {
     console.error('Get companion availability error:', error);
     return jsonError(c, 'Failed to retrieve availability', 'An error occurred while fetching availability', 500);
   }
 });
+
+// Protected routes for companion management (require authentication)
+companions.use('/*/experiences*', authMiddleware);
+companions.use('/*/locations*', authMiddleware);
+companions.use('/*/availability*', authMiddleware);
+
+/**
+ * Create companion experience
+ */
+companions.post('/:id/experiences', validateUUID('id'), zValidator('json', experienceSchema), async (c) => {
+  const companionId = c.req.param('id');
+  const userId = c.get('userId');
+  const userType = c.get('userType');
+  const experienceData = c.req.valid('json');
+
+  // Only companions can create experiences for themselves
+  if (userType !== 'companion' || userId !== companionId) {
+    return jsonError(c, 'Access denied', 'You can only create experiences for your own profile', 403);
+  }
+
+  try {
+    const experienceId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    await c.env.DB.prepare(`
+      INSERT INTO companion_experiences (
+        id, companion_id, title, description, duration_minutes, 
+        keywords, price, currency, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      experienceId,
+      companionId,
+      experienceData.title,
+      experienceData.description || null,
+      experienceData.durationMinutes,
+      JSON.stringify(experienceData.keywords || []),
+      experienceData.price,
+      experienceData.currency,
+      now,
+      now
+    ).run();
+
+    // Track experience creation
+    await c.env.ANALYTICS_QUEUE.send({
+      eventType: 'experience_created',
+      userId: companionId,
+      properties: { 
+        experienceId,
+        price: experienceData.price,
+        duration: experienceData.durationMinutes
+      },
+      timestamp: now
+    });
+
+    return jsonSuccess(c, { 
+      experienceId,
+      created: true 
+    }, 'Experience created successfully', 201);
+
+  } catch (error) {
+    console.error('Create experience error:', error);
+    return jsonError(c, 'Failed to create experience', 'An error occurred while creating the experience', 500);
+  }
+});
+
+/**
+ * Get companion experiences
+ */
+companions.get('/:id/experiences', validateUUID('id'), validatePagination, async (c) => {
+  const companionId = c.req.param('id');
+  const pagination = c.get('pagination');
+  const { page, limit } = pagination || { page: 1, limit: 20 };
+
+  try {
+    // Get total count
+    const countResult = await c.env.DB.prepare(`
+      SELECT COUNT(*) as total 
+      FROM companion_experiences 
+      WHERE companion_id = ? AND is_active = TRUE
+    `).bind(companionId).first();
+    
+    const total = countResult?.total as number || 0;
+
+    // Get experiences with pagination
+    const offset = (page - 1) * limit;
+    const experiencesResult = await c.env.DB.prepare(`
+      SELECT *
+      FROM companion_experiences 
+      WHERE companion_id = ? AND is_active = TRUE
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `).bind(companionId, limit, offset).all();
+
+    const experiences = experiencesResult.results?.map((exp: any) => ({
+      id: exp.id,
+      title: exp.title,
+      description: exp.description,
+      durationMinutes: exp.duration_minutes,
+      keywords: JSON.parse(exp.keywords || '[]'),
+      price: exp.price,
+      currency: exp.currency,
+      isActive: Boolean(exp.is_active),
+      createdAt: exp.created_at,
+      updatedAt: exp.updated_at
+    })) || [];
+
+    const pagination = createPagination(page, limit, total);
+    return jsonPaginated(c, experiences, pagination, 'Experiences retrieved successfully');
+
+  } catch (error) {
+    console.error('Get companion experiences error:', error);
+    return jsonError(c, 'Failed to retrieve experiences', 'An error occurred while fetching experiences', 500);
+  }
+});
+
+/**
+ * Update companion experience
+ */
+companions.put('/:id/experiences/:experienceId', 
+  validateUUID('id'), 
+  validateUUID('experienceId'), 
+  zValidator('json', experienceSchema), 
+  async (c) => {
+    const companionId = c.req.param('id');
+    const experienceId = c.req.param('experienceId');
+    const userId = c.get('userId');
+    const userType = c.get('userType');
+    const experienceData = c.req.valid('json');
+
+    // Only companions can update their own experiences
+    if (userType !== 'companion' || userId !== companionId) {
+      return jsonError(c, 'Access denied', 'You can only update your own experiences', 403);
+    }
+
+    try {
+      // Verify experience exists and belongs to companion
+      const existingExp = await c.env.DB.prepare(`
+        SELECT id FROM companion_experiences 
+        WHERE id = ? AND companion_id = ?
+      `).bind(experienceId, companionId).first();
+
+      if (!existingExp) {
+        return jsonError(c, 'Experience not found', 'The requested experience does not exist', 404);
+      }
+
+      const now = new Date().toISOString();
+
+      await c.env.DB.prepare(`
+        UPDATE companion_experiences 
+        SET title = ?, description = ?, duration_minutes = ?, 
+            keywords = ?, price = ?, currency = ?, updated_at = ?
+        WHERE id = ? AND companion_id = ?
+      `).bind(
+        experienceData.title,
+        experienceData.description || null,
+        experienceData.durationMinutes,
+        JSON.stringify(experienceData.keywords || []),
+        experienceData.price,
+        experienceData.currency,
+        now,
+        experienceId,
+        companionId
+      ).run();
+
+      return jsonSuccess(c, { updated: true }, 'Experience updated successfully');
+
+    } catch (error) {
+      console.error('Update experience error:', error);
+      return jsonError(c, 'Failed to update experience', 'An error occurred while updating the experience', 500);
+    }
+  }
+);
+
+/**
+ * Delete companion experience
+ */
+companions.delete('/:id/experiences/:experienceId', 
+  validateUUID('id'), 
+  validateUUID('experienceId'), 
+  async (c) => {
+    const companionId = c.req.param('id');
+    const experienceId = c.req.param('experienceId');
+    const userId = c.get('userId');
+    const userType = c.get('userType');
+
+    // Only companions can delete their own experiences
+    if (userType !== 'companion' || userId !== companionId) {
+      return jsonError(c, 'Access denied', 'You can only delete your own experiences', 403);
+    }
+
+    try {
+      // Verify experience exists and belongs to companion
+      const existingExp = await c.env.DB.prepare(`
+        SELECT id FROM companion_experiences 
+        WHERE id = ? AND companion_id = ?
+      `).bind(experienceId, companionId).first();
+
+      if (!existingExp) {
+        return jsonError(c, 'Experience not found', 'The requested experience does not exist', 404);
+      }
+
+      // Soft delete by setting is_active to false
+      await c.env.DB.prepare(`
+        UPDATE companion_experiences 
+        SET is_active = FALSE, updated_at = ?
+        WHERE id = ? AND companion_id = ?
+      `).bind(new Date().toISOString(), experienceId, companionId).run();
+
+      return jsonSuccess(c, { deleted: true }, 'Experience deleted successfully');
+
+    } catch (error) {
+      console.error('Delete experience error:', error);
+      return jsonError(c, 'Failed to delete experience', 'An error occurred while deleting the experience', 500);
+    }
+  }
+);
+
+/**
+ * Create companion location
+ */
+companions.post('/:id/locations', validateUUID('id'), zValidator('json', locationSchema), async (c) => {
+  const companionId = c.req.param('id');
+  const userId = c.get('userId');
+  const userType = c.get('userType');
+  const locationData = c.req.valid('json');
+
+  // Only companions can create locations for themselves
+  if (userType !== 'companion' || userId !== companionId) {
+    return jsonError(c, 'Access denied', 'You can only create locations for your own profile', 403);
+  }
+
+  try {
+    const locationId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    await c.env.DB.prepare(`
+      INSERT INTO companion_locations (
+        id, companion_id, city, region, is_popular, description, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      locationId,
+      companionId,
+      locationData.city,
+      locationData.region,
+      locationData.isPopular,
+      locationData.description || null,
+      now,
+      now
+    ).run();
+
+    return jsonSuccess(c, { 
+      locationId,
+      created: true 
+    }, 'Location created successfully', 201);
+
+  } catch (error) {
+    console.error('Create location error:', error);
+    return jsonError(c, 'Failed to create location', 'An error occurred while creating the location', 500);
+  }
+});
+
+/**
+ * Get companion locations
+ */
+companions.get('/:id/locations', validateUUID('id'), async (c) => {
+  const companionId = c.req.param('id');
+
+  try {
+    const locationsResult = await c.env.DB.prepare(`
+      SELECT *
+      FROM companion_locations 
+      WHERE companion_id = ?
+      ORDER BY is_popular DESC, city ASC
+    `).bind(companionId).all();
+
+    const locations = locationsResult.results?.map((loc: any) => ({
+      id: loc.id,
+      city: loc.city,
+      region: loc.region,
+      isPopular: Boolean(loc.is_popular),
+      description: loc.description,
+      createdAt: loc.created_at,
+      updatedAt: loc.updated_at
+    })) || [];
+
+    return jsonSuccess(c, { locations }, 'Locations retrieved successfully');
+
+  } catch (error) {
+    console.error('Get companion locations error:', error);
+    return jsonError(c, 'Failed to retrieve locations', 'An error occurred while fetching locations', 500);
+  }
+});
+
+/**
+ * Update companion location
+ */
+companions.put('/:id/locations/:locationId', 
+  validateUUID('id'), 
+  validateUUID('locationId'), 
+  zValidator('json', locationSchema), 
+  async (c) => {
+    const companionId = c.req.param('id');
+    const locationId = c.req.param('locationId');
+    const userId = c.get('userId');
+    const userType = c.get('userType');
+    const locationData = c.req.valid('json');
+
+    // Only companions can update their own locations
+    if (userType !== 'companion' || userId !== companionId) {
+      return jsonError(c, 'Access denied', 'You can only update your own locations', 403);
+    }
+
+    try {
+      // Verify location exists and belongs to companion
+      const existingLoc = await c.env.DB.prepare(`
+        SELECT id FROM companion_locations 
+        WHERE id = ? AND companion_id = ?
+      `).bind(locationId, companionId).first();
+
+      if (!existingLoc) {
+        return jsonError(c, 'Location not found', 'The requested location does not exist', 404);
+      }
+
+      const now = new Date().toISOString();
+
+      await c.env.DB.prepare(`
+        UPDATE companion_locations 
+        SET city = ?, region = ?, is_popular = ?, description = ?, updated_at = ?
+        WHERE id = ? AND companion_id = ?
+      `).bind(
+        locationData.city,
+        locationData.region,
+        locationData.isPopular,
+        locationData.description || null,
+        now,
+        locationId,
+        companionId
+      ).run();
+
+      return jsonSuccess(c, { updated: true }, 'Location updated successfully');
+
+    } catch (error) {
+      console.error('Update location error:', error);
+      return jsonError(c, 'Failed to update location', 'An error occurred while updating the location', 500);
+    }
+  }
+);
+
+/**
+ * Delete companion location
+ */
+companions.delete('/:id/locations/:locationId', 
+  validateUUID('id'), 
+  validateUUID('locationId'), 
+  async (c) => {
+    const companionId = c.req.param('id');
+    const locationId = c.req.param('locationId');
+    const userId = c.get('userId');
+    const userType = c.get('userType');
+
+    // Only companions can delete their own locations
+    if (userType !== 'companion' || userId !== companionId) {
+      return jsonError(c, 'Access denied', 'You can only delete your own locations', 403);
+    }
+
+    try {
+      // Verify location exists and belongs to companion
+      const existingLoc = await c.env.DB.prepare(`
+        SELECT id FROM companion_locations 
+        WHERE id = ? AND companion_id = ?
+      `).bind(locationId, companionId).first();
+
+      if (!existingLoc) {
+        return jsonError(c, 'Location not found', 'The requested location does not exist', 404);
+      }
+
+      // Hard delete location
+      await c.env.DB.prepare(`
+        DELETE FROM companion_locations 
+        WHERE id = ? AND companion_id = ?
+      `).bind(locationId, companionId).run();
+
+      return jsonSuccess(c, { deleted: true }, 'Location deleted successfully');
+
+    } catch (error) {
+      console.error('Delete location error:', error);
+      return jsonError(c, 'Failed to delete location', 'An error occurred while deleting the location', 500);
+    }
+  }
+);
+
+/**
+ * Set companion availability
+ */
+companions.post('/:id/availability', 
+  validateUUID('id'), 
+  zValidator('json', z.array(availabilitySchema)), 
+  async (c) => {
+    const companionId = c.req.param('id');
+    const userId = c.get('userId');
+    const userType = c.get('userType');
+    const availabilityData = c.req.valid('json');
+
+    // Only companions can set their own availability
+    if (userType !== 'companion' || userId !== companionId) {
+      return jsonError(c, 'Access denied', 'You can only set your own availability', 403);
+    }
+
+    try {
+      // Delete existing availability
+      await c.env.DB.prepare(`
+        DELETE FROM supplier_availability WHERE supplier_id = ?
+      `).bind(companionId).run();
+
+      // Insert new availability
+      for (const avail of availabilityData) {
+        const availId = crypto.randomUUID();
+        await c.env.DB.prepare(`
+          INSERT INTO supplier_availability (
+            id, supplier_id, day_of_week, start_time, end_time, is_available, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          availId,
+          companionId,
+          avail.dayOfWeek,
+          avail.startTime,
+          avail.endTime,
+          avail.isAvailable,
+          new Date().toISOString(),
+          new Date().toISOString()
+        ).run();
+      }
+
+      return jsonSuccess(c, { updated: true }, 'Availability updated successfully');
+
+    } catch (error) {
+      console.error('Set availability error:', error);
+      return jsonError(c, 'Failed to set availability', 'An error occurred while setting availability', 500);
+    }
+  }
+);
 
 export { companions as companionRoutes };
