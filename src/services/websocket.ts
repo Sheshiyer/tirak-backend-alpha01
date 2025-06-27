@@ -2,7 +2,7 @@ import type { Env } from '../index';
 
 export interface WebSocketConnection {
   userId: string;
-  userType: 'customer' | 'supplier' | 'admin';
+  userType: 'customer' | 'supplier' | 'admin' | 'companion';
   socket: WebSocket;
   lastActivity: Date;
   subscriptions: Set<string>;

@@ -96,7 +96,14 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
         userId,
         displayName: normalizedEmail.split('@')[0] || 'User', // Default display name
       }, c.env.DB);
-    } 
+    } else if (userType === 'companion') {
+      // For companions, create a customer profile for now as a base
+      await createCustomerProfile({
+        userId,
+        displayName: normalizedEmail.split('@')[0] || 'Companion', // Default companion display name
+      }, c.env.DB);
+    }
+    
     // Admin users don't need specific profiles
     
     // Generate tokens

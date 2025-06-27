@@ -3,7 +3,7 @@
 export interface JWTPayload {
   sub: string; // user ID
   email: string;
-  userType: 'customer' | 'supplier' | 'admin';
+  userType: 'customer' | 'supplier' | 'admin' | 'companion';
   iat: number;
   exp: number;
   jti?: string; // JWT ID for token tracking
@@ -36,7 +36,7 @@ export interface AuthContext {
   user: {
     id: string;
     email: string;
-    userType: 'customer' | 'supplier' | 'admin';
+    userType: 'customer' | 'supplier' | 'admin' | 'companion';
     status: string;
   };
   session: SessionData;
