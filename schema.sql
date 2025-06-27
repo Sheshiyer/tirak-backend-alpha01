@@ -6,7 +6,7 @@ CREATE TABLE users (
     email TEXT UNIQUE NOT NULL,
     phone TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    user_type TEXT NOT NULL CHECK (user_type IN ('customer', 'supplier', 'admin')),
+    user_type TEXT NOT NULL CHECK (user_type IN ('customer', 'supplier', 'admin', 'companion')),
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('active', 'suspended', 'pending')),
     email_verified BOOLEAN DEFAULT FALSE,
     phone_verified BOOLEAN DEFAULT FALSE,

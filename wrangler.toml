@@ -30,8 +30,8 @@ database_id = "placeholder-staging-db-id"
 
 [[env.production.d1_databases]]
 binding = "DB"
-database_name = "tirak-production"
-database_id = "placeholder-production-db-id"
+database_name = "tirak-development"
+database_id = "60443346-c480-4975-962e-bd4daf4a37a8"
 
 # R2 Storage bindings
 [[r2_buckets]]
