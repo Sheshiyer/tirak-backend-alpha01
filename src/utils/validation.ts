@@ -152,7 +152,7 @@ export function validateFileUpload(options: {
   required?: boolean;
   maxFiles?: number;
 }) {
-  return async (c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) => {
+  return async (c: Context<{ Bindings: Env; Variables: Variables; }>, next: Next) => {
     try {
       const contentType = c.req.header('Content-Type');
 

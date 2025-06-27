@@ -1,0 +1,1160 @@
+{
+  "info": {
+    "name": "Tirak API",
+    "description": "API collection for Tirak companion booking platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "description": "Authentication related endpoints",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"phone\": \"0615554444\",\n  \"password\": \"Password123!\",\n  \"userType\": \"customer\",\n  \"preferredLanguage\": \"en\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Register a new user"
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"user@example.com\",\n  \"password\": \"Password123!\",\n  \"deviceId\": \"device-uuid-here\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Login with email/phone and password"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData && jsonData.data && jsonData.data.accessToken) {",
+                  "    pm.environment.set('accessToken', jsonData.data.accessToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"user@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "forgot-password"]
+            },
+            "description": "Request password reset"
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"reset-token-here\",\n  \"newPassword\": \"NewPassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "reset-password"]
+            },
+            "description": "Reset password with token"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "logout"]
+            },
+            "description": "Logout user"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Public",
+      "description": "Public endpoints that don't require authentication",
+      "item": [
+        {
+          "name": "Get Public Categories",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/public/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "public", "categories"]
+            },
+            "description": "Get list of service categories"
+          }
+        },
+        {
+          "name": "Get Public Regions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/public/regions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "public", "regions"]
+            },
+            "description": "Get list of available regions"
+          }
+        },
+        {
+          "name": "Get Featured Suppliers",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/public/featured-suppliers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "public", "featured-suppliers"]
+            },
+            "description": "Get list of featured suppliers"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "description": "User profile related endpoints",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "me"]
+            },
+            "description": "Get current user profile"
+          }
+        },
+        {
+          "name": "Update My Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Updated Name\",\n  \"bio\": \"New bio text\",\n  \"preferredLanguage\": \"th\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "me"]
+            },
+            "description": "Update current user profile"
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"Password123!\",\n  \"newPassword\": \"NewPassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/change-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "change-password"]
+            },
+            "description": "Change user password"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Suppliers",
+      "description": "Supplier related endpoints",
+      "item": [
+        {
+          "name": "Get My Supplier Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/suppliers/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "suppliers", "me"]
+            },
+            "description": "Get supplier's own profile"
+          }
+        },
+        {
+          "name": "Update Supplier Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Business Name\",\n  \"bio\": \"Professional bio\",\n  \"categories\": [\"massage\", \"therapy\"],\n  \"regions\": [\"bangkok\", \"pattaya\"],\n  \"spokenLanguages\": [\"en\", \"th\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/suppliers/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "suppliers", "me"]
+            },
+            "description": "Update supplier profile"
+          }
+        },
+        {
+          "name": "Get Supplier Services",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/suppliers/me/services",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "suppliers", "me", "services"]
+            },
+            "description": "Get supplier's services"
+          }
+        },
+        {
+          "name": "Create Service",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Professional Massage\",\n  \"description\": \"Relaxing full body massage\",\n  \"priceMin\": 500,\n  \"priceMax\": 1000,\n  \"currency\": \"THB\",\n  \"durationHours\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/suppliers/me/services",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "suppliers", "me", "services"]
+            },
+            "description": "Create a new service"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "description": "Customer related endpoints",
+      "item": [
+        {
+          "name": "Get My Customer Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/customers/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customers", "me"]
+            },
+            "description": "Get customer's own profile"
+          }
+        },
+        {
+          "name": "Update Customer Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"New Display Name\",\n  \"preferences\": {\n    \"region\": \"bangkok\",\n    \"language\": \"en\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customers/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customers", "me"]
+            },
+            "description": "Update customer profile"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bookings",
+      "description": "Booking management endpoints",
+      "item": [
+        {
+          "name": "Create Booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceId\": \"service-uuid\",\n  \"scheduledAt\": \"2023-10-15T14:00:00Z\",\n  \"duration\": 60,\n  \"notes\": \"Special requests here\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings"]
+            },
+            "description": "Create a new booking"
+          }
+        },
+        {
+          "name": "Get My Bookings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/me?status=pending&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings", "me"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "pending"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Get user's bookings with optional filters"
+          }
+        },
+        {
+          "name": "Get Booking Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "booking-uuid"
+                }
+              ]
+            },
+            "description": "Get details for a specific booking"
+          }
+        },
+        {
+          "name": "Update Booking Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"confirmed\",\n  \"notes\": \"Booking confirmed\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/:id/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings", ":id", "status"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "booking-uuid"
+                }
+              ]
+            },
+            "description": "Update booking status (confirm, cancel, complete)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reviews",
+      "description": "Review management endpoints",
+      "item": [
+        {
+          "name": "Create Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookingId\": \"booking-uuid\",\n  \"rating\": 5,\n  \"comment\": \"Great service!\",\n  \"isPublic\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reviews"]
+            },
+            "description": "Create a review for a completed booking"
+          }
+        },
+        {
+          "name": "Get Reviews for Supplier",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reviews/supplier/:id?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reviews", "supplier", ":id"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "supplier-uuid"
+                }
+              ]
+            },
+            "description": "Get reviews for a specific supplier"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat",
+      "description": "Chat related endpoints",
+      "item": [
+        {
+          "name": "Create Chat Room",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplierId\": \"supplier-uuid\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/rooms",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chat", "rooms"]
+            },
+            "description": "Create a new chat room with a supplier"
+          }
+        },
+        {
+          "name": "Get My Chat Rooms",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/rooms",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chat", "rooms"]
+            },
+            "description": "Get list of user's active chat rooms"
+          }
+        },
+        {
+          "name": "Get Chat Messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/rooms/:roomId/messages?before=timestamp&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chat", "rooms", ":roomId", "messages"],
+              "query": [
+                {
+                  "key": "before",
+                  "value": "timestamp",
+                  "description": "optional"
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "optional"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "roomId",
+                  "value": "room-uuid"
+                }
+              ]
+            },
+            "description": "Get messages for a specific chat room"
+          }
+        },
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messageType\": \"text\",\n  \"content\": \"Hello there!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/rooms/:roomId/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chat", "rooms", ":roomId", "messages"],
+              "variable": [
+                {
+                  "key": "roomId",
+                  "value": "room-uuid"
+                }
+              ]
+            },
+            "description": "Send a new message in a chat room"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "description": "Search related endpoints",
+      "item": [
+        {
+          "name": "Search Suppliers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/search/suppliers?region=bangkok&category=massage&priceMin=300&priceMax=1000&language=en&page=1&limit=20&sortBy=rating&sortOrder=desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "search", "suppliers"],
+              "query": [
+                {
+                  "key": "region",
+                  "value": "bangkok",
+                  "description": "optional"
+                },
+                {
+                  "key": "category",
+                  "value": "massage",
+                  "description": "optional"
+                },
+                {
+                  "key": "priceMin",
+                  "value": "300",
+                  "description": "optional"
+                },
+                {
+                  "key": "priceMax",
+                  "value": "1000",
+                  "description": "optional"
+                },
+                {
+                  "key": "language",
+                  "value": "en",
+                  "description": "optional"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "optional, default: 1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "optional, default: 20"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "rating",
+                  "description": "optional: rating, price, distance, created"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc",
+                  "description": "optional: asc, desc"
+                }
+              ]
+            },
+            "description": "Search for suppliers with filters"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Uploads",
+      "description": "File upload endpoints",
+      "item": [
+        {
+          "name": "Upload File",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/file.jpg"
+                },
+                {
+                  "key": "category",
+                  "value": "profile",
+                  "type": "text",
+                  "description": "profile, service, chat, document"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/uploads",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "uploads"]
+            },
+            "description": "Upload a file (image)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Companions",
+      "description": "Companion related endpoints",
+      "item": [
+        {
+          "name": "Get Companions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/companions?region=bangkok&category=massage&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "companions"],
+              "query": [
+                {
+                  "key": "region",
+                  "value": "bangkok",
+                  "description": "optional"
+                },
+                {
+                  "key": "category",
+                  "value": "massage",
+                  "description": "optional"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "optional"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "optional"
+                }
+              ]
+            },
+            "description": "Get list of companions"
+          }
+        },
+        {
+          "name": "Get Companion Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/companions/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "companions", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "companion-uuid"
+                }
+              ]
+            },
+            "description": "Get details for a specific companion"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Admin endpoints (requires admin privileges)",
+      "item": [
+        {
+          "name": "Dashboard",
+          "item": [
+            {
+              "name": "Get Dashboard Overview",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/dashboard",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "admin", "dashboard"]
+                },
+                "description": "Get admin dashboard overview data"
+              }
+            },
+            {
+              "name": "Get Recent Activity",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/dashboard/activity",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "admin", "dashboard", "activity"]
+                },
+                "description": "Get recent platform activity"
+              }
+            }
+          ]
+        },
+        {
+          "name": "User Management",
+          "item": [
+            {
+              "name": "Get All Users",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/users?userType=customer&status=active&page=1&limit=20",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "admin", "users"],
+                  "query": [
+                    {
+                      "key": "userType",
+                      "value": "customer",
+                      "description": "optional"
+                    },
+                    {
+                      "key": "status",
+                      "value": "active",
+                      "description": "optional"
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Get all users with filtering"
+              }
+            },
+            {
+              "name": "Get User Details",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/users/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "admin", "users", ":id"],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "user-uuid"
+                    }
+                  ]
+                },
+                "description": "Get details for a specific user"
+              }
+            },
+            {
+              "name": "Update User Status",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"suspended\",\n  \"reason\": \"Violation of terms\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/users/:id/status",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "admin", "users", ":id", "status"],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "user-uuid"
+                    }
+                  ]
+                },
+                "description": "Suspend or reactivate a user"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Analytics",
+          "item": [
+            {
+              "name": "Get User Growth",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/analytics/user-growth?period=monthly",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "admin", "analytics", "user-growth"],
+                  "query": [
+                    {
+                      "key": "period",
+                      "value": "monthly",
+                      "description": "daily, weekly, monthly, yearly"
+                    }
+                  ]
+                },
+                "description": "Get user growth analytics"
+              }
+            },
+            {
+              "name": "Get Booking Analytics",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/analytics/bookings?startDate=2023-01-01&endDate=2023-12-31",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "admin", "analytics", "bookings"],
+                  "query": [
+                    {
+                      "key": "startDate",
+                      "value": "2023-01-01"
+                    },
+                    {
+                      "key": "endDate",
+                      "value": "2023-12-31"
+                    }
+                  ]
+                },
+                "description": "Get booking analytics"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Moderation",
+          "item": [
+            {
+              "name": "Get Content For Moderation",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/moderation/queue?status=pending&contentType=profile&page=1&limit=20",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "admin", "moderation", "queue"],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "pending"
+                    },
+                    {
+                      "key": "contentType",
+                      "value": "profile"
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Get content that needs moderation"
+              }
+            },
+            {
+              "name": "Moderate Content",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"contentId\": \"content-uuid\",\n  \"decision\": \"approve\",\n  \"notes\": \"Approved after review\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/moderation/review",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "admin", "moderation", "review"]
+                },
+                "description": "Approve or reject content"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://tirak-api.yourdomain.com",
+      "description": "API base URL"
+    }
+  ]
+} 

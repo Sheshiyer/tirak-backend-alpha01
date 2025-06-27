@@ -23,6 +23,12 @@ const moderationActionSchema = z.object({
   severity: z.enum(['low', 'medium', 'high']).optional()
 });
 
+// Simplified schema for supplier verification
+const supplierVerificationSchema = z.object({
+  action: z.enum(['approve', 'reject']).default('approve'),
+  reason: z.string().optional().default('Standard verification process')
+});
+
 const moderationRuleSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(500),
@@ -311,6 +317,62 @@ moderation.get('/reports', validatePagination(), async (c) => {
   } catch (error) {
     console.error('Get reports error:', error);
     return jsonError(c, 'Failed to load reports', 'An error occurred while loading content reports', 500);
+  }
+});
+
+/**
+ * Simplified endpoint for supplier verification
+ * This endpoint is more forgiving in its validation requirements
+ */
+moderation.post('/verify-supplier/:supplierId', validateUUID('supplierId'), async (c) => {
+  try {
+    const supplierId = c.req.param('supplierId');
+    const moderatorId = c.get('userId');
+    
+    // Log received data for debugging
+    console.log(`Verify supplier request for ${supplierId}`, {
+      body: await c.req.json().catch(() => ({})),
+      headers: Object.fromEntries(c.req.raw.headers),
+      url: c.req.url,
+      method: c.req.method
+    });
+    
+    // Parse body with fallback values
+    let body;
+    try {
+      body = supplierVerificationSchema.parse(await c.req.json().catch(() => ({})));
+    } catch (validationError) {
+      console.error('Validation error:', validationError);
+      return jsonError(c, 'Invalid request data', 'Please provide a valid action: "approve" or "reject"', 400);
+    }
+    
+    const { action, reason } = body;
+    
+    // Update supplier verification status
+    if (action === 'approve') {
+      await c.env.DB.prepare(`
+        UPDATE supplier_profiles 
+        SET verification_status = 'verified', updated_at = CURRENT_TIMESTAMP 
+        WHERE user_id = ?
+      `).bind(supplierId).run();
+    } else if (action === 'reject') {
+      await c.env.DB.prepare(`
+        UPDATE supplier_profiles 
+        SET verification_status = 'rejected', updated_at = CURRENT_TIMESTAMP 
+        WHERE user_id = ?
+      `).bind(supplierId).run();
+    }
+    
+    return jsonSuccess(c, {
+      supplierId,
+      action,
+      moderatorId,
+      timestamp: new Date().toISOString()
+    }, `Supplier ${action === 'approve' ? 'approved' : 'rejected'} successfully`);
+    
+  } catch (error) {
+    console.error('Supplier verification error:', error);
+    return jsonError(c, 'Verification failed', 'An error occurred during supplier verification', 500);
   }
 });
 
