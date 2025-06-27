@@ -82,7 +82,7 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
       userType,
       preferredLanguage,
       status: initialStatus,
-      phoneVerified: userType === 'admin' // Auto-verify admins
+      phoneVerified: userType === 'admin' || userType === 'companion' || userType === 'supplier' || userType === 'customer' // Auto-verify admins
     }, c.env.DB);
 
     // Create user profile based on type
