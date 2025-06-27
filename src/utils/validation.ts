@@ -12,8 +12,8 @@ export const registerSchema = z.object({
   email: z.string().email('Invalid email format'),
   phone: z.string().min(10, 'Phone number must be at least 10 digits'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  userType: z.enum(['customer', 'supplier', 'admin'], {
-    errorMap: () => ({ message: 'User type must be either customer, supplier or admin' })
+  userType: z.enum(['customer', 'supplier', 'admin','companion'], {
+    errorMap: () => ({ message: 'User type must be either customer, supplier, admin or companion' })
   }),
   preferredLanguage: z.enum(['en', 'th']).default('en')
 });
