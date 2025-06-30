@@ -56,20 +56,20 @@ publicRoutes.get('/stats', async (c) => {
 
     const stats = {
       users: {
-        total: userStats?.total_users || 0,
-        suppliers: userStats?.total_suppliers || 0,
-        customers: userStats?.total_customers || 0
+        total: Number(userStats?.total_users || 0),
+        suppliers: Number(userStats?.total_suppliers || 0),
+        customers: Number(userStats?.total_customers || 0)
       },
       suppliers: {
-        verified: supplierStats?.verified_suppliers || 0,
-        averageRating: Math.round((supplierStats?.avg_rating || 0) * 10) / 10
+        verified: Number(supplierStats?.verified_suppliers || 0),
+        averageRating: Math.round((Number(supplierStats?.avg_rating) || 0) * 10) / 10
       },
       services: {
-        total: serviceStats?.total_services || 0
+        total: Number(serviceStats?.total_services || 0)
       },
       bookings: {
-        total: bookingStats?.total_bookings || 0,
-        completed: bookingStats?.completed_bookings || 0
+        total: Number(bookingStats?.total_bookings || 0),
+        completed: Number(bookingStats?.completed_bookings || 0)
       },
       lastUpdated: new Date().toISOString()
     };
@@ -89,7 +89,9 @@ publicRoutes.get('/stats', async (c) => {
  * Get available categories
  */
 publicRoutes.get('/categories', validatePagination(), async (c) => {
-  const { page, limit } = c.req.valid('query');
+  const pagination = c.get('pagination');
+  const page = pagination?.page || 1;
+  const limit = pagination?.limit || 20;
   
   try {
     // Check cache first
@@ -107,7 +109,7 @@ publicRoutes.get('/categories', validatePagination(), async (c) => {
       WHERE is_active = TRUE
     `).first();
     
-    const total = countResult?.total as number || 0;
+    const total = Number(countResult?.total) || 0;
 
     // Get categories with pagination
     const offset = (page - 1) * limit;
@@ -153,7 +155,9 @@ publicRoutes.get('/categories', validatePagination(), async (c) => {
  * Get available regions
  */
 publicRoutes.get('/regions', validatePagination(), async (c) => {
-  const { page, limit } = c.req.valid('query');
+  const pagination = c.get('pagination');
+  const page = pagination?.page || 1;
+  const limit = pagination?.limit || 20;
   
   try {
     // Check cache first
@@ -171,7 +175,7 @@ publicRoutes.get('/regions', validatePagination(), async (c) => {
       WHERE is_active = TRUE
     `).first();
     
-    const total = countResult?.total as number || 0;
+    const total = Number(countResult?.total) || 0;
 
     // Get regions with pagination
     const offset = (page - 1) * limit;
@@ -213,7 +217,9 @@ publicRoutes.get('/regions', validatePagination(), async (c) => {
  * Get featured suppliers
  */
 publicRoutes.get('/featured-suppliers', validatePagination(), async (c) => {
-  const { page, limit } = c.req.valid('query');
+  const pagination = c.get('pagination');
+  const page = pagination?.page || 1;
+  const limit = pagination?.limit || 20;
   
   try {
     // Check cache first
@@ -272,7 +278,7 @@ publicRoutes.get('/featured-suppliers', validatePagination(), async (c) => {
         AND rating_count >= 5
     `).first();
 
-    const total = countResult?.total as number || 0;
+    const total = Number(countResult?.total) || 0;
     const response = {
       suppliers,
       pagination: createPagination(page, limit, total)

@@ -184,30 +184,73 @@ Authorization: Bearer {token}
 ```json
 {
   "name": "string?",
-  "phone": "string?",
+  "displayName": "string?",
+  "bio": "string?",
+  "socialLinks": {
+    "instagram": "string?",
+    "facebook": "string?",
+    "twitter": "string?",
+    "tiktok": "string?",
+    "website": "string?",
+    "other": [{"name": "string", "url": "string"}]?
+  },
   "dateOfBirth": "string?",
-  "gender": "string?",
+  "gender": "male" | "female" | "other"?,
   "profileImage": "string?",
   "preferences": {
     "language": "string?",
     "currency": "string?",
     "notifications": {
-      "push": boolean?,
-      "email": boolean?,
-      "sms": boolean?
+      "push": true,
+      "email": true,
+      "sms": true
     }?
   }?
 }
 ```
-
 **Response:**
 ```json
 {
-  "success": boolean,
+  "success": true,
   "data": {
-    "user": "UserProfile"
+    "id": "string",
+    "name": "string",
+    "displayName": "string",
+    "email": "string",
+    "role": "customer" | "companion",
+    "verified": true,
+    "profileImage": "string?",
+    "phone": "string?",
+    "bio": "string?",
+    "socialLinks": {},
+    "dateOfBirth": "string?",
+    "gender": "string?",
+    "preferences": {
+      "language": "string",
+      "currency": "string",
+      "notifications": {
+        "push": true,
+        "email": true,
+        "sms": true
+      }
+    },
+    "createdAt": "string",
+    "updatedAt": "string"
   },
-  "message": "string"
+  "message": "Profile updated successfully"
+}
+```
+
+### GET /users/:id
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "user": { /* user fields */ },
+    "profile": { /* profile fields */ }
+  },
+  "message": "Profile retrieved successfully"
 }
 ```
 
@@ -356,23 +399,23 @@ endDate: string (YYYY-MM-DD)
 **Response:**
 ```json
 {
-  "success": boolean,
+  "success": true,
   "data": {
     "availability": [
       {
-        "date": "string",
-        "available": boolean,
-        "timeSlots": [
+        "date": "YYYY-MM-DD",
+        "available": true,
+        "slots": [
           {
-            "start": "string",
-            "end": "string",
-            "available": boolean,
-            "price": number?
+            "start": "HH:MM",
+            "end": "HH:MM",
+            "available": true
           }
         ]
       }
     ]
-  }
+  },
+  "message": "Availability retrieved successfully"
 }
 ```
 
@@ -647,6 +690,53 @@ endDate: string (YYYY-MM-DD)
     "availability": "Availability"
   },
   "message": "string"
+}
+```
+
+### PUT /suppliers/:id
+**Request:**
+```json
+{
+  "displayName": "string",
+  "bio": "string?",
+  "categories": ["string"],
+  "regions": ["string"],
+  "spokenLanguages": ["string"],
+  "profileImages": ["string"]
+}
+```
+**Response:**
+```json
+{
+  "success": true,
+  "data": { "updated": true },
+  "message": "Supplier profile updated successfully"
+}
+```
+
+### GET /suppliers/:id/services
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "services": [
+      {
+        "id": "string",
+        "title": "string",
+        "description": "string",
+        "priceMin": 0,
+        "priceMax": 0,
+        "currency": "string",
+        "durationHours": 0,
+        "isActive": true,
+        "createdAt": "string",
+        "updatedAt": "string"
+      }
+    ],
+    "pagination": { "page": 1, "limit": 20, "total": 100, "totalPages": 5 }
+  },
+  "message": "Services retrieved successfully"
 }
 ```
 
@@ -1494,3 +1584,283 @@ All endpoints return errors in this format:
 - `422` - Validation Error
 - `429` - Rate Limit Exceeded
 - `500` - Internal Server Error
+
+## [ADDED] Companion Endpoints
+
+### POST /companions/:id/experiences
+**Request:**
+```json
+{
+  "title": "string",
+  "description": "string?",
+  "durationMinutes": 60,
+  "keywords": ["string"],
+  "price": 1000,
+  "currency": "string"
+}
+```
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "experienceId": "string",
+    "created": true
+  },
+  "message": "Experience created successfully"
+}
+```
+
+### GET /companions/:id/experiences
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "experiences": [
+      {
+        "id": "string",
+        "title": "string",
+        "description": "string",
+        "durationMinutes": 60,
+        "keywords": ["string"],
+        "price": 1000,
+        "currency": "string",
+        "isActive": true,
+        "createdAt": "string",
+        "updatedAt": "string"
+      }
+    ],
+    "pagination": { "page": 1, "limit": 20, "total": 100, "totalPages": 5 }
+  },
+  "message": "Experiences retrieved successfully"
+}
+```
+
+### GET /companions/:id/locations
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "locations": [
+      {
+        "id": "string",
+        "city": "string",
+        "region": "string",
+        "isPopular": true,
+        "description": "string",
+        "createdAt": "string",
+        "updatedAt": "string"
+      }
+    ],
+    "pagination": { "page": 1, "limit": 20, "total": 100, "totalPages": 5 }
+  },
+  "message": "Locations retrieved successfully"
+}
+```
+
+### POST /companions/:id/locations
+**Request:**
+```json
+{
+  "city": "string",
+  "region": "string",
+  "isPopular": true,
+  "description": "string"
+}
+```
+**Response:**
+```json
+{
+  "success": true,
+  "data": { "locationId": "string", "created": true },
+  "message": "Location created successfully"
+}
+```
+
+## [ADDED] Customer Endpoints
+
+### GET /customers/all
+**Query Parameters:**
+```
+search?: string
+status?: string
+sortBy?: string
+sortOrder?: "asc" | "desc"
+page?: number
+limit?: number
+```
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "string",
+      "email": "string",
+      "phone": "string",
+      "displayName": "string",
+      "profileImage": "string",
+      "status": "string",
+      "loyaltyPoints": 0,
+      "emailVerified": true,
+      "phoneVerified": true,
+      "preferredLanguage": "string",
+      "createdAt": "string",
+      "lastLoginAt": "string",
+      "preferences": {}
+    }
+  ],
+  "pagination": { "page": 1, "limit": 20, "total": 100, "totalPages": 5 },
+  "message": "Customers retrieved successfully"
+}
+```
+
+### GET /customers/:id
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "string",
+    "displayName": "string",
+    "profileImage": "string",
+    "loyaltyPoints": 0,
+    "preferences": {},
+    "memberSince": "string",
+    "statistics": {
+      "totalBookings": 0,
+      "completedBookings": 0,
+      "pendingBookings": 0,
+      "cancelledBookings": 0,
+      "favoriteSuppliers": 0
+    },
+    "language": "string",
+    "emailVerified": true,
+    "phoneVerified": true
+  },
+  "message": "Customer profile retrieved successfully"
+}
+```
+
+### GET /customers/:id/bookings
+**Query Parameters:**
+```
+page?: number
+limit?: number
+```
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "string",
+      "status": "string",
+      "scheduledAt": "string",
+      "duration": 0,
+      "totalAmount": 0,
+      "currency": "string",
+      "notes": "string",
+      "createdAt": "string",
+      "updatedAt": "string",
+      "service": {
+        "title": "string",
+        "description": "string"
+      },
+      "supplier": {
+        "name": "string",
+        "profileImage": "string"
+      }
+    }
+  ],
+  "pagination": { "page": 1, "limit": 20, "total": 100, "totalPages": 5 },
+  "message": "Booking history retrieved successfully"
+}
+```
+
+### POST /customers/:id/bookings
+**Request:**
+```json
+{
+  "serviceId": "string",
+  "scheduledAt": "string",
+  "duration": 60,
+  "notes": "string?"
+}
+```
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "bookingId": "string",
+    "status": "pending",
+    "totalAmount": 0,
+    "currency": "string"
+  },
+  "message": "Booking created successfully"
+}
+```
+
+### GET /customers/:id/favorites
+**Query Parameters:**
+```
+page?: number
+limit?: number
+```
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "string",
+      "displayName": "string",
+      "bio": "string",
+      "profileImages": ["string"],
+      "categories": ["string"],
+      "rating": { "average": 0, "count": 0 },
+      "verificationStatus": "string"
+    }
+  ],
+  "pagination": { "page": 1, "limit": 20, "total": 100, "totalPages": 5 },
+  "message": "Favorite suppliers retrieved successfully"
+}
+```
+
+### POST /customers/:id/favorites/:supplierId
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "added": true,
+    "totalFavorites": 1
+  },
+  "message": "Supplier added to favorites"
+}
+```
+
+### POST /customers/:id/reviews
+**Request:**
+```json
+{
+  "bookingId": "string",
+  "rating": 5,
+  "comment": "string?",
+  "isPublic": true
+}
+```
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "reviewId": "string",
+    "submitted": true
+  },
+  "message": "Review submitted successfully"
+}
+```
