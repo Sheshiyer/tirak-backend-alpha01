@@ -20,8 +20,11 @@ chat.use('*', createRateLimit('chat'));
  */
 chat.get('/rooms', validatePagination(), async (c) => {
   const userId = c.get('userId');
-  const { page, limit } = c.req.valid('query');
+  const pagination = c.get('pagination') || { page: 1, limit: 20 };
+  const { page, limit } = pagination;
   
+  if (!userId) return jsonError(c, 'Missing userId', 'User ID is required', 400);
+
   try {
     // Get total count
     const countResult = await c.env.DB.prepare(`
@@ -57,7 +60,7 @@ chat.get('/rooms', validatePagination(), async (c) => {
       const otherParty = isCustomer ? {
         id: room.supplier_id,
         name: room.supplier_name,
-        image: JSON.parse(room.supplier_images || '[]')[0] || null,
+        image: typeof room.supplier_images === 'string' ? JSON.parse(room.supplier_images || '[]')[0] || null : null,
         type: 'supplier'
       } : {
         id: room.customer_id,
@@ -121,9 +124,11 @@ chat.post('/rooms', async (c) => {
     let customerId: string, supplierId: string;
     
     if (userType === 'customer' && otherUser.user_type === 'supplier') {
+      if (!userId || !otherUserId) return jsonError(c, 'Missing userId', 'User ID is required', 400);
       customerId = userId;
       supplierId = otherUserId;
     } else if (userType === 'supplier' && otherUser.user_type === 'customer') {
+      if (!userId || !otherUserId) return jsonError(c, 'Missing userId', 'User ID is required', 400);
       customerId = otherUserId;
       supplierId = userId;
     } else {
@@ -158,17 +163,19 @@ chat.post('/rooms', async (c) => {
     ).run();
 
     // Track chat room creation
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'chat_room_created',
-      userId,
-      properties: { 
-        roomId,
-        otherUserId,
-        userType,
-        otherUserType: otherUser.user_type
-      },
-      timestamp: new Date().toISOString()
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'chat_room_created',
+        userId,
+        properties: { 
+          roomId,
+          otherUserId,
+          userType,
+          otherUserType: otherUser.user_type
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, { 
       roomId,
@@ -187,8 +194,11 @@ chat.post('/rooms', async (c) => {
 chat.get('/rooms/:roomId', validateUUID('roomId'), validatePagination(), async (c) => {
   const roomId = c.req.param('roomId');
   const userId = c.get('userId');
-  const { page, limit } = c.req.valid('query');
+  const pagination = c.get('pagination') || { page: 1, limit: 20 };
+  const { page, limit } = pagination;
   
+  if (!userId) return jsonError(c, 'Missing userId', 'User ID is required', 400);
+
   try {
     // Verify user has access to this chat room
     const room = await c.env.DB.prepare(`
@@ -248,7 +258,7 @@ chat.get('/rooms/:roomId', validateUUID('roomId'), validatePagination(), async (
     const otherParty = isCustomer ? {
       id: room.supplier_id,
       name: room.supplier_name,
-      image: JSON.parse(room.supplier_images || '[]')[0] || null,
+      image: typeof room.supplier_images === 'string' ? JSON.parse(room.supplier_images || '[]')[0] || null : null,
       type: 'supplier'
     } : {
       id: room.customer_id,
@@ -299,12 +309,22 @@ chat.get('/rooms/:roomId/ws', validateUUID('roomId'), async (c) => {
     // Forward the WebSocket request to the Durable Object
     const url = new URL(c.req.url);
     url.pathname = '/websocket';
-    url.searchParams.set('userId', userId);
-    url.searchParams.set('roomId', roomId);
+    url.searchParams.set('userId', userId ? String(userId) : '');
+    url.searchParams.set('roomId', roomId ? String(roomId) : '');
 
-    return await durableObject.fetch(url.toString(), {
+    const response = await durableObject.fetch(url.toString(), {
       headers: c.req.raw.headers,
     });
+
+    const result = await response.json().catch(() => ({}));
+    
+    if (!response.ok) {
+      return jsonError(c, 'Connection failed', 'Failed to establish WebSocket connection', response.status);
+    }
+
+    const messageId = (result && typeof result === 'object' && 'id' in result) ? (result as any).id : undefined;
+
+    return response;
 
   } catch (error) {
     console.error('WebSocket connection error:', error);
@@ -350,10 +370,28 @@ chat.post('/rooms/:roomId/messages',
         })
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
       
       if (!response.ok) {
         return jsonError(c, 'Message failed', 'Failed to send message', response.status);
+      }
+
+      const messageId = (result && typeof result === 'object' && 'id' in result) ? (result as any).id : undefined;
+
+      // Track message sent
+      if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+        await c.env.ANALYTICS_QUEUE.send({
+          eventType: 'message_sent',
+          userId,
+          properties: { 
+            roomId,
+            messageId: messageId,
+            messageType: messageData.messageType,
+            content: messageData.content,
+            imageUrl: messageData.imageUrl
+          },
+          timestamp: new Date().toISOString()
+        });
       }
 
       return jsonSuccess(c, result, 'Message sent successfully', 201);
@@ -388,15 +426,17 @@ chat.post('/rooms/:roomId/read', validateUUID('roomId'), async (c) => {
 
     // In a full implementation, this would update read receipts
     // For now, we'll just track the analytics event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'message_read',
-      userId,
-      properties: { 
-        roomId,
-        messageId: messageId || 'latest'
-      },
-      timestamp: new Date().toISOString()
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'message_read',
+        userId,
+        properties: { 
+          roomId,
+          messageId: messageId || 'latest'
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, { marked: true }, 'Messages marked as read');
 
@@ -452,6 +492,20 @@ chat.get('/rooms/:roomId/search', validateUUID('roomId'), async (c) => {
       timestamp: message.created_at,
       isOwn: message.sender_id === userId
     })) || [];
+
+    // Track search
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'message_search',
+        userId,
+        properties: { 
+          roomId,
+          query,
+          count: messages.length
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, {
       query,

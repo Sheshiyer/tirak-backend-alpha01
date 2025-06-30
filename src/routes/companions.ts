@@ -546,16 +546,18 @@ companions.post('/:id/experiences', validateUUID('id'), zValidator('json', exper
     ).run();
 
     // Track experience creation
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'experience_created',
-      userId: companionId,
-      properties: { 
-        experienceId,
-        price: experienceData.price,
-        duration: experienceData.durationMinutes
-      },
-      timestamp: now
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'experience_created',
+        userId: companionId,
+        properties: { 
+          experienceId,
+          price: experienceData.price,
+          duration: experienceData.durationMinutes
+        },
+        timestamp: now
+      });
+    }
 
     return jsonSuccess(c, { 
       experienceId,

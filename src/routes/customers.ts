@@ -342,18 +342,20 @@ customers.post('/:id/bookings',
       ).run();
 
       // Track booking creation
-      await c.env.ANALYTICS_QUEUE.send({
-        eventType: 'booking_created',
-        userId: customerId,
-        properties: { 
-          bookingId,
-          supplierId: service.supplier_id,
-          serviceId: bookingData.serviceId,
-          amount: totalAmount,
-          duration: bookingData.duration
-        },
-        timestamp: new Date().toISOString()
-      });
+      if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+        await c.env.ANALYTICS_QUEUE.send({
+          eventType: 'booking_created',
+          userId: customerId,
+          properties: { 
+            bookingId,
+            supplierId: service.supplier_id,
+            serviceId: bookingData.serviceId,
+            amount: totalAmount,
+            duration: bookingData.duration
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
 
       // Send notification to supplier (via queue)
       await c.env.MODERATION_QUEUE.send({
@@ -497,12 +499,14 @@ customers.post('/:id/favorites/:supplierId',
       ).run();
 
       // Track favorite addition
-      await c.env.ANALYTICS_QUEUE.send({
-        eventType: 'supplier_favorited',
-        userId: customerId,
-        properties: { supplierId },
-        timestamp: new Date().toISOString()
-      });
+      if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+        await c.env.ANALYTICS_QUEUE.send({
+          eventType: 'supplier_favorited',
+          userId: customerId,
+          properties: { supplierId },
+          timestamp: new Date().toISOString()
+        });
+      }
 
       return jsonSuccess(c, { 
         added: true,
@@ -588,17 +592,19 @@ customers.post('/:id/reviews',
       `).bind(booking.supplier_id, booking.supplier_id, booking.supplier_id).run();
 
       // Track review submission
-      await c.env.ANALYTICS_QUEUE.send({
-        eventType: 'review_submitted',
-        userId: customerId,
-        properties: { 
-          reviewId,
-          supplierId: booking.supplier_id,
-          rating: reviewData.rating,
-          hasComment: !!reviewData.comment
-        },
-        timestamp: new Date().toISOString()
-      });
+      if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+        await c.env.ANALYTICS_QUEUE.send({
+          eventType: 'review_submitted',
+          userId: customerId,
+          properties: { 
+            reviewId,
+            supplierId: booking.supplier_id,
+            rating: reviewData.rating,
+            hasComment: !!reviewData.comment
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
 
       return jsonSuccess(c, { 
         reviewId,

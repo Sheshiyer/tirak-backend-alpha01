@@ -481,18 +481,20 @@ chat.post('/monitoring/action/:chatId', validateUUID('chatId'), zValidator('json
 
     // Log admin action in analytics
     const actionId = crypto.randomUUID();
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'admin_chat_action',
-      userId: adminId,
-      properties: { 
-        actionId,
-        chatId,
-        action,
-        reason: String(reason || ''),
-        newStatus
-      },
-      timestamp: new Date().toISOString()
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'admin_chat_action',
+        userId: adminId,
+        properties: { 
+          actionId,
+          chatId,
+          action,
+          reason: String(reason || ''),
+          newStatus
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
 
     const actionResult = {
@@ -560,17 +562,19 @@ chat.post('/monitoring/intervene/:chatId', validateUUID('chatId'), zValidator('j
 
     // Log admin action in analytics
     const actionId = crypto.randomUUID();
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'admin_chat_intervention',
-      userId: adminId,
-      properties: { 
-        actionId,
-        chatId,
-        messageId,
-        message
-      },
-      timestamp
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'admin_chat_intervention',
+        userId: adminId,
+        properties: { 
+          actionId,
+          chatId,
+          messageId,
+          message
+        },
+        timestamp
+      });
+    }
 
 
     // Get Durable Object for this chat room to notify participants

@@ -87,17 +87,19 @@ reviews.post('/', zValidator('json', createReviewSchema), async (c) => {
     await updateCompanionRating(c.env.DB, reviewData.companionId);
 
     // Track review creation event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'review_created',
-      userId,
-      properties: {
-        reviewId,
-        bookingId: reviewData.bookingId,
-        companionId: reviewData.companionId,
-        rating: reviewData.rating
-      },
-      timestamp: now
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'review_created',
+        userId,
+        properties: {
+          reviewId,
+          bookingId: reviewData.bookingId,
+          companionId: reviewData.companionId,
+          rating: reviewData.rating
+        },
+        timestamp: now
+      });
+    }
 
     // Send notification to companion
     await c.env.NOTIFICATION_QUEUE.send({
@@ -120,6 +122,10 @@ reviews.post('/', zValidator('json', createReviewSchema), async (c) => {
       WHERE r.id = ?
     `).bind(reviewId).first();
 
+    if (!createdReview) {
+      return jsonError(c, 'Review not found', 'Failed to fetch created review', 500);
+    }
+
     return jsonSuccess(c, {
       review: {
         id: createdReview.id,
@@ -128,7 +134,7 @@ reviews.post('/', zValidator('json', createReviewSchema), async (c) => {
         customerId: createdReview.customer_id,
         rating: createdReview.rating,
         comment: createdReview.comment,
-        categories: JSON.parse(createdReview.categories || '{}'),
+        categories: typeof createdReview.categories === 'string' ? JSON.parse(createdReview.categories) : {},
         verified: createdReview.verified,
         createdAt: createdReview.created_at
       }
@@ -145,7 +151,7 @@ reviews.post('/', zValidator('json', createReviewSchema), async (c) => {
  */
 reviews.get('/companion/:id', validateUUID('id'), validatePagination, async (c) => {
   const companionId = c.req.param('id');
-  const { page, limit } = c.get('pagination');
+  const { page, limit } = c.get('pagination') || { page: 1, limit: 20 };
   const rating = c.req.query('rating');
   
   try {
@@ -221,7 +227,7 @@ reviews.get('/companion/:id', validateUUID('id'), validatePagination, async (c) 
     `).bind(companionId).first();
 
     const summary = {
-      averageRating: Math.round((summaryResult?.average_rating || 0) * 10) / 10,
+      averageRating: Math.round((Number(summaryResult?.average_rating) || 0) * 10) / 10,
       totalReviews: summaryResult?.total_reviews || 0,
       ratingDistribution: {
         5: summaryResult?.rating_5 || 0,
@@ -231,10 +237,10 @@ reviews.get('/companion/:id', validateUUID('id'), validatePagination, async (c) 
         1: summaryResult?.rating_1 || 0
       },
       categoryAverages: {
-        communication: Math.round((summaryResult?.avg_communication || 0) * 10) / 10,
-        punctuality: Math.round((summaryResult?.avg_punctuality || 0) * 10) / 10,
-        professionalism: Math.round((summaryResult?.avg_professionalism || 0) * 10) / 10,
-        knowledge: Math.round((summaryResult?.avg_knowledge || 0) * 10) / 10
+        communication: Math.round((Number(summaryResult?.avg_communication) || 0) * 10) / 10,
+        punctuality: Math.round((Number(summaryResult?.avg_punctuality) || 0) * 10) / 10,
+        professionalism: Math.round((Number(summaryResult?.avg_professionalism) || 0) * 10) / 10,
+        knowledge: Math.round((Number(summaryResult?.avg_knowledge) || 0) * 10) / 10
       }
     };
 

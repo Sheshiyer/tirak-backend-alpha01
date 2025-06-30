@@ -606,7 +606,7 @@ users.delete('/:userId', validateUUID('userId'), async (c) => {
     console.log(`Admin ${adminUserId} deleted user ${userId} of type ${userType}`);
     
     // Queue analytics event
-    if (c.env.ANALYTICS_QUEUE) {
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
       await c.env.ANALYTICS_QUEUE.send({
         action: 'user_deleted',
         userId: userId,

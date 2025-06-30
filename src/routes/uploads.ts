@@ -30,13 +30,12 @@ uploads.post('/image', async (c) => {
   
   try {
     const formData = await c.req.formData();
-    const file = formData.get('file') as File;
-    const category = formData.get('category') as string || 'general';
-    
-    if (!file) {
+    const file = formData.get('file') as unknown as File;
+    if (!(file instanceof File)) {
       return jsonError(c, 'No file provided', 'Please select a file to upload', 400);
     }
-
+    const category = formData.get('category') as string || 'general';
+    
     // Validate file
     const validation = validateImageFile(file);
     if (!validation.isValid) {
@@ -50,34 +49,36 @@ uploads.post('/image', async (c) => {
     }
 
     // Generate unique file key
-    const fileKey = generateFileKey(userId, file.name, `images/${category}`);
+    const fileKey = generateFileKey(userId || '', file.name || '', `images/${category}`);
     
     // Upload to R2
     const uploadResult = await uploadFile(
       c.env.STORAGE,
       file,
       fileKey,
-      file.type,
+      file.type || '',
       {
-        userId,
+        userId: userId || '',
         category,
-        originalName: file.name,
+        originalName: file.name || '',
         uploadedAt: new Date().toISOString()
       }
     );
 
     // Track upload event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'image_upload',
-      userId,
-      properties: { 
-        fileSize: file.size,
-        fileType: file.type,
-        category,
-        fileName: file.name
-      },
-      timestamp: new Date().toISOString()
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'image_upload',
+        userId,
+        properties: { 
+          fileSize: file.size,
+          fileType: file.type,
+          category,
+          fileName: file.name
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, {
       url: uploadResult.url,
@@ -101,13 +102,12 @@ uploads.post('/document', async (c) => {
   
   try {
     const formData = await c.req.formData();
-    const file = formData.get('file') as File;
-    const category = formData.get('category') as string || 'general';
-    
-    if (!file) {
+    const fileDoc = formData.get('file') as unknown as File;
+    if (!(fileDoc instanceof File)) {
       return jsonError(c, 'No file provided', 'Please select a file to upload', 400);
     }
-
+    const category = formData.get('category') as string || 'general';
+    
     // Validate document file types
     const allowedTypes = [
       'application/pdf',
@@ -116,52 +116,54 @@ uploads.post('/document', async (c) => {
       'text/plain'
     ];
 
-    if (!allowedTypes.includes(file.type)) {
+    if (!allowedTypes.includes(fileDoc.type)) {
       return jsonError(c, 'Invalid file type', 'Only PDF, DOC, DOCX, and TXT files are allowed', 400);
     }
 
     // Check file size (max 25MB for documents)
     const maxSize = 25 * 1024 * 1024;
-    if (file.size > maxSize) {
+    if (fileDoc.size > maxSize) {
       return jsonError(c, 'File too large', `Maximum file size is ${formatFileSize(maxSize)}`, 400);
     }
 
     // Generate unique file key
-    const fileKey = generateFileKey(userId, file.name, `documents/${category}`);
+    const fileKeyDoc = generateFileKey(userId || '', fileDoc.name || '', `documents/${category}`);
     
     // Upload to R2
-    const uploadResult = await uploadFile(
+    const uploadResultDoc = await uploadFile(
       c.env.STORAGE,
-      file,
-      fileKey,
-      file.type,
+      fileDoc,
+      fileKeyDoc,
+      fileDoc.type || '',
       {
-        userId,
+        userId: userId || '',
         category,
-        originalName: file.name,
+        originalName: fileDoc.name || '',
         uploadedAt: new Date().toISOString(),
         documentType: 'document'
       }
     );
 
     // Track upload event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'document_upload',
-      userId,
-      properties: { 
-        fileSize: file.size,
-        fileType: file.type,
-        category,
-        fileName: file.name
-      },
-      timestamp: new Date().toISOString()
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'document_upload',
+        userId,
+        properties: { 
+          fileSize: fileDoc.size,
+          fileType: fileDoc.type,
+          category,
+          fileName: fileDoc.name
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, {
-      url: uploadResult.url,
-      key: uploadResult.key,
-      size: uploadResult.size,
-      contentType: uploadResult.contentType,
+      url: uploadResultDoc.url,
+      key: uploadResultDoc.key,
+      size: uploadResultDoc.size,
+      contentType: uploadResultDoc.contentType,
       category
     }, 'Document uploaded successfully', 201);
 
@@ -201,27 +203,29 @@ uploads.post('/presigned-url', zValidator('json', fileUploadSchema), async (c) =
 
     // Generate unique file key
     const prefix = contentType.startsWith('image/') ? 'images' : 'documents';
-    const fileKey = generateFileKey(userId, fileName, `${prefix}/${category}`);
+    const fileKeyPresigned = generateFileKey(userId || '', fileName || '', `${prefix}/${category}`);
     
     // Generate presigned URL (expires in 1 hour)
-    const presignedUrl = await generatePresignedUploadUrl(c.env.STORAGE, fileKey, 3600);
+    const presignedUrl = await generatePresignedUploadUrl(c.env.STORAGE, fileKeyPresigned, 3600);
 
     // Track presigned URL generation
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'presigned_url_generated',
-      userId,
-      properties: { 
-        fileSize,
-        contentType,
-        category,
-        fileName
-      },
-      timestamp: new Date().toISOString()
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'presigned_url_generated',
+        userId,
+        properties: { 
+          fileSize,
+          contentType,
+          category,
+          fileName
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, {
       uploadUrl: presignedUrl,
-      fileKey,
+      fileKey: fileKeyPresigned,
       expiresIn: 3600,
       maxFileSize: maxSize
     }, 'Presigned URL generated successfully');
@@ -241,22 +245,24 @@ uploads.delete('/:fileKey', async (c) => {
   
   try {
     // Verify user owns the file (file key should contain user ID)
-    if (!fileKey.includes(userId)) {
+    if ((fileKey || '').includes(userId || '')) {
+      // Delete from R2
+      await deleteFile(c.env.STORAGE, fileKey);
+
+      // Track deletion event
+      if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+        await c.env.ANALYTICS_QUEUE.send({
+          eventType: 'file_deleted',
+          userId,
+          properties: { fileKey },
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      return jsonSuccess(c, { deleted: true }, 'File deleted successfully');
+    } else {
       return jsonError(c, 'Access denied', 'You can only delete your own files', 403);
     }
-
-    // Delete from R2
-    await deleteFile(c.env.STORAGE, fileKey);
-
-    // Track deletion event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'file_deleted',
-      userId,
-      properties: { fileKey },
-      timestamp: new Date().toISOString()
-    });
-
-    return jsonSuccess(c, { deleted: true }, 'File deleted successfully');
 
   } catch (error) {
     console.error('File deletion error:', error);
@@ -300,40 +306,42 @@ uploads.post('/validate/:fileKey', async (c) => {
   
   try {
     // Verify user owns the file
-    if (!fileKey.includes(userId)) {
+    if ((fileKey || '').includes(userId || '')) {
+      // In a real implementation, this would:
+      // 1. Scan file for viruses/malware
+      // 2. Validate file integrity
+      // 3. Check for inappropriate content
+      // 4. Verify file format matches extension
+
+      // For now, return a successful validation
+      const validationResult = {
+        isValid: true,
+        scannedAt: new Date().toISOString(),
+        threats: [],
+        warnings: [],
+        fileInfo: {
+          key: fileKey,
+          status: 'clean'
+        }
+      };
+
+      // Track validation event
+      if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+        await c.env.ANALYTICS_QUEUE.send({
+          eventType: 'file_validated',
+          userId,
+          properties: { 
+            fileKey,
+            isValid: validationResult.isValid
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      return jsonSuccess(c, validationResult, 'File validation completed');
+    } else {
       return jsonError(c, 'Access denied', 'You can only validate your own files', 403);
     }
-
-    // In a real implementation, this would:
-    // 1. Scan file for viruses/malware
-    // 2. Validate file integrity
-    // 3. Check for inappropriate content
-    // 4. Verify file format matches extension
-
-    // For now, return a successful validation
-    const validationResult = {
-      isValid: true,
-      scannedAt: new Date().toISOString(),
-      threats: [],
-      warnings: [],
-      fileInfo: {
-        key: fileKey,
-        status: 'clean'
-      }
-    };
-
-    // Track validation event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'file_validated',
-      userId,
-      properties: { 
-        fileKey,
-        isValid: validationResult.isValid
-      },
-      timestamp: new Date().toISOString()
-    });
-
-    return jsonSuccess(c, validationResult, 'File validation completed');
 
   } catch (error) {
     console.error('File validation error:', error);
@@ -350,27 +358,27 @@ uploads.get('/metadata/:fileKey', async (c) => {
   
   try {
     // Verify user owns the file
-    if (!fileKey.includes(userId)) {
+    if ((fileKey || '').includes(userId || '')) {
+      // Get file metadata from R2
+      const metadata = await c.env.STORAGE.head(fileKey);
+      
+      if (!metadata) {
+        return jsonError(c, 'File not found', 'The requested file does not exist', 404);
+      }
+
+      const fileMetadata = {
+        key: fileKey,
+        size: metadata.size,
+        contentType: metadata.httpMetadata?.contentType,
+        lastModified: metadata.uploaded,
+        etag: metadata.etag,
+        customMetadata: metadata.customMetadata
+      };
+
+      return jsonSuccess(c, fileMetadata, 'File metadata retrieved successfully');
+    } else {
       return jsonError(c, 'Access denied', 'You can only access metadata for your own files', 403);
     }
-
-    // Get file metadata from R2
-    const metadata = await c.env.STORAGE.head(fileKey);
-    
-    if (!metadata) {
-      return jsonError(c, 'File not found', 'The requested file does not exist', 404);
-    }
-
-    const fileMetadata = {
-      key: fileKey,
-      size: metadata.size,
-      contentType: metadata.httpMetadata?.contentType,
-      lastModified: metadata.uploaded,
-      etag: metadata.etag,
-      customMetadata: metadata.customMetadata
-    };
-
-    return jsonSuccess(c, fileMetadata, 'File metadata retrieved successfully');
 
   } catch (error) {
     console.error('Get file metadata error:', error);

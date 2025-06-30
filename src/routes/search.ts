@@ -25,7 +25,7 @@ search.get('/suggestions', zValidator('query', searchSuggestionsSchema), async (
   const { query, type } = c.req.valid('query');
   
   try {
-    const suggestions = [];
+    const suggestions: any[] = [];
     const searchTerm = `%${query}%`;
 
     // Search companions if no type specified or type is companions
@@ -340,17 +340,19 @@ search.post('/track', zValidator('json', trackSearchSchema), async (c) => {
   
   try {
     // Track search event for analytics
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'search_performed',
-      userId: userId || 'anonymous',
-      properties: {
-        query: searchData.query,
-        filters: searchData.filters || {},
-        resultsCount: searchData.resultsCount || 0,
-        hasFilters: !!searchData.filters && Object.keys(searchData.filters).length > 0
-      },
-      timestamp: new Date().toISOString()
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'search_performed',
+        userId: userId || 'anonymous',
+        properties: {
+          query: searchData.query,
+          filters: searchData.filters || {},
+          resultsCount: searchData.resultsCount || 0,
+          hasFilters: !!searchData.filters && Object.keys(searchData.filters).length > 0
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, {}, 'Search tracked successfully');
 

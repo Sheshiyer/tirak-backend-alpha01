@@ -328,15 +328,17 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
     }
 
     // Track profile update event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'profile_update_mobile',
-      userId,
-      properties: {
-        updatedFields: Object.keys(updates),
-        userType: user.userType
-      },
-      timestamp: new Date().toISOString()
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'profile_update_mobile',
+        userId,
+        properties: {
+          updatedFields: Object.keys(updates),
+          userType: user.userType
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     // Get updated profile
     let profile: any = null;
@@ -499,15 +501,17 @@ users.put('/:id', validateUUID('id'), requireOwnership('id'), zValidator('json',
     }
 
     // Track profile update event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'profile_update',
-      userId,
-      properties: { 
-        updatedFields: Object.keys(updates),
-        userType: user.userType 
-      },
-      timestamp: new Date().toISOString()
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'profile_update',
+        userId,
+        properties: { 
+          updatedFields: Object.keys(updates),
+          userType: user.userType 
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, { updated: true }, 'Profile updated successfully');
 
@@ -591,16 +595,18 @@ users.post('/:id/avatar',
       }
 
       // Track image upload event
-      await c.env.ANALYTICS_QUEUE.send({
-        eventType: 'avatar_upload',
-        userId,
-        properties: { 
-          fileSize: file.size,
-          fileType: file.type,
-          userType: user.userType
-        },
-        timestamp: new Date().toISOString()
-      });
+      if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+        await c.env.ANALYTICS_QUEUE.send({
+          eventType: 'avatar_upload',
+          userId,
+          properties: { 
+            fileSize: file.size,
+            fileType: file.type,
+            userType: user.userType
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
 
       return jsonSuccess(c, {
         imageUrl: uploadResult.url,
@@ -695,15 +701,17 @@ users.put('/:id/settings', validateUUID('id'), requireOwnership('id'), async (c)
     }
 
     // Track settings update event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'settings_update',
-      userId,
-      properties: { 
-        updatedSettings: Object.keys(body),
-        userType: user.userType 
-      },
-      timestamp: new Date().toISOString()
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'settings_update',
+        userId,
+        properties: { 
+          updatedSettings: Object.keys(body),
+          userType: user.userType 
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, { updated: true }, 'Settings updated successfully');
 
@@ -733,15 +741,17 @@ users.delete('/:id', validateUUID('id'), requireOwnership('id'), async (c) => {
     }, c.env.DB);
 
     // Track account deletion event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'account_deletion',
-      userId,
-      properties: { 
-        userType: user.userType,
-        accountAge: new Date().getTime() - new Date(user.createdAt).getTime()
-      },
-      timestamp: new Date().toISOString()
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'account_deletion',
+        userId,
+        properties: { 
+          userType: user.userType,
+          accountAge: new Date().getTime() - new Date(user.createdAt).getTime()
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, { deleted: true }, 'Account deleted successfully');
 

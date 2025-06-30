@@ -129,7 +129,7 @@ conversations.get('/', async (c) => {
 conversations.get('/:id/messages', validateUUID('id'), validatePagination, async (c) => {
   const conversationId = c.req.param('id');
   const userId = c.get('userId');
-  const { page, limit } = c.get('pagination');
+  const { page, limit } = c.get('pagination') || { page: 1, limit: 20 };
   const before = c.req.query('before'); // message ID for pagination
   
   try {
@@ -170,14 +170,14 @@ conversations.get('/:id/messages', validateUUID('id'), validatePagination, async
         SELECT created_at FROM chat_messages WHERE id = ?
       `).bind(before).first();
       
-      if (beforeMessage) {
+      if (beforeMessage && typeof beforeMessage.created_at === 'string') {
         query += ` AND cm.created_at < ?`;
         queryParams.push(beforeMessage.created_at);
       }
     }
 
     query += ` ORDER BY cm.created_at DESC LIMIT ?`;
-    queryParams.push(limit);
+    queryParams.push(limit.toString());
 
     const messagesResult = await c.env.DB.prepare(query).bind(...queryParams).all();
 
@@ -273,17 +273,19 @@ conversations.post('/:id/messages', validateUUID('id'), zValidator('json', creat
     });
 
     // Track message sent event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'message_sent',
-      userId,
-      properties: {
-        conversationId,
-        messageId,
-        messageType: messageData.type,
-        hasMedia: !!messageData.mediaUrl
-      },
-      timestamp: now
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'message_sent',
+        userId,
+        properties: {
+          conversationId,
+          messageId,
+          messageType: messageData.type,
+          hasMedia: !!messageData.mediaUrl
+        },
+        timestamp: now
+      });
+    }
 
     return jsonSuccess(c, {
       message: {
@@ -432,7 +434,7 @@ conversations.post('/', zValidator('json', createConversationSchema), async (c) 
       WHERE u.id = ?
     `).bind(userType, userType, participantId).first();
 
-    const participantImages = JSON.parse(participant?.images || '[]');
+    const participantImages = typeof participant?.images === 'string' ? JSON.parse(participant.images || '[]') : [];
 
     return jsonSuccess(c, {
       conversation: {

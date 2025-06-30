@@ -415,16 +415,18 @@ support.patch('/tickets/:ticketId', validateUUID('ticketId'), zValidator('json',
 
     // Log admin action
     const actionId = crypto.randomUUID();
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'admin_ticket_update',
-      userId: adminId,
-      properties: { 
-        actionId,
-        ticketId,
-        updates
-      },
-      timestamp: new Date().toISOString()
-    }).catch(err => console.error('Failed to log ticket update:', err));
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'admin_ticket_update',
+        userId: adminId,
+        properties: { 
+          actionId,
+          ticketId,
+          updates
+        },
+        timestamp: new Date().toISOString()
+      }).catch(err => console.error('Failed to log ticket update:', err));
+    }
 
     return jsonSuccess(c, { 
       ticketId, 
@@ -475,16 +477,18 @@ support.post('/tickets/:ticketId/assign', validateUUID('ticketId'), zValidator('
 
     // Log admin action
     const actionId = crypto.randomUUID();
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'admin_ticket_assign',
-      userId: adminId,
-      properties: { 
-        actionId,
-        ticketId,
-        assigneeId
-      },
-      timestamp: new Date().toISOString()
-    }).catch(err => console.error('Failed to log ticket assignment:', err));
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'admin_ticket_assign',
+        userId: adminId,
+        properties: { 
+          actionId,
+          ticketId,
+          assigneeId
+        },
+        timestamp: new Date().toISOString()
+      }).catch(err => console.error('Failed to log ticket assignment:', err));
+    }
 
     return jsonSuccess(c, { 
       ticketId, 
@@ -569,17 +573,19 @@ support.post('/tickets/:ticketId/reply', validateUUID('ticketId'), zValidator('j
 
     // Log admin action
     const actionId = crypto.randomUUID();
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'admin_ticket_reply',
-      userId: adminId,
-      properties: { 
-        actionId,
-        ticketId,
-        replyId,
-        hasAttachments: attachments && attachments.length > 0
-      },
-      timestamp: new Date().toISOString()
-    }).catch(err => console.error('Failed to log ticket reply:', err));
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'admin_ticket_reply',
+        userId: adminId,
+        properties: { 
+          actionId,
+          ticketId,
+          replyId,
+          hasAttachments: attachments && attachments.length > 0
+        },
+        timestamp: new Date().toISOString()
+      }).catch(err => console.error('Failed to log ticket reply:', err));
+    }
 
     return jsonSuccess(c, { 
       ticketId, 
@@ -668,20 +674,22 @@ support.post('/tickets/create', zValidator('json', ticketCreateSchema), async (c
 
     // Log admin action
     const actionId = crypto.randomUUID();
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'admin_ticket_create',
-      userId: adminId,
-      properties: { 
-        actionId,
-        ticketId,
-        subject,
-        category,
-        priority,
-        submittedBy: effectiveSubmitter,
-        hasAttachments: attachments && attachments.length > 0
-      },
-      timestamp: new Date().toISOString()
-    }).catch(err => console.error('Failed to log ticket creation:', err));
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'admin_ticket_create',
+        userId: adminId,
+        properties: { 
+          actionId,
+          ticketId,
+          subject,
+          category,
+          priority,
+          submittedBy: effectiveSubmitter,
+          hasAttachments: attachments && attachments.length > 0
+        },
+        timestamp: new Date().toISOString()
+      }).catch(err => console.error('Failed to log ticket creation:', err));
+    }
 
     return jsonSuccess(c, { 
       ticketId, 

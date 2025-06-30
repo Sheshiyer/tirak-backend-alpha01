@@ -109,18 +109,17 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
     // Generate tokens
     const tokens = await generateTokens(user, c.env.JWT_SECRET);
 
-    // Comment out analytics queue since it's not available on the free plan
-    /*
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'user_registration',
-      userId: user.id,
-      properties: { 
-        userType: user.userType,
-        preferredLanguage: user.preferredLanguage 
-      },
-      timestamp: new Date().toISOString()
-    });
-    */
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'user_registration',
+        userId: user.id,
+        properties: { 
+          userType: user.userType,
+          preferredLanguage: user.preferredLanguage 
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, {
       user: {
@@ -175,19 +174,18 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
       'UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?'
     ).bind(user.id).run();
 
-    // Comment out analytics queue since it's not available on the free plan
-    /*
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'user_login',
-      userId: user.id,
-      properties: { 
-        deviceId, 
-        userType: user.userType,
-        loginMethod: isValidEmail(identifier) ? 'email' : 'phone'
-      },
-      timestamp: new Date().toISOString()
-    });
-    */
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'user_login',
+        userId: user.id,
+        properties: { 
+          deviceId, 
+          userType: user.userType,
+          loginMethod: isValidEmail(identifier) ? 'email' : 'phone'
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, {
       user: {
@@ -238,6 +236,18 @@ auth.post('/forgot-password', zValidator('json', passwordResetRequestSchema), as
     // In production, send email/SMS with reset link
     console.log(`Password reset token for ${user.email}: ${resetToken}`); // Development only
 
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'password_reset_request',
+        userId: user.id,
+        properties: { 
+          identifier,
+          resetToken
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
+
     return jsonSuccess(c, { sent: true }, 'If an account exists, a reset code will be sent');
 
   } catch (error) {
@@ -279,15 +289,13 @@ auth.post('/reset-password', zValidator('json', passwordResetSchema), async (c) 
     // Delete reset token
     await c.env.CACHE.delete(`reset:${token}`);
 
-    // Comment out analytics queue since it's not available on the free plan
-    /*
-    // Track password reset event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'password_reset',
-      userId,
-      timestamp: new Date().toISOString()
-    });
-    */
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'password_reset',
+        userId,
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, { reset: true }, 'Password reset successfully');
 
@@ -309,14 +317,13 @@ auth.post('/logout', async (c) => {
 
     const userId = c.get('userId');
     if (userId) {
-      // Comment out analytics queue since it's not available on the free plan
-      /*
-      await c.env.ANALYTICS_QUEUE.send({
-        eventType: 'user_logout',
-        userId,
-        timestamp: new Date().toISOString()
-      });
-      */
+      if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+        await c.env.ANALYTICS_QUEUE.send({
+          eventType: 'user_logout',
+          userId,
+          timestamp: new Date().toISOString()
+        });
+      }
     }
 
     return jsonSuccess(c, { loggedOut: true }, 'Logged out successfully');

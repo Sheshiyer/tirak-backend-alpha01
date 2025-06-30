@@ -156,21 +156,23 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
     `).bind(bookingId, 'pending', now, 'Booking created').run();
 
     // Track booking creation event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'booking_created',
-      userId,
-      properties: {
-        bookingId,
-        companionId: bookingData.companionId,
-        serviceId: bookingData.serviceId,
-        experienceId: bookingData.experienceId,
-        totalAmount,
-        duration: bookingData.duration,
-        hasPreferences: !!bookingData.customerPreferences,
-        hasSpecialRequests: !!bookingData.specialRequests
-      },
-      timestamp: now
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'booking_created',
+        userId,
+        properties: {
+          bookingId,
+          companionId: bookingData.companionId,
+          serviceId: bookingData.serviceId,
+          experienceId: bookingData.experienceId,
+          totalAmount,
+          duration: bookingData.duration,
+          hasPreferences: !!bookingData.customerPreferences,
+          hasSpecialRequests: !!bookingData.specialRequests
+        },
+        timestamp: now
+      });
+    }
 
     // Send notification to companion
     await c.env.NOTIFICATION_QUEUE.send({
@@ -715,17 +717,19 @@ bookings.put('/:id/status', validateUUID('id'), zValidator('json', updateBooking
     });
 
     // Track status change event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'booking_status_changed',
-      userId,
-      properties: {
-        bookingId,
-        oldStatus: currentStatus,
-        newStatus: status,
-        reason
-      },
-      timestamp: now
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'booking_status_changed',
+        userId,
+        properties: {
+          bookingId,
+          oldStatus: currentStatus,
+          newStatus: status,
+          reason
+        },
+        timestamp: now
+      });
+    }
 
     // Get updated booking
     const updatedBooking = await c.env.DB.prepare(`

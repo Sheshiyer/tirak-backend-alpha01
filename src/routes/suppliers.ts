@@ -135,7 +135,7 @@ suppliers.get('/search', zValidator('query', supplierSearchSchema), optionalAuth
 
     // Track search event
     const userId = c.get('userId');
-    if (userId) {
+    if (userId && c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
       await c.env.ANALYTICS_QUEUE.send({
         eventType: 'supplier_search',
         userId,
@@ -173,7 +173,7 @@ suppliers.get('/:id', validateUUID('id'), optionalAuthMiddleware, async (c) => {
       
       // Track profile view
       const userId = c.get('userId');
-      if (userId && userId !== supplierId) {
+      if (userId && userId !== supplierId && c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
         await c.env.ANALYTICS_QUEUE.send({
           eventType: 'supplier_profile_view',
           userId,
@@ -271,7 +271,7 @@ suppliers.get('/:id', validateUUID('id'), optionalAuthMiddleware, async (c) => {
 
     // Track profile view
     const userId = c.get('userId');
-    if (userId && userId !== supplierId) {
+    if (userId && userId !== supplierId && c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
       await c.env.ANALYTICS_QUEUE.send({
         eventType: 'supplier_profile_view',
         userId,
@@ -333,16 +333,18 @@ suppliers.put('/:id',
       await c.env.CACHE.delete(`supplier:${supplierId}`);
 
       // Track profile update
-      await c.env.ANALYTICS_QUEUE.send({
-        eventType: 'supplier_profile_update',
-        userId: supplierId,
-        properties: { 
-          updatedFields: Object.keys(updates),
-          categoriesCount: updates.categories.length,
-          regionsCount: updates.regions.length
-        },
-        timestamp: new Date().toISOString()
-      });
+      if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+        await c.env.ANALYTICS_QUEUE.send({
+          eventType: 'supplier_profile_update',
+          userId: supplierId,
+          properties: { 
+            updatedFields: Object.keys(updates),
+            categoriesCount: updates.categories.length,
+            regionsCount: updates.regions.length
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
 
       return jsonSuccess(c, { updated: true }, 'Supplier profile updated successfully');
 
@@ -358,7 +360,9 @@ suppliers.put('/:id',
  */
 suppliers.get('/:id/services', validateUUID('id'), validatePagination(), async (c) => {
   const supplierId = c.req.param('id');
-  const { page, limit } = c.req.valid('query');
+  const { page = '1', limit = '20' } = c.req.query();
+  const pageNum = Number(page) || 1;
+  const limitNum = Number(limit) || 20;
   
   try {
     // Get total count
@@ -371,7 +375,7 @@ suppliers.get('/:id/services', validateUUID('id'), validatePagination(), async (
     const total = countResult?.total as number || 0;
 
     // Get services with pagination
-    const offset = (page - 1) * limit;
+    const offset = (pageNum - 1) * limitNum;
     const servicesResult = await c.env.DB.prepare(`
       SELECT id, title, description, price_min, price_max, currency, 
              duration_hours, is_active, created_at, updated_at
@@ -379,7 +383,7 @@ suppliers.get('/:id/services', validateUUID('id'), validatePagination(), async (
       WHERE supplier_id = ? AND is_active = TRUE
       ORDER BY created_at DESC
       LIMIT ? OFFSET ?
-    `).bind(supplierId, limit, offset).all();
+    `).bind(supplierId, limitNum, offset).all();
 
     const services = servicesResult.results?.map((service: any) => ({
       id: service.id,
@@ -394,7 +398,7 @@ suppliers.get('/:id/services', validateUUID('id'), validatePagination(), async (
       updatedAt: service.updated_at
     })) || [];
 
-    const pagination = createPagination(page, limit, total);
+    const pagination = createPagination(pageNum, limitNum, total);
     return jsonPaginated(c, services, pagination, 'Services retrieved successfully');
 
   } catch (error) {
@@ -446,16 +450,18 @@ suppliers.post('/:id/services',
       await c.env.CACHE.delete(`supplier:${supplierId}`);
 
       // Track service creation
-      await c.env.ANALYTICS_QUEUE.send({
-        eventType: 'service_created',
-        userId: supplierId,
-        properties: { 
-          serviceId,
-          priceRange: `${serviceData.priceMin}-${serviceData.priceMax}`,
-          duration: serviceData.durationHours
-        },
-        timestamp: new Date().toISOString()
-      });
+      if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+        await c.env.ANALYTICS_QUEUE.send({
+          eventType: 'service_created',
+          userId: supplierId,
+          properties: { 
+            serviceId,
+            priceRange: `${serviceData.priceMin}-${serviceData.priceMax}`,
+            duration: serviceData.durationHours
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
 
       return jsonSuccess(c, { 
         serviceId,

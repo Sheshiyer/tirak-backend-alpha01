@@ -18,7 +18,7 @@ notifications.use('*', createRateLimit('notification'));
  */
 notifications.get('/', validatePagination, async (c) => {
   const userId = c.get('userId');
-  const { page, limit } = c.get('pagination');
+  const { page, limit } = c.get('pagination') || { page: 1, limit: 20 };
   const read = c.req.query('read');
   
   try {
@@ -33,7 +33,7 @@ notifications.get('/', validatePagination, async (c) => {
 
     if (read !== undefined) {
       query += ` AND read = ?`;
-      queryParams.push(read === 'true' ? 1 : 0);
+      queryParams.push(read === 'true' ? '1' : '0');
     }
 
     query += ` ORDER BY created_at DESC`;
@@ -109,14 +109,16 @@ notifications.put('/:id/read', validateUUID('id'), async (c) => {
     `).bind(new Date().toISOString(), notificationId).run();
 
     // Track notification read event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'notification_read',
-      userId,
-      properties: {
-        notificationId
-      },
-      timestamp: new Date().toISOString()
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'notification_read',
+        userId,
+        properties: {
+          notificationId
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, {}, 'Notification marked as read');
 
@@ -154,14 +156,16 @@ notifications.put('/read-all', async (c) => {
     `).bind(new Date().toISOString(), userId).run();
 
     // Track bulk read event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'notifications_read_all',
-      userId,
-      properties: {
-        count: unreadCount
-      },
-      timestamp: new Date().toISOString()
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'notifications_read_all',
+        userId,
+        properties: {
+          count: unreadCount
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, {
       markedCount: unreadCount
@@ -281,14 +285,16 @@ notifications.delete('/:id', validateUUID('id'), async (c) => {
     `).bind(notificationId).run();
 
     // Track notification deletion
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'notification_deleted',
-      userId,
-      properties: {
-        notificationId
-      },
-      timestamp: new Date().toISOString()
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'notification_deleted',
+        userId,
+        properties: {
+          notificationId
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, {}, 'Notification deleted successfully');
 
@@ -324,7 +330,9 @@ notifications.put('/preferences', zValidator('json', updatePreferencesSchema), a
       SELECT notification_preferences FROM users WHERE id = ?
     `).bind(userId).first();
 
-    const current = JSON.parse(currentPrefs?.notification_preferences || '{}');
+    const current = typeof currentPrefs?.notification_preferences === 'string' 
+      ? JSON.parse(currentPrefs.notification_preferences || '{}') 
+      : {};
     const updated = { ...current, ...preferences };
 
     // Update preferences

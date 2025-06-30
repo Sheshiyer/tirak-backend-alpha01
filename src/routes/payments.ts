@@ -120,7 +120,7 @@ payments.post('/payment-methods', zValidator('json', createPaymentMethodSchema),
       processedDetails.phoneNumber = details.phoneNumber;
     } else if (type === 'bank_transfer') {
       processedDetails.accountNumber = details.accountNumber;
-      processedDetails.bankName = details.bankName || 'Unknown Bank';
+      processedDetails.bankName = (details as any).bankName || 'Unknown Bank';
     }
 
     // If this is set as default, unset other defaults
@@ -152,16 +152,18 @@ payments.post('/payment-methods', zValidator('json', createPaymentMethodSchema),
     ).run();
 
     // Track payment method addition
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'payment_method_added',
-      userId,
-      properties: {
-        paymentMethodId,
-        type,
-        isDefault
-      },
-      timestamp: now
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'payment_method_added',
+        userId,
+        properties: {
+          paymentMethodId,
+          type,
+          isDefault
+        },
+        timestamp: now
+      });
+    }
 
     return jsonSuccess(c, {
       paymentMethod: {
@@ -232,14 +234,16 @@ payments.delete('/payment-methods/:id', validateUUID('id'), async (c) => {
     }
 
     // Track payment method removal
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'payment_method_removed',
-      userId,
-      properties: {
-        paymentMethodId
-      },
-      timestamp: new Date().toISOString()
-    });
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'payment_method_removed',
+        userId,
+        properties: {
+          paymentMethodId
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     return jsonSuccess(c, {}, 'Payment method removed successfully');
 
@@ -254,7 +258,7 @@ payments.delete('/payment-methods/:id', validateUUID('id'), async (c) => {
  */
 payments.get('/payments/history', validatePagination, async (c) => {
   const userId = c.get('userId');
-  const { page, limit } = c.get('pagination');
+  const { page, limit } = c.get('pagination') || { page: 1, limit: 20 };
   const status = c.req.query('status');
   
   try {
@@ -316,8 +320,8 @@ payments.get('/payments/history', validatePagination, async (c) => {
     }));
 
     return jsonPaginated(c, {
-      payments: paymentsList
-    }, createPagination(page, limit, total));
+      payments: paymentsList as any[]
+    } as any, createPagination(page, limit, total));
 
   } catch (error) {
     console.error('Get payment history error:', error);
