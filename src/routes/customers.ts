@@ -5,7 +5,7 @@ import {
   reviewSchema
 } from '../utils/validation';
 import { validateUUID, validatePagination } from '../middleware/validation';
-import { authMiddleware, customerOnly } from '../middleware/auth';
+import { authMiddleware, customerOnly, adminOnly } from '../middleware/auth';
 import { createRateLimit } from '../middleware/rateLimit';
 import { 
   getUserById, 
@@ -22,6 +22,114 @@ customers.use('*', customerOnly);
 
 // Apply rate limiting
 customers.use('*', createRateLimit('general'));
+
+/**
+ * Get all customers (accessible to all authenticated users)
+ */
+customers.get('/all', async (c) => {
+  // No longer admin-only, any authenticated user can access this endpoint
+  
+  // Get pagination parameters
+  const pageParam = c.req.query('page');
+  const limitParam = c.req.query('limit');
+  const page = pageParam ? parseInt(pageParam) : 1;
+  const limit = limitParam ? parseInt(limitParam) : 20;
+  
+  // Get other query parameters
+  const search = c.req.query('search');
+  const status = c.req.query('status');
+  const sortBy = c.req.query('sortBy') || 'created_at';
+  const sortOrder = (c.req.query('sortOrder') === 'asc') ? 'ASC' : 'DESC';
+  const offset = (page - 1) * limit;
+  
+  try {
+    // Build the base query
+    let query = `
+      SELECT 
+        u.id, 
+        u.email, 
+        u.phone,
+        u.user_type, 
+        u.status, 
+        u.email_verified, 
+        u.phone_verified, 
+        u.preferred_language,
+        u.created_at,
+        u.last_login_at,
+        cp.display_name,
+        cp.profile_image,
+        cp.preferences,
+        cp.loyalty_points
+      FROM users u
+      JOIN customer_profiles cp ON u.id = cp.user_id
+      WHERE u.user_type = 'customer'
+    `;
+    
+    const queryParams: any[] = [];
+    
+    // Add search condition if provided
+    if (search) {
+      query += ` AND (cp.display_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)`;
+      const searchTerm = `%${search}%`;
+      queryParams.push(searchTerm, searchTerm, searchTerm);
+    }
+    
+    // Add status filter if provided
+    if (status) {
+      query += ` AND u.status = ?`;
+      queryParams.push(status);
+    }
+    
+    // Add count query to get total records
+    const countQuery = `SELECT COUNT(*) as total FROM (${query})`;
+    const countResult = await c.env.DB.prepare(countQuery).bind(...queryParams).first();
+    const total = countResult?.total as number || 0;
+    
+    // Add sorting and pagination
+    const validSortColumns = ['created_at', 'display_name', 'loyalty_points', 'last_login_at'];
+    const sortColumnSafe = validSortColumns.includes(sortBy as string) ? sortBy : 'created_at';
+    
+    query += ` ORDER BY ${sortColumnSafe} ${sortOrder} LIMIT ? OFFSET ?`;
+    queryParams.push(limit, offset);
+    
+    // Execute the final query
+    const customersResult = await c.env.DB.prepare(query).bind(...queryParams).all();
+    
+    // Format the data
+    const customersList = customersResult.results.map((customer: any) => {
+      let preferences;
+      try {
+        preferences = customer.preferences ? JSON.parse(customer.preferences) : {};
+      } catch (e) {
+        preferences = {};
+      }
+      
+      return {
+        id: customer.id,
+        email: customer.email,
+        phone: customer.phone,
+        displayName: customer.display_name,
+        profileImage: customer.profile_image,
+        status: customer.status,
+        loyaltyPoints: customer.loyalty_points,
+        emailVerified: customer.email_verified === 1,
+        phoneVerified: customer.phone_verified === 1,
+        preferredLanguage: customer.preferred_language,
+        createdAt: customer.created_at,
+        lastLoginAt: customer.last_login_at,
+        preferences: preferences
+      };
+    });
+    
+    // Return paginated response
+    const pagination = createPagination(page, limit, total);
+    return jsonPaginated(c, customersList, pagination, 'Customers retrieved successfully');
+    
+  } catch (error) {
+    console.error('Get all customers error:', error);
+    return jsonError(c, 'Failed to retrieve customers', 'An error occurred while fetching customer data', 500);
+  }
+});
 
 /**
  * Get customer profile
@@ -97,7 +205,9 @@ customers.get('/:id', validateUUID('id'), async (c) => {
 customers.get('/:id/bookings', validateUUID('id'), validatePagination(), async (c) => {
   const customerId = c.req.param('id');
   const userId = c.get('userId');
-  const { page, limit } = c.req.valid('query');
+  const pagination = c.get('pagination'); // Get pagination from context
+  const page = pagination?.page || 1;
+  const limit = pagination?.limit || 20;
   
   // Ensure customer can only access their own bookings
   if (userId !== customerId) {
@@ -274,7 +384,9 @@ customers.post('/:id/bookings',
 customers.get('/:id/favorites', validateUUID('id'), validatePagination(), async (c) => {
   const customerId = c.req.param('id');
   const userId = c.get('userId');
-  const { page, limit } = c.req.valid('query');
+  const pagination = c.get('pagination'); // Get pagination from context
+  const page = pagination?.page || 1;
+  const limit = pagination?.limit || 20;
   
   // Ensure customer can only access their own favorites
   if (userId !== customerId) {

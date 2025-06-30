@@ -1,7 +1,28 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { profileUpdateSchema, validateFileUpload } from '../utils/validation';
+import { validateFileUpload } from '../utils/validation';
+
+// Legacy profile update schema
+const profileUpdateSchema = z.object({
+  displayName: z.string().min(2).max(100).optional(),
+  bio: z.string().max(500).optional(),
+  socialLinks: z.object({
+    instagram: z.string().url().optional(),
+    facebook: z.string().url().optional(),
+    twitter: z.string().url().optional(),
+    tiktok: z.string().url().optional(),
+    website: z.string().url().optional(),
+    other: z.array(
+      z.object({
+        name: z.string(),
+        url: z.string().url()
+      })
+    ).optional()
+  }).optional(),
+  preferredLanguage: z.enum(['en', 'th']).optional(),
+  profileImage: z.string().url().optional()
+});
 import { validateUUID } from '../middleware/validation';
 import { authMiddleware, requireOwnership } from '../middleware/auth';
 import { createRateLimit } from '../middleware/rateLimit';
@@ -27,16 +48,16 @@ users.use('*', createRateLimit('general'));
  * Get user profile (mobile app format)
  */
 users.get('/profile', async (c) => {
-  const userId = c.get('userId');
+  const userId = c.get('userId') as string;
 
   try {
-    const user = await getUserById(userId, c.env.DB);
+    const user = await getUserById(userId, c.env.DB) as any;
     if (!user) {
       return jsonError(c, 'User not found', 'The requested user does not exist', 404);
     }
 
     // Get profile based on user type
-    let profile = null;
+    let profile: any = null;
     if (user.userType === 'supplier') {
       profile = await getSupplierProfile(userId, c.env.DB);
     } else if (user.userType === 'customer') {
@@ -44,7 +65,9 @@ users.get('/profile', async (c) => {
     }
 
     // Get user preferences
-    const preferences = JSON.parse(user.notificationPreferences || '{}');
+    const preferences = user.notificationPreferences ? 
+      JSON.parse(user.notificationPreferences) : {};
+      
     const defaultPreferences = {
       language: user.preferredLanguage || 'en',
       currency: 'THB',
@@ -55,15 +78,43 @@ users.get('/profile', async (c) => {
       }
     };
 
+    // Parse profile images based on what's available
+    let profileImage = null;
+    let profileImages: string[] = [];
+    
+    if (profile) {
+      // For supplier profiles or updated customer profiles with profile_images
+      if (profile.profileImages) {
+        try {
+          profileImages = JSON.parse(profile.profileImages);
+          profileImage = profileImages[0] || null;
+        } catch (e) {
+          profileImages = [];
+        }
+      } 
+      // For customer profiles with just profile_image
+      else if (profile.profileImage) {
+        profileImage = profile.profileImage;
+        profileImages = [profileImage];
+      }
+    }
+
+    // Get social links if they exist
+    const socialLinks = profile?.socialLinks ? JSON.parse(profile.socialLinks) : {};
+
     // Format response for mobile app
     const profileData = {
       id: user.id,
       name: profile?.displayName || user.email.split('@')[0],
+      displayName: profile?.displayName || user.email.split('@')[0],
       email: user.email,
       role: user.userType === 'supplier' ? 'companion' : 'customer',
       verified: user.emailVerified && user.phoneVerified,
-      profileImage: profile ? JSON.parse(profile.profileImages || '[]')[0] : null,
+      profileImage,
+      profileImages: profileImages || [],
       phone: user.phone,
+      bio: profile?.bio || '',
+      socialLinks,
       dateOfBirth: profile?.dateOfBirth || null,
       gender: profile?.gender || null,
       preferences: defaultPreferences,
@@ -86,7 +137,7 @@ users.get('/:id', validateUUID('id'), requireOwnership('id'), async (c) => {
   const userId = c.req.param('id');
 
   try {
-    const user = await getUserById(userId, c.env.DB);
+    const user = await getUserById(userId, c.env.DB) as any;
     if (!user) {
       return jsonError(c, 'User not found', 'The requested user does not exist', 404);
     }
@@ -116,6 +167,21 @@ users.get('/:id', validateUUID('id'), requireOwnership('id'), async (c) => {
 // Mobile app profile update schema
 const updateMobileProfileSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name too long').optional(),
+  displayName: z.string().min(2, 'Display name must be at least 2 characters').max(100, 'Display name too long').optional(),
+  bio: z.string().max(500, 'Bio must not exceed 500 characters').optional(),
+  socialLinks: z.object({
+    instagram: z.string().url('Invalid Instagram URL').optional(),
+    facebook: z.string().url('Invalid Facebook URL').optional(),
+    twitter: z.string().url('Invalid Twitter URL').optional(),
+    tiktok: z.string().url('Invalid TikTok URL').optional(),
+    website: z.string().url('Invalid Website URL').optional(),
+    other: z.array(
+      z.object({
+        name: z.string(),
+        url: z.string().url('Invalid URL')
+      })
+    ).optional()
+  }).optional(),
   dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional(),
   gender: z.enum(['male', 'female', 'other']).optional(),
   profileImage: z.string().url('Invalid image URL').optional(),
@@ -134,11 +200,11 @@ const updateMobileProfileSchema = z.object({
  * Update user profile (mobile app format)
  */
 users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) => {
-  const userId = c.get('userId');
+  const userId = c.get('userId') as string;
   const updates = c.req.valid('json');
 
   try {
-    const user = await getUserById(userId, c.env.DB);
+    const user = await getUserById(userId, c.env.DB) as any;
     if (!user) {
       return jsonError(c, 'User not found', 'The requested user does not exist', 404);
     }
@@ -165,9 +231,13 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
       const profileUpdates: string[] = [];
       const values: any[] = [];
 
-      if (updates.name) {
+      if (updates.name || updates.displayName) {
         profileUpdates.push('display_name = ?');
-        values.push(updates.name);
+        values.push(updates.displayName || updates.name);
+      }
+      if (updates.bio !== undefined) {
+        profileUpdates.push('bio = ?');
+        values.push(updates.bio);
       }
       if (updates.dateOfBirth) {
         profileUpdates.push('date_of_birth = ?');
@@ -177,11 +247,15 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
         profileUpdates.push('gender = ?');
         values.push(updates.gender);
       }
+      if (updates.socialLinks) {
+        profileUpdates.push('social_links = ?');
+        values.push(JSON.stringify(updates.socialLinks));
+      }
       if (updates.profileImage) {
         // Add to profile_images array
-        const profile = await getSupplierProfile(userId, c.env.DB);
-        const currentImages = JSON.parse(profile?.profileImages || '[]');
-        const updatedImages = [updates.profileImage, ...currentImages.filter(img => img !== updates.profileImage).slice(0, 9)];
+        const profile = await getSupplierProfile(userId, c.env.DB) as any;
+        const currentImages = profile?.profileImages ? JSON.parse(profile.profileImages) : [];
+        const updatedImages = [updates.profileImage, ...currentImages.filter((img: string) => img !== updates.profileImage).slice(0, 9)];
         profileUpdates.push('profile_images = ?');
         values.push(JSON.stringify(updatedImages));
       }
@@ -201,9 +275,13 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
       const profileUpdates: string[] = [];
       const values: any[] = [];
 
-      if (updates.name) {
+      if (updates.name || updates.displayName) {
         profileUpdates.push('display_name = ?');
-        values.push(updates.name);
+        values.push(updates.displayName || updates.name);
+      }
+      if (updates.bio !== undefined) {
+        profileUpdates.push('bio = ?');
+        values.push(updates.bio);
       }
       if (updates.dateOfBirth) {
         profileUpdates.push('date_of_birth = ?');
@@ -213,17 +291,24 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
         profileUpdates.push('gender = ?');
         values.push(updates.gender);
       }
+      if (updates.socialLinks) {
+        profileUpdates.push('social_links = ?');
+        values.push(JSON.stringify(updates.socialLinks));
+      }
       if (updates.profileImage) {
-        const currentImages = JSON.parse(user.profileImages || '[]');
-        const updatedImages = [updates.profileImage, ...currentImages.filter(img => img !== updates.profileImage).slice(0, 4)];
+        profileUpdates.push('profile_image = ?');
+        values.push(updates.profileImage);
+        
+        // Also update profile_images array for consistency
         profileUpdates.push('profile_images = ?');
-        values.push(JSON.stringify(updatedImages));
+        const profileImagesArray = [updates.profileImage];
+        values.push(JSON.stringify(profileImagesArray));
       }
 
       // Update preferences
       if (updates.preferences) {
-        const currentProfile = await getCustomerProfile(userId, c.env.DB);
-        const currentPrefs = JSON.parse(currentProfile?.preferences || '{}');
+        const currentProfile = await getCustomerProfile(userId, c.env.DB) as any;
+        const currentPrefs = currentProfile?.preferences ? JSON.parse(currentProfile.preferences) : {};
         const updatedPrefs = { ...currentPrefs, ...updates.preferences };
         profileUpdates.push('preferences = ?');
         values.push(JSON.stringify(updatedPrefs));
@@ -254,14 +339,18 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
     });
 
     // Get updated profile
-    let profile = null;
+    let profile: any = null;
     if (user.userType === 'supplier') {
       profile = await getSupplierProfile(userId, c.env.DB);
     } else if (user.userType === 'customer') {
       profile = await getCustomerProfile(userId, c.env.DB);
     }
 
-    const updatedUser = await getUserById(userId, c.env.DB);
+    const updatedUser = await getUserById(userId, c.env.DB) as any;
+    if (!updatedUser) {
+      return jsonError(c, 'User not found', 'The requested user does not exist after update', 500);
+    }
+    
     const preferences = JSON.parse(updatedUser.notificationPreferences || '{}');
     const defaultPreferences = {
       language: updatedUser.preferredLanguage || 'en',
@@ -273,14 +362,41 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
       }
     };
 
+    // Parse profile images based on what's available
+    let profileImage = null;
+    let profileImages: string[] = [];
+    
+    if (profile) {
+      // For supplier profiles or updated customer profiles with profile_images
+      if (profile.profileImages) {
+        try {
+          profileImages = JSON.parse(profile.profileImages);
+          profileImage = profileImages[0] || null;
+        } catch (e) {
+          profileImages = [];
+        }
+      } 
+      // For customer profiles with just profile_image
+      else if ('profileImage' in profile && profile.profileImage) {
+        profileImage = profile.profileImage;
+        profileImages = [profileImage];
+      }
+    }
+
+    // Get social links
+    const socialLinks = profile?.socialLinks ? JSON.parse(profile.socialLinks) : {};
+
     const profileData = {
       id: updatedUser.id,
       name: profile?.displayName || updatedUser.email.split('@')[0],
+      displayName: profile?.displayName || updatedUser.email.split('@')[0],
       email: updatedUser.email,
       role: updatedUser.userType === 'supplier' ? 'companion' : 'customer',
       verified: updatedUser.emailVerified && updatedUser.phoneVerified,
-      profileImage: profile ? JSON.parse(profile.profileImages || '[]')[0] : null,
+      profileImage,
       phone: updatedUser.phone,
+      bio: profile?.bio || null,
+      socialLinks,
       dateOfBirth: profile?.dateOfBirth || null,
       gender: profile?.gender || null,
       preferences: defaultPreferences,
@@ -304,7 +420,7 @@ users.put('/:id', validateUUID('id'), requireOwnership('id'), zValidator('json',
   const updates = c.req.valid('json');
   
   try {
-    const user = await getUserById(userId, c.env.DB);
+    const user = await getUserById(userId, c.env.DB) as any;
     if (!user) {
       return jsonError(c, 'User not found', 'The requested user does not exist', 404);
     }
@@ -320,7 +436,7 @@ users.put('/:id', validateUUID('id'), requireOwnership('id'), zValidator('json',
     }
 
     // Update profile table based on user type
-    if (user.userType === 'supplier' && (updates.displayName || updates.bio)) {
+    if (user.userType === 'supplier' && (updates.displayName || updates.bio || updates.socialLinks)) {
       const profileUpdates: string[] = [];
       const values: any[] = [];
 
@@ -331,6 +447,10 @@ users.put('/:id', validateUUID('id'), requireOwnership('id'), zValidator('json',
       if (updates.bio) {
         profileUpdates.push('bio = ?');
         values.push(updates.bio);
+      }
+      if (updates.socialLinks) {
+        profileUpdates.push('social_links = ?');
+        values.push(JSON.stringify(updates.socialLinks));
       }
 
       if (profileUpdates.length > 0) {
@@ -344,7 +464,7 @@ users.put('/:id', validateUUID('id'), requireOwnership('id'), zValidator('json',
           WHERE user_id = ?
         `).bind(...values).run();
       }
-    } else if (user.userType === 'customer' && (updates.displayName || updates.profileImage)) {
+    } else if (user.userType === 'customer' && (updates.displayName || updates.profileImage || updates.bio || updates.socialLinks)) {
       const profileUpdates: string[] = [];
       const values: any[] = [];
 
@@ -355,6 +475,14 @@ users.put('/:id', validateUUID('id'), requireOwnership('id'), zValidator('json',
       if (updates.profileImage) {
         profileUpdates.push('profile_image = ?');
         values.push(updates.profileImage);
+      }
+      if (updates.bio) {
+        profileUpdates.push('bio = ?');
+        values.push(updates.bio);
+      }
+      if (updates.socialLinks) {
+        profileUpdates.push('social_links = ?');
+        values.push(JSON.stringify(updates.socialLinks));
       }
 
       if (profileUpdates.length > 0) {
@@ -410,6 +538,9 @@ users.post('/:id/avatar',
     }
 
     const file = files[0];
+    if (!file) {
+      return jsonError(c, 'Invalid file', 'The uploaded file is invalid', 400);
+    }
     
     try {
       // Validate image file
@@ -448,7 +579,7 @@ users.post('/:id/avatar',
         `).bind(uploadResult.url, new Date().toISOString(), userId).run();
       } else if (user.userType === 'supplier') {
         // For suppliers, add to profile_images array
-        const profile = await getSupplierProfile(userId, c.env.DB);
+        const profile = await getSupplierProfile(userId, c.env.DB) as any;
         const currentImages = profile?.profileImages || [];
         const updatedImages = [uploadResult.url, ...currentImages.slice(0, 9)]; // Keep max 10 images
 
@@ -491,7 +622,7 @@ users.get('/:id/settings', validateUUID('id'), requireOwnership('id'), async (c)
   const userId = c.req.param('id');
   
   try {
-    const user = await getUserById(userId, c.env.DB);
+    const user = await getUserById(userId, c.env.DB) as any;
     if (!user) {
       return jsonError(c, 'User not found', 'The requested user does not exist', 404);
     }

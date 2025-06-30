@@ -945,4 +945,147 @@ companions.post('/:id/availability',
   }
 );
 
+/**
+ * Get all companions (accessible to all users)
+ */
+companions.get('/all', async (c) => {
+  // Removed admin check to allow all users to access this endpoint
+
+  // Get query parameters with defaults
+  const page = parseInt(c.req.query('page') || '1');
+  const limit = parseInt(c.req.query('limit') || '20');
+  const search = c.req.query('search');
+  const status = c.req.query('status');
+  const verificationStatus = c.req.query('verification');
+  const sortBy = c.req.query('sortBy') || 'created_at';
+  const sortOrder = c.req.query('sortOrder')?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+  try {
+    // First check if companion_experiences table exists
+    const tableCheck = await c.env.DB.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='companion_experiences'"
+    ).first();
+    
+    if (!tableCheck?.name) {
+      console.error('Missing required table: companion_experiences');
+      return jsonError(
+        c, 
+        'System maintenance', 
+        'The system is currently undergoing maintenance. Please try again in a few minutes.', 
+        503
+      );
+    }
+
+    // Build the base query
+    let query = `
+      SELECT 
+        u.id,
+        u.email,
+        u.phone,
+        u.status as user_status,
+        u.email_verified,
+        u.phone_verified,
+        u.preferred_language,
+        u.created_at,
+        u.last_login_at,
+        sp.display_name,
+        sp.bio,
+        sp.profile_images,
+        sp.categories,
+        sp.regions,
+        sp.spoken_languages,
+        sp.rating_average,
+        sp.rating_count,
+        sp.verification_status,
+        sp.subscription_status,
+        sp.subscription_tier,
+        sp.subscription_expires_at
+      FROM users u
+      JOIN supplier_profiles sp ON u.id = sp.user_id
+      WHERE u.user_type = 'companion'
+    `;
+
+    const queryParams: any[] = [];
+
+    // Add search condition if provided
+    if (search) {
+      query += ` AND (sp.display_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)`;
+      const searchTerm = `%${search}%`;
+      queryParams.push(searchTerm, searchTerm, searchTerm);
+    }
+
+    // Add status filter if provided
+    if (status) {
+      query += ` AND u.status = ?`;
+      queryParams.push(status);
+    }
+
+    // Add verification status filter if provided
+    if (verificationStatus) {
+      query += ` AND sp.verification_status = ?`;
+      queryParams.push(verificationStatus);
+    }
+
+    // Add count query to get total records
+    const countQuery = `SELECT COUNT(*) as total FROM (${query})`;
+    const countResult = await c.env.DB.prepare(countQuery).bind(...queryParams).first();
+    const total = countResult?.total as number || 0;
+
+    // Add sorting and pagination
+    const validSortColumns = ['created_at', 'display_name', 'rating_average', 'rating_count', 'last_login_at'];
+    const sortColumn = validSortColumns.includes(sortBy) ? sortBy : 'created_at';
+    
+    query += ` ORDER BY ${sortColumn} ${sortOrder} LIMIT ? OFFSET ?`;
+    const offset = (page - 1) * limit;
+    queryParams.push(limit, offset);
+
+    // Execute the final query
+    const companionsResult = await c.env.DB.prepare(query).bind(...queryParams).all();
+
+    // Format the data
+    const companionsList = companionsResult.results.map((companion: any) => {
+      // Parse JSON fields
+      const profileImages = companion.profile_images ? JSON.parse(companion.profile_images) : [];
+      const categories = companion.categories ? JSON.parse(companion.categories) : [];
+      const regions = companion.regions ? JSON.parse(companion.regions) : [];
+      const languages = companion.spoken_languages ? JSON.parse(companion.spoken_languages) : [];
+
+      return {
+        id: companion.id,
+        email: companion.email,
+        phone: companion.phone,
+        displayName: companion.display_name,
+        profileImage: profileImages[0] || null,
+        gallery: profileImages,
+        bio: companion.bio,
+        categories: categories,
+        regions: regions,
+        languages: languages,
+        rating: {
+          average: companion.rating_average || 0,
+          count: companion.rating_count || 0
+        },
+        userStatus: companion.user_status,
+        verificationStatus: companion.verification_status,
+        subscriptionStatus: companion.subscription_status,
+        subscriptionTier: companion.subscription_tier,
+        subscriptionExpiresAt: companion.subscription_expires_at,
+        emailVerified: companion.email_verified === 1,
+        phoneVerified: companion.phone_verified === 1,
+        preferredLanguage: companion.preferred_language,
+        createdAt: companion.created_at,
+        lastLoginAt: companion.last_login_at
+      };
+    });
+
+    // Return paginated response
+    const pagination = createPagination(page, limit, total);
+    return jsonPaginated(c, companionsList, pagination, 'All companions retrieved successfully');
+
+  } catch (error) {
+    console.error('Get all companions error:', error);
+    return jsonError(c, 'Failed to retrieve companions', 'An error occurred while fetching companion data', 500);
+  }
+});
+
 export { companions as companionRoutes };
