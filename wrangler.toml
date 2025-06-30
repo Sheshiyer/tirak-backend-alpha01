@@ -76,33 +76,25 @@ id = "placeholder-sessions-production-id"
 # binding = "MODERATION_QUEUE"
 # queue = "tirak-moderation-dev"
 
-# [[queues.producers]]
-# binding = "ANALYTICS_QUEUE"
-# queue = "tirak-analytics-dev"
+[[queues.producers]]
+binding = "ANALYTICS_QUEUE"
+queue = "tirak-analytics-dev"
 
 # [[queues.producers]]
 # binding = "NOTIFICATION_QUEUE"
 # queue = "tirak-notification-dev"
 
-# [[env.staging.queues.producers]]
-# binding = "MODERATION_QUEUE"
-# queue = "tirak-moderation-staging"
-
-# [[env.staging.queues.producers]]
-# binding = "ANALYTICS_QUEUE"
-# queue = "tirak-analytics-staging"
+[[env.staging.queues.producers]]
+binding = "ANALYTICS_QUEUE"
+queue = "tirak-analytics-staging"
 
 # [[env.staging.queues.producers]]
 # binding = "NOTIFICATION_QUEUE"
 # queue = "tirak-notification-staging"
 
-# [[env.production.queues.producers]]
-# binding = "MODERATION_QUEUE"
-# queue = "tirak-moderation-production"
-
-# [[env.production.queues.producers]]
-# binding = "ANALYTICS_QUEUE"
-# queue = "tirak-analytics-production"
+[[env.production.queues.producers]]
+binding = "ANALYTICS_QUEUE"
+queue = "tirak-analytics-production"
 
 # [[env.production.queues.producers]]
 # binding = "NOTIFICATION_QUEUE"
