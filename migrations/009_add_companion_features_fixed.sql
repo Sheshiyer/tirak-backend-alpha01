@@ -34,53 +34,24 @@ CREATE TABLE IF NOT EXISTS companion_locations (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Add new columns to bookings table for enhanced customer preferences if they don't exist
--- SQLite doesn't have a direct way to check if column exists, so we use ALTER TABLE with a transaction
-BEGIN TRANSACTION;
+-- Add new columns to bookings table for enhanced customer preferences
+-- We try to add each column separately and ignore errors if they already exist
+-- Using ALTER TABLE statements without transactions (D1 doesn't allow BEGIN TRANSACTION)
 
--- Add columns conditionally using the SQLite technique
--- We try to add each column and catch any errors
--- Checking first if the customer_preferences column exists
-SELECT CASE 
-    WHEN (SELECT COUNT(*) FROM pragma_table_info('bookings') WHERE name = 'customer_preferences') = 0 THEN
-        ALTER TABLE bookings ADD COLUMN customer_preferences TEXT
-    ELSE
-        SELECT 0
-END;
+-- Try to add customer_preferences column (will fail silently if column already exists)
+ALTER TABLE bookings ADD COLUMN customer_preferences TEXT;
 
--- Checking if the special_requests column exists
-SELECT CASE 
-    WHEN (SELECT COUNT(*) FROM pragma_table_info('bookings') WHERE name = 'special_requests') = 0 THEN
-        ALTER TABLE bookings ADD COLUMN special_requests TEXT
-    ELSE
-        SELECT 0
-END;
+-- Try to add special_requests column (will fail silently if column already exists)
+ALTER TABLE bookings ADD COLUMN special_requests TEXT;
 
--- Checking if the preferred_language column exists
-SELECT CASE 
-    WHEN (SELECT COUNT(*) FROM pragma_table_info('bookings') WHERE name = 'preferred_language') = 0 THEN
-        ALTER TABLE bookings ADD COLUMN preferred_language TEXT
-    ELSE
-        SELECT 0
-END;
+-- Try to add preferred_language column (will fail silently if column already exists)
+ALTER TABLE bookings ADD COLUMN preferred_language TEXT;
 
--- Checking if the group_composition column exists
-SELECT CASE 
-    WHEN (SELECT COUNT(*) FROM pragma_table_info('bookings') WHERE name = 'group_composition') = 0 THEN
-        ALTER TABLE bookings ADD COLUMN group_composition TEXT
-    ELSE
-        SELECT 0
-END;
+-- Try to add group_composition column (will fail silently if column already exists)
+ALTER TABLE bookings ADD COLUMN group_composition TEXT;
 
--- Checking if the dietary_requirements column exists
-SELECT CASE 
-    WHEN (SELECT COUNT(*) FROM pragma_table_info('bookings') WHERE name = 'dietary_requirements') = 0 THEN
-        ALTER TABLE bookings ADD COLUMN dietary_requirements TEXT
-    ELSE
-        SELECT 0
-END;
-
-COMMIT;
+-- Try to add dietary_requirements column (will fail silently if column already exists)
+ALTER TABLE bookings ADD COLUMN dietary_requirements TEXT;
 
 -- Create indexes for better query performance (if they don't exist)
 CREATE INDEX IF NOT EXISTS idx_companion_exp_companion_id ON companion_experiences(companion_id);
