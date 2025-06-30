@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { jwt } from 'hono/jwt';
 import { debugLogger } from './middleware/debug';
 import { defaultHandler } from './utils/defaultHandler';
+import { checkRequiredTablesAndMigrate } from './utils/database';
 import { authRoutes } from './routes/auth';
 import { userRoutes } from './routes/users';
 import { supplierRoutes } from './routes/suppliers';
@@ -93,6 +94,16 @@ app.use('*', async (c, next) => {
     webSocketService = new WebSocketService(c.env);
   }
   c.set('webSocketService', webSocketService);
+  
+  // Check database schema and run missing migrations if needed
+  if (c.env.ENVIRONMENT !== 'test') {
+    try {
+      await checkRequiredTablesAndMigrate(c.env);
+    } catch (error) {
+      console.error('Database check failed:', error);
+    }
+  }
+  
   await next();
 });
 

@@ -39,6 +39,22 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
   const userId = c.get('userId');
 
   try {
+    // First check if companion_experiences table exists to avoid D1 errors
+    const tableCheck = await c.env.DB.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='companion_experiences'"
+    ).first();
+    
+    if (!tableCheck?.name) {
+      console.error('Missing required table: companion_experiences');
+      // Return a response without joining with non-existent table
+      return jsonError(
+        c, 
+        'System maintenance', 
+        'The system is currently undergoing maintenance. Please try again in a few minutes.', 
+        503
+      );
+    }
+
     // Build base query
     let query = `
       SELECT 
