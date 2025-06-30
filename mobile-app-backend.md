@@ -419,6 +419,27 @@ endDate: string (YYYY-MM-DD)
 }
 ```
 
+### POST /companions/:id/availability
+**Request:**
+```json
+[
+  {
+    "dayOfWeek": 1,
+    "startTime": "09:00",
+    "endTime": "17:00",
+    "isAvailable": true
+  }
+]
+```
+**Response:**
+```json
+{
+  "success": true,
+  "data": { "updated": true },
+  "message": "Availability updated successfully"
+}
+```
+
 ## Supplier Management Endpoints
 
 ### POST /suppliers/signup
