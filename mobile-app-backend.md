@@ -440,68 +440,71 @@ endDate: string (YYYY-MM-DD)
 }
 ```
 
-## Supplier Management Endpoints
+### PUT /companions/profile
+**Request:** (multipart/form-data or application/json)
 
-### POST /suppliers/signup
-**Request:**
-```json
-{
-  "basicInfo": {
-    "firstName": "string",
-    "lastName": "string",
-    "displayName": "string",
-    "phone": "string",
-    "email": "string",
-    "bio": "string",
-    "dateOfBirth": "string",
-    "gender": "string"
-  },
-  "idVerification": {
-    "idCardFront": "string",
-    "idCardBack": "string",
-    "selfieWithId": "string",
-    "idNumber": "string"
-  },
-  "photos": ["string"],
-  "categories": ["string"],
-  "services": [
+- **multipart/form-data**
+  - Fields:
+    - `coverPhoto`: File (optional, cover photo image)
+    - `profilePhoto`: File (optional, profile photo image)
+    - `data`: JSON string with the following fields:
+      ```json
+      {
+        "firstName": "string?",
+        "lastName": "string?",
+        "displayName": "string?",
+        "bio": "string?",
+        "socialLinks": {
+          "instagram": "string?",
+          "facebook": "string?",
+          "twitter": "string?",
+          "tiktok": "string?",
+          "website": "string?",
+          "other": [{"name": "string", "url": "string"}]?
+        },
+        "dateOfBirth": "string?",
+        "gender": "male" | "female" | "other"?
+      }
+      ```
+- **application/json**
+  - Body:
+    ```json
     {
-      "name": "string",
-      "description": "string",
-      "price": number,
-      "duration": "string",
-      "category": "string"
+      "firstName": "string?",
+      "lastName": "string?",
+      "displayName": "string?",
+      "bio": "string?",
+      "socialLinks": {
+        "instagram": "string?",
+        "facebook": "string?",
+        "twitter": "string?",
+        "tiktok": "string?",
+        "website": "string?",
+        "other": [{"name": "string", "url": "string"}]?
+      },
+      "dateOfBirth": "string?",
+      "gender": "male" | "female" | "other"?
     }
-  ],
-  "regions": ["string"],
-  "availability": {
-    "weeklySchedule": {
-      "monday": [{"start": "string", "end": "string"}],
-      "tuesday": [{"start": "string", "end": "string"}],
-      "wednesday": [{"start": "string", "end": "string"}],
-      "thursday": [{"start": "string", "end": "string"}],
-      "friday": [{"start": "string", "end": "string"}],
-      "saturday": [{"start": "string", "end": "string"}],
-      "sunday": [{"start": "string", "end": "string"}]
-    }
-  },
-  "subscription": {
-    "plan": "basic" | "premium" | "pro",
-    "paymentMethod": "promptpay" | "card" | "bank_transfer"
-  }
-}
-```
+    ```
 
 **Response:**
 ```json
 {
-  "success": boolean,
+  "success": true,
   "data": {
-    "supplierId": "string",
-    "status": "pending_review" | "approved" | "rejected",
-    "estimatedReviewTime": "string"
+    "id": "string",
+    "firstName": "string",
+    "lastName": "string",
+    "displayName": "string",
+    "coverPhoto": "string?",
+    "profilePhoto": "string?",
+    "bio": "string?",
+    "socialLinks": {},
+    "dateOfBirth": "string?",
+    "gender": "string?",
+    "updatedAt": "string"
   },
-  "message": "string"
+  "message": "Companion profile updated successfully"
 }
 ```
 

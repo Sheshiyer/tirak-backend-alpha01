@@ -166,6 +166,8 @@ users.get('/:id', validateUUID('id'), requireOwnership('id'), async (c) => {
 
 // Mobile app profile update schema
 const updateMobileProfileSchema = z.object({
+  firstName: z.string().min(1, 'First name required').max(50, 'First name too long').optional(),
+  lastName: z.string().min(1, 'Last name required').max(50, 'Last name too long').optional(),
   name: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name too long').optional(),
   displayName: z.string().min(2, 'Display name must be at least 2 characters').max(100, 'Display name too long').optional(),
   bio: z.string().max(500, 'Bio must not exceed 500 characters').optional(),
@@ -182,7 +184,7 @@ const updateMobileProfileSchema = z.object({
       })
     ).optional()
   }).optional(),
-  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional(),
+  dateOfBirth: z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/, 'Date must be in YYYY-MM-DD format').optional(),
   gender: z.enum(['male', 'female', 'other']).optional(),
   profileImage: z.string().url('Invalid image URL').optional(),
   preferences: z.object({
@@ -758,6 +760,127 @@ users.delete('/:id', validateUUID('id'), requireOwnership('id'), async (c) => {
   } catch (error) {
     console.error('Delete account error:', error);
     return jsonError(c, 'Failed to delete account', 'An error occurred while deleting the account', 500);
+  }
+});
+
+// Companion profile update route (multipart/form-data for images, JSON for other fields)
+users.put('/companion/profile', async (c) => {
+  const userId = c.get('userId') as string;
+  const contentType = c.req.header('content-type') || '';
+  let updates: any = {};
+  let coverPhotoUrl: string | undefined;
+  let profilePhotoUrl: string | undefined;
+
+  try {
+    // Parse form data for images
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await c.req.formData();
+      if (formData.has('coverPhoto')) {
+        const coverPhotoRaw = formData.get('coverPhoto');
+        if (coverPhotoRaw && typeof coverPhotoRaw === 'object' && 'size' in coverPhotoRaw && (coverPhotoRaw as any).size > 0) {
+          const file = coverPhotoRaw as any;
+          const upload = await uploadFile(c.env.STORAGE, file, generateFileKey(userId, file.name, 'companion-covers'), file.type, { userId, purpose: 'coverPhoto' });
+          coverPhotoUrl = upload.url;
+        }
+      }
+      if (formData.has('profilePhoto')) {
+        const profilePhotoRaw = formData.get('profilePhoto');
+        if (profilePhotoRaw && typeof profilePhotoRaw === 'object' && 'size' in profilePhotoRaw && (profilePhotoRaw as any).size > 0) {
+          const file = profilePhotoRaw as any;
+          const upload = await uploadFile(c.env.STORAGE, file, generateFileKey(userId, file.name, 'companion-profiles'), file.type, { userId, purpose: 'profilePhoto' });
+          profilePhotoUrl = upload.url;
+        }
+      }
+      // Other fields as JSON
+      if (formData.has('data')) {
+        try {
+          updates = JSON.parse(formData.get('data') as string);
+        } catch (e) {
+          return jsonError(c, 'Invalid data', 'Could not parse profile data', 400);
+        }
+      }
+    } else {
+      // JSON body
+      updates = await c.req.json();
+    }
+
+    // Validate firstName/lastName
+    if (updates.firstName && typeof updates.firstName !== 'string') {
+      return jsonError(c, 'Invalid first name', 'First name must be a string', 400);
+    }
+    if (updates.lastName && typeof updates.lastName !== 'string') {
+      return jsonError(c, 'Invalid last name', 'Last name must be a string', 400);
+    }
+
+    // Update companion_profiles table
+    const profileUpdates: string[] = [];
+    const values: any[] = [];
+    if (updates.firstName) {
+      profileUpdates.push('first_name = ?');
+      values.push(updates.firstName);
+    }
+    if (updates.lastName) {
+      profileUpdates.push('last_name = ?');
+      values.push(updates.lastName);
+    }
+    if (coverPhotoUrl) {
+      profileUpdates.push('cover_photo = ?');
+      values.push(coverPhotoUrl);
+    }
+    if (profilePhotoUrl) {
+      profileUpdates.push('profile_photo = ?');
+      values.push(profilePhotoUrl);
+    }
+    if (updates.displayName) {
+      profileUpdates.push('display_name = ?');
+      values.push(updates.displayName);
+    }
+    if (updates.bio) {
+      profileUpdates.push('bio = ?');
+      values.push(updates.bio);
+    }
+    if (updates.socialLinks) {
+      profileUpdates.push('social_links = ?');
+      values.push(JSON.stringify(updates.socialLinks));
+    }
+    if (updates.dateOfBirth) {
+      profileUpdates.push('date_of_birth = ?');
+      values.push(updates.dateOfBirth);
+    }
+    if (updates.gender) {
+      profileUpdates.push('gender = ?');
+      values.push(updates.gender);
+    }
+    if (profileUpdates.length > 0) {
+      profileUpdates.push('updated_at = ?');
+      values.push(new Date().toISOString());
+      values.push(userId);
+      await c.env.DB.prepare(`
+        UPDATE companion_profiles
+        SET ${profileUpdates.join(', ')}
+        WHERE user_id = ?
+      `).bind(...values).run();
+    }
+
+    // Track profile update event
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'companion_profile_update',
+        userId,
+        properties: {
+          updatedFields: Object.keys(updates),
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Get updated profile directly
+    const row = await c.env.DB.prepare('SELECT * FROM companion_profiles WHERE user_id = ?').bind(userId).first();
+    const profile = row || {};
+    return jsonSuccess(c, profile, 'Companion profile updated successfully');
+  } catch (error) {
+    console.error('Update companion profile error:', error);
+    return jsonError(c, 'Failed to update companion profile', 'An error occurred while updating the companion profile', 500);
   }
 });
 
