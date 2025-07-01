@@ -22,6 +22,7 @@ name = "tirak-backend-production"
 binding = "DB"
 database_name = "tirak-main"
 database_id = "fe94000d-ef78-4059-ba2c-23a638909b27"
+preview_database_id = "fe94000d-ef78-4059-ba2c-23a638909b27" # Using same DB for preview
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -37,6 +38,7 @@ database_id = "fe94000d-ef78-4059-ba2c-23a638909b27"
 [[r2_buckets]]
 binding = "STORAGE"
 bucket_name = "tirak-storage-dev"
+preview_bucket_name = "tirak-storage-dev" # Using same bucket for preview
 
 [[env.staging.r2_buckets]]
 binding = "STORAGE"
@@ -50,10 +52,12 @@ bucket_name = "tirak-storage-production"
 [[kv_namespaces]]
 binding = "CACHE"
 id = "29c134656fca4bada93e1c3b5313b3fa"
+preview_id = "d841c52982cb4ae3917975bdd1061ce0"
 
 [[kv_namespaces]]
 binding = "SESSIONS"
 id = "486126fb5afb41feb30458231bde3a96"
+preview_id = "9ed9fe2729284248ac99e3acc6b4f029"
 
 [[env.staging.kv_namespaces]]
 binding = "CACHE"

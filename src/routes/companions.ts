@@ -527,7 +527,14 @@ companions.post('/:id/experiences', validateUUID('id'), zValidator('json', exper
     const experienceId = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    await c.env.DB.prepare(`
+    console.log('Creating experience:', { 
+      experienceId, 
+      companionId,
+      title: experienceData.title,
+      price: experienceData.price 
+    });
+
+    const result = await c.env.DB.prepare(`
       INSERT INTO companion_experiences (
         id, companion_id, title, description, duration_minutes, 
         keywords, price, currency, is_active, created_at, updated_at
@@ -545,6 +552,21 @@ companions.post('/:id/experiences', validateUUID('id'), zValidator('json', exper
       now,
       now
     ).run();
+
+    // Verify insertion
+    console.log('Insert result:', result);
+    
+    // Double-check that the experience was inserted
+    const verifyInsert = await c.env.DB.prepare(`
+      SELECT id FROM companion_experiences WHERE id = ?
+    `).bind(experienceId).first();
+    
+    console.log('Verification result:', verifyInsert);
+
+    if (!verifyInsert) {
+      console.error('Experience was not properly inserted');
+      return jsonError(c, 'Database error', 'Experience could not be inserted', 500);
+    }
 
     // Track experience creation
     if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
@@ -574,53 +596,145 @@ companions.post('/:id/experiences', validateUUID('id'), zValidator('json', exper
 /**
  * Get companion experiences
  */
-companions.get('/:id/experiences', validateUUID('id'), validatePagination, async (c) => {
+companions.get('/:id/experiences', validateUUID('id'), async (c) => {
   const companionId = c.req.param('id');
-  const pagination = c.get('pagination');
-  const { page, limit } = pagination || { page: 1, limit: 20 };
-
+  const page = parseInt(c.req.query('page') || '1');
+  const limit = parseInt(c.req.query('limit') || '20');
+  
+  console.error('DEBUG - Get experiences route called with ID:', companionId);
+  c.header('X-Debug-CompanionId', companionId);
+  
   try {
-    console.log('Getting experiences for companion:', companionId);
-    
     // Get total count
     const countResult = await c.env.DB.prepare(`
       SELECT COUNT(*) as total 
-      FROM companion_experiences
+      FROM companion_experiences 
       WHERE companion_id = ?
     `).bind(companionId).first();
     
     const total = countResult?.total as number || 0;
+    console.log('Total experiences found:', total);
 
     // Get experiences with pagination
     const offset = (page - 1) * limit;
     const experiencesResult = await c.env.DB.prepare(`
       SELECT *
-      FROM companion_experiences
+      FROM companion_experiences 
       WHERE companion_id = ?
       ORDER BY created_at DESC
       LIMIT ? OFFSET ?
     `).bind(companionId, Number(limit), Number(offset)).all();
-
-    const experiences = experiencesResult.results?.map((exp: any) => ({
+    
+    // Map experiences to the expected format
+    const experiences = (experiencesResult.results || []).map(exp => ({
       id: exp.id,
       title: exp.title,
       description: exp.description,
       durationMinutes: exp.duration_minutes,
-      keywords: JSON.parse(exp.keywords || '[]'),
+      keywords: Array.isArray(exp.keywords) ? exp.keywords : 
+               (typeof exp.keywords === 'string' && exp.keywords ? 
+                 (() => { try { return JSON.parse(exp.keywords); } catch { return []; } })() : 
+                 []),
       price: exp.price,
       currency: exp.currency,
       isActive: Boolean(exp.is_active),
       createdAt: exp.created_at,
       updatedAt: exp.updated_at
-    })) || [];
-
-    const pagination = createPagination(page, limit, total);
-    return jsonPaginated(c, experiences, pagination, 'Experiences retrieved successfully');
-
+    }));
+    
+    // Create pagination data
+    const pagination = {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit)
+    };
+    
+    return c.json({
+      success: true,
+      data: {
+        items: experiences,
+        pagination
+      },
+      message: `Retrieved ${experiences.length} experiences successfully`
+    });
   } catch (error) {
-    console.error('Get companion experiences error:', error);
-    console.error('Parameters:', { companionId, limit, offset: (page - 1) * limit });
-    return jsonError(c, 'Failed to retrieve experiences', 'An error occurred while fetching experiences', 500);
+    console.error('Get experiences error:', error);
+    return c.json({
+      success: false,
+      error: 'Failed to retrieve experiences',
+      message: 'An error occurred while fetching experiences'
+    }, 500);
+  }
+});
+
+/**
+ * DEBUG ENDPOINT - Shows all database diagnostics
+ */
+companions.get('/:id/experiences-debug', validateUUID('id'), async (c) => {
+  const companionId = c.req.param('id');
+  const results: {
+    companionId: string;
+    timestamp: string;
+    diagnostics: Record<string, any>;
+  } = {
+    companionId,
+    timestamp: new Date().toISOString(),
+    diagnostics: {}
+  };
+  
+  try {
+    // 1. Basic database connection check
+    results.diagnostics.connectionCheck = await c.env.DB.prepare('SELECT 1 as value').first();
+    
+    // 2. Count total experiences in the entire table
+    const totalCountResult = await c.env.DB.prepare(
+      `SELECT COUNT(*) as total FROM companion_experiences`
+    ).first();
+    results.diagnostics.totalExperiencesInDatabase = totalCountResult?.total || 0;
+    
+    // 3. Count experiences for this specific companion
+    const companionCountResult = await c.env.DB.prepare(
+      `SELECT COUNT(*) as total FROM companion_experiences WHERE companion_id = ?`
+    ).bind(companionId).first();
+    results.diagnostics.experiencesForThisCompanion = companionCountResult?.total || 0;
+    
+    // 4. Get all fields for every experience for this companion
+    const allExperiencesResult = await c.env.DB.prepare(
+      `SELECT * FROM companion_experiences WHERE companion_id = ?`
+    ).bind(companionId).all();
+    results.diagnostics.allExperiencesForCompanion = allExperiencesResult?.results || [];
+    
+    // 5. Get schema information
+    const schemaResult = await c.env.DB.prepare(
+      `SELECT sql FROM sqlite_master WHERE name = 'companion_experiences'`
+    ).first();
+    results.diagnostics.tableSchema = schemaResult?.sql;
+    
+    // 6. Check if companion exists
+    const companionResult = await c.env.DB.prepare(
+      `SELECT user_id, display_name FROM supplier_profiles WHERE user_id = ?`
+    ).bind(companionId).first();
+    results.diagnostics.companionExists = companionResult ? true : false;
+    results.diagnostics.companionInfo = companionResult;
+    
+    return c.json({
+      success: true,
+      data: results
+    }, 200, {
+      'X-Debug-Enabled': 'true'
+    });
+    
+  } catch (error) {
+    return c.json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      companionId,
+      timestamp: new Date().toISOString()
+    }, 500, {
+      'X-Debug-Error': 'true'
+    });
   }
 });
 
@@ -1091,6 +1205,28 @@ companions.get('/all', async (c) => {
   } catch (error) {
     console.error('Get all companions error:', error);
     return jsonError(c, 'Failed to retrieve companions', 'An error occurred while fetching companion data', 500);
+  }
+});
+
+// Direct database query endpoint
+companions.get('/:id/raw-experiences', validateUUID('id'), async (c) => {
+  const companionId = c.req.param('id');
+  try {
+    const result = await c.env.DB.prepare(`
+      SELECT * FROM companion_experiences WHERE companion_id = ?
+    `).bind(companionId).all();
+    
+    return c.json({ 
+      success: true, 
+      count: result.results?.length || 0,
+      data: result.results || []
+    });
+  } catch (error) {
+    console.error('Raw experiences error:', error);
+    return c.json({
+      success: false,
+      error: String(error)
+    }, 500);
   }
 });
 
