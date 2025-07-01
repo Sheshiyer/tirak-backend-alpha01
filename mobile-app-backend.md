@@ -1888,3 +1888,72 @@ limit?: number
   "message": "Review submitted successfully"
 }
 ```
+
+### GET /companion/profile
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "string",
+    "userId": "string",
+    "firstName": "string",
+    "lastName": "string",
+    "displayName": "string",
+    "coverPhoto": "string?",
+    "profilePhoto": "string?",
+    "bio": "string?",
+    "socialLinks": {},
+    "dateOfBirth": "string?",
+    "gender": "string?",
+    "createdAt": "string",
+    "updatedAt": "string"
+  },
+  "message": "Companion profile retrieved successfully"
+}
+```
+
+### POST /companion/profile
+**Request:**
+```json
+{
+  "firstName": "string",
+  "lastName": "string",
+  "displayName": "string",
+  "bio": "string?",
+  "socialLinks": {
+    "instagram": "string?",
+    "facebook": "string?",
+    "twitter": "string?",
+    "tiktok": "string?",
+    "website": "string?",
+    "other": [{"name": "string", "url": "string"}]?
+  },
+  "dateOfBirth": "string?",
+  "gender": "male" | "female" | "other"?,
+  "coverPhoto": "string?",
+  "profilePhoto": "string?"
+}
+```
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "string",
+    "userId": "string",
+    "firstName": "string",
+    "lastName": "string",
+    "displayName": "string",
+    "coverPhoto": "string?",
+    "profilePhoto": "string?",
+    "bio": "string?",
+    "socialLinks": {},
+    "dateOfBirth": "string?",
+    "gender": "string?",
+    "createdAt": "string",
+    "updatedAt": "string"
+  },
+  "message": "Companion profile created successfully"
+}
+```

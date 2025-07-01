@@ -884,4 +884,64 @@ users.put('/companion/profile', async (c) => {
   }
 });
 
+// Get current user's companion profile
+users.get('/companion/profile', async (c) => {
+  const userId = c.get('userId') as string;
+  try {
+    const row = await c.env.DB.prepare('SELECT * FROM companion_profiles WHERE user_id = ?').bind(userId).first();
+    if (!row) {
+      return jsonError(c, 'Not found', 'Companion profile does not exist', 404);
+    }
+    return jsonSuccess(c, row, 'Companion profile retrieved successfully');
+  } catch (error) {
+    console.error('Get companion profile error:', error);
+    return jsonError(c, 'Failed to get companion profile', 'An error occurred while fetching the companion profile', 500);
+  }
+});
+
+// Create a new companion profile for the current user
+users.post('/companion/profile', async (c) => {
+  const userId = c.get('userId') as string;
+  try {
+    const body = await c.req.json();
+    const {
+      firstName,
+      lastName,
+      displayName,
+      bio,
+      socialLinks,
+      dateOfBirth,
+      gender,
+      coverPhoto,
+      profilePhoto
+    } = body;
+
+    // Insert new profile
+    await c.env.DB.prepare(`
+      INSERT INTO companion_profiles (
+        user_id, first_name, last_name, display_name, bio, social_links, date_of_birth, gender, cover_photo, profile_photo, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      userId,
+      firstName || null,
+      lastName || null,
+      displayName || null,
+      bio || null,
+      socialLinks ? JSON.stringify(socialLinks) : null,
+      dateOfBirth || null,
+      gender || null,
+      coverPhoto || null,
+      profilePhoto || null,
+      new Date().toISOString(),
+      new Date().toISOString()
+    ).run();
+
+    const row = await c.env.DB.prepare('SELECT * FROM companion_profiles WHERE user_id = ?').bind(userId).first();
+    return jsonSuccess(c, row, 'Companion profile created successfully', 201);
+  } catch (error) {
+    console.error('Create companion profile error:', error);
+    return jsonError(c, 'Failed to create companion profile', 'An error occurred while creating the companion profile', 500);
+  }
+});
+
 export { users as userRoutes };
