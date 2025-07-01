@@ -86,21 +86,22 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
     }, c.env.DB);
 
     // Create user profile based on type
+    let displayName = normalizedEmail.split('@')[0] || 'User';
     if (userType === 'supplier') {
       await createSupplierProfile({
         userId,
-        displayName: normalizedEmail.split('@')[0] || 'User', // Default display name
+        displayName,
       }, c.env.DB);
     } else if (userType === 'customer') {
       await createCustomerProfile({
         userId,
-        displayName: normalizedEmail.split('@')[0] || 'User', // Default display name
+        displayName,
       }, c.env.DB);
     } else if (userType === 'companion') {
       // For companions, create a customer profile for now as a base
       await createCustomerProfile({
         userId,
-        displayName: normalizedEmail.split('@')[0] || 'Companion', // Default companion display name
+        displayName: displayName || 'Companion',
       }, c.env.DB);
     }
     
@@ -129,7 +130,8 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
         userType: user.userType,
         status: user.status,
         emailVerified: user.emailVerified,
-        phoneVerified: user.phoneVerified
+        phoneVerified: user.phoneVerified,
+        name: displayName
       },
       ...tokens
     }, 'Registration successful.', 201);
@@ -153,6 +155,16 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
     
     if (!user) {
       return jsonError(c, 'Invalid credentials', 'Email/phone or password is incorrect', 401);
+    }
+
+    // Fetch display name from profile
+    let name = null;
+    if (user.userType === 'supplier') {
+      const profile = await c.env.DB.prepare('SELECT display_name FROM supplier_profiles WHERE user_id = ?').bind(user.id).first();
+      name = profile?.display_name || null;
+    } else if (user.userType === 'customer' || user.userType === 'companion') {
+      const profile = await c.env.DB.prepare('SELECT display_name FROM customer_profiles WHERE user_id = ?').bind(user.id).first();
+      name = profile?.display_name || null;
     }
 
     // Verify password
@@ -195,7 +207,8 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
         userType: user.userType,
         status: user.status,
         emailVerified: user.emailVerified,
-        phoneVerified: user.phoneVerified
+        phoneVerified: user.phoneVerified,
+        name
       },
       ...tokens
     }, 'Login successful');
