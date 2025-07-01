@@ -583,7 +583,7 @@ companions.get('/:id/experiences', validateUUID('id'), validatePagination, async
     const countResult = await c.env.DB.prepare(`
       SELECT COUNT(*) as total 
       FROM companion_experiences 
-      WHERE companion_id = ? AND is_active = TRUE
+      WHERE companion_id = ?
     `).bind(companionId).first();
     
     const total = countResult?.total as number || 0;
@@ -593,7 +593,7 @@ companions.get('/:id/experiences', validateUUID('id'), validatePagination, async
     const experiencesResult = await c.env.DB.prepare(`
       SELECT *
       FROM companion_experiences 
-      WHERE companion_id = ? AND is_active = TRUE
+      WHERE companion_id = ?
       ORDER BY created_at DESC
       LIMIT ? OFFSET ?
     `).bind(companionId, limit, offset).all();
