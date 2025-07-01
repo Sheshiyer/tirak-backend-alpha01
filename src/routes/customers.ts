@@ -16,16 +16,7 @@ import type { Env, Variables } from '../index';
 
 const customers = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-// Apply authentication middleware to all routes
-customers.use('*', authMiddleware);
-customers.use('*', customerOnly);
-
-// Apply rate limiting
-customers.use('*', createRateLimit('general'));
-
-/**
- * Get all customers (accessible to all authenticated users)
- */
+// Place this BEFORE any middleware
 customers.get('/all', async (c) => {
   // No longer admin-only, any authenticated user can access this endpoint
   
@@ -38,12 +29,12 @@ customers.get('/all', async (c) => {
   // Get other query parameters
   const search = c.req.query('search');
   const status = c.req.query('status');
-  const sortBy = c.req.query('sortBy') || 'created_at';
+  const sortByParam = c.req.query('sortBy') || 'u.created_at';
   const sortOrder = (c.req.query('sortOrder') === 'asc') ? 'ASC' : 'DESC';
   const offset = (page - 1) * limit;
   
   try {
-    // Build the base query
+    // Use LEFT JOIN to include all customers, even those without a profile
     let query = `
       SELECT 
         u.id, 
@@ -61,7 +52,7 @@ customers.get('/all', async (c) => {
         cp.preferences,
         cp.loyalty_points
       FROM users u
-      JOIN customer_profiles cp ON u.id = cp.user_id
+      LEFT JOIN customer_profiles cp ON u.id = cp.user_id
       WHERE u.user_type = 'customer'
     `;
     
@@ -85,11 +76,18 @@ customers.get('/all', async (c) => {
     const countResult = await c.env.DB.prepare(countQuery).bind(...queryParams).first();
     const total = countResult?.total as number || 0;
     
-    // Add sorting and pagination
-    const validSortColumns = ['created_at', 'display_name', 'loyalty_points', 'last_login_at'];
-    const sortColumnSafe = validSortColumns.includes(sortBy as string) ? sortBy : 'created_at';
+    // Update validSortColumns to use table prefixes
+    const validSortColumns = [
+      'u.created_at',
+      'cp.display_name',
+      'cp.loyalty_points',
+      'u.last_login_at'
+    ];
     
-    query += ` ORDER BY ${sortColumnSafe} ${sortOrder} LIMIT ? OFFSET ?`;
+    // Use prefixed sortBy
+    const sortColumn = validSortColumns.includes(sortByParam) ? sortByParam : 'u.created_at';
+    
+    query += ` ORDER BY ${sortColumn} ${sortOrder} LIMIT ? OFFSET ?`;
     queryParams.push(limit, offset);
     
     // Execute the final query
@@ -130,6 +128,13 @@ customers.get('/all', async (c) => {
     return jsonError(c, 'Failed to retrieve customers', 'An error occurred while fetching customer data', 500);
   }
 });
+
+// Now apply middleware for all other routes
+customers.use('*', authMiddleware);
+customers.use('*', customerOnly);
+
+// Apply rate limiting
+customers.use('*', createRateLimit('general'));
 
 /**
  * Get customer profile

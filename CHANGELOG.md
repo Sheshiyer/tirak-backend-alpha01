@@ -5,6 +5,10 @@ All notable changes to the Tirak Backend will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- **API**: Resolved an issue where companion experiences were not being returned from the `GET /api/companions/:id/experiences` endpoint. The fix involved:
+  - Removing a duplicate, conflicting route handler for the same path.
+  - Correcting a JSON parsing error for the `keywords` field which could fail silently.
+  - Ensuring the endpoint correctly handles pagination and returns experience data even if the associated companion profile is missing from `supplier_profiles`.
 - Fixed "no such table: companion_experiences" error by adding automatic database migration checks
 - Added graceful error handling for missing tables in companions route
 - Created utility scripts for applying specific migrations
