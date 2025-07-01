@@ -580,10 +580,13 @@ companions.get('/:id/experiences', validateUUID('id'), validatePagination, async
   const { page, limit } = pagination || { page: 1, limit: 20 };
 
   try {
+    console.log('Getting experiences for companion:', companionId);
+    
     // Get total count
     const countResult = await c.env.DB.prepare(`
       SELECT COUNT(*) as total 
-      FROM companion_experiences 
+      FROM companion_experiences
+      WHERE companion_id = ?
     `).bind(companionId).first();
     
     const total = countResult?.total as number || 0;
@@ -592,10 +595,11 @@ companions.get('/:id/experiences', validateUUID('id'), validatePagination, async
     const offset = (page - 1) * limit;
     const experiencesResult = await c.env.DB.prepare(`
       SELECT *
-      FROM companion_experiences 
+      FROM companion_experiences
+      WHERE companion_id = ?
       ORDER BY created_at DESC
       LIMIT ? OFFSET ?
-    `).bind(companionId, limit, offset).all();
+    `).bind(companionId, Number(limit), Number(offset)).all();
 
     const experiences = experiencesResult.results?.map((exp: any) => ({
       id: exp.id,
@@ -615,6 +619,7 @@ companions.get('/:id/experiences', validateUUID('id'), validatePagination, async
 
   } catch (error) {
     console.error('Get companion experiences error:', error);
+    console.error('Parameters:', { companionId, limit, offset: (page - 1) * limit });
     return jsonError(c, 'Failed to retrieve experiences', 'An error occurred while fetching experiences', 500);
   }
 });
