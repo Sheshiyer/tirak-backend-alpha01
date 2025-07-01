@@ -463,7 +463,11 @@ endDate: string (YYYY-MM-DD)
           "other": [{"name": "string", "url": "string"}]?
         },
         "dateOfBirth": "string?",
-        "gender": "male" | "female" | "other"?
+        "gender": "male" | "female" | "other"?,
+        "location": "string",
+        "languages": ["string"],
+        "specialization": ["string"],
+        "certifications": ["string"]
       }
       ```
 - **application/json**
@@ -483,7 +487,11 @@ endDate: string (YYYY-MM-DD)
         "other": [{"name": "string", "url": "string"}]?
       },
       "dateOfBirth": "string?",
-      "gender": "male" | "female" | "other"?
+      "gender": "male" | "female" | "other"?,
+      "location": "string",
+      "languages": ["string"],
+      "specialization": ["string"],
+      "certifications": ["string"]
     }
     ```
 
@@ -502,6 +510,16 @@ endDate: string (YYYY-MM-DD)
     "socialLinks": {},
     "dateOfBirth": "string?",
     "gender": "string?",
+    "location": "string",
+    "languages": ["string"],
+    "specialization": ["string"],
+    "certifications": ["string"],
+    "experienceStats": {
+      "yearsOfExperience": 5,
+      "totalGuests": 120,
+      "averageRating": 4.8,
+      "responseTime": "1 hour"
+    },
     "updatedAt": "string"
   },
   "message": "Companion profile updated successfully"
@@ -1906,6 +1924,16 @@ limit?: number
     "socialLinks": {},
     "dateOfBirth": "string?",
     "gender": "string?",
+    "location": "string",
+    "languages": ["string"],
+    "specialization": ["string"],
+    "certifications": ["string"],
+    "experienceStats": {
+      "yearsOfExperience": 5,
+      "totalGuests": 120,
+      "averageRating": 4.8,
+      "responseTime": "1 hour"
+    },
     "createdAt": "string",
     "updatedAt": "string"
   },
@@ -1932,7 +1960,11 @@ limit?: number
   "dateOfBirth": "string?",
   "gender": "male" | "female" | "other"?,
   "coverPhoto": "string?",
-  "profilePhoto": "string?"
+  "profilePhoto": "string?",
+  "location": "string",
+  "languages": ["string"],
+  "specialization": ["string"],
+  "certifications": ["string"]
 }
 ```
 **Response:**
@@ -1951,6 +1983,16 @@ limit?: number
     "socialLinks": {},
     "dateOfBirth": "string?",
     "gender": "string?",
+    "location": "string",
+    "languages": ["string"],
+    "specialization": ["string"],
+    "certifications": ["string"],
+    "experienceStats": {
+      "yearsOfExperience": 5,
+      "totalGuests": 120,
+      "averageRating": 4.8,
+      "responseTime": "1 hour"
+    },
     "createdAt": "string",
     "updatedAt": "string"
   },

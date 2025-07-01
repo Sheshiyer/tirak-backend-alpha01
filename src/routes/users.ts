@@ -851,6 +851,22 @@ users.put('/companion/profile', async (c) => {
       profileUpdates.push('gender = ?');
       values.push(updates.gender);
     }
+    if (updates.location) {
+      profileUpdates.push('location = ?');
+      values.push(updates.location);
+    }
+    if (updates.languages) {
+      profileUpdates.push('languages = ?');
+      values.push(Array.isArray(updates.languages) ? JSON.stringify(updates.languages) : null);
+    }
+    if (updates.specialization) {
+      profileUpdates.push('specialization = ?');
+      values.push(Array.isArray(updates.specialization) ? JSON.stringify(updates.specialization) : null);
+    }
+    if (updates.certifications) {
+      profileUpdates.push('certifications = ?');
+      values.push(Array.isArray(updates.certifications) ? JSON.stringify(updates.certifications) : null);
+    }
     if (profileUpdates.length > 0) {
       profileUpdates.push('updated_at = ?');
       values.push(new Date().toISOString());
@@ -876,26 +892,17 @@ users.put('/companion/profile', async (c) => {
 
     // Get updated profile directly
     const row = await c.env.DB.prepare('SELECT * FROM companion_profiles WHERE user_id = ?').bind(userId).first();
-    const profile = row || {};
+    // Parse JSON fields for response
+    const profile = {
+      ...row,
+      languages: typeof row?.languages === 'string' ? JSON.parse(row.languages) : [],
+      specialization: typeof row?.specialization === 'string' ? JSON.parse(row.specialization) : [],
+      certifications: typeof row?.certifications === 'string' ? JSON.parse(row.certifications) : []
+    };
     return jsonSuccess(c, profile, 'Companion profile updated successfully');
   } catch (error) {
     console.error('Update companion profile error:', error);
     return jsonError(c, 'Failed to update companion profile', 'An error occurred while updating the companion profile', 500);
-  }
-});
-
-// Get current user's companion profile
-users.get('/companion/profile', async (c) => {
-  const userId = c.get('userId') as string;
-  try {
-    const row = await c.env.DB.prepare('SELECT * FROM companion_profiles WHERE user_id = ?').bind(userId).first();
-    if (!row) {
-      return jsonError(c, 'Not found', 'Companion profile does not exist', 404);
-    }
-    return jsonSuccess(c, row, 'Companion profile retrieved successfully');
-  } catch (error) {
-    console.error('Get companion profile error:', error);
-    return jsonError(c, 'Failed to get companion profile', 'An error occurred while fetching the companion profile', 500);
   }
 });
 
@@ -913,14 +920,18 @@ users.post('/companion/profile', async (c) => {
       dateOfBirth,
       gender,
       coverPhoto,
-      profilePhoto
+      profilePhoto,
+      location,
+      languages,
+      specialization,
+      certifications
     } = body;
 
     // Insert new profile
     await c.env.DB.prepare(`
       INSERT INTO companion_profiles (
-        user_id, first_name, last_name, display_name, bio, social_links, date_of_birth, gender, cover_photo, profile_photo, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        user_id, first_name, last_name, display_name, bio, social_links, date_of_birth, gender, cover_photo, profile_photo, location, languages, specialization, certifications, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       userId,
       firstName || null,
@@ -932,15 +943,64 @@ users.post('/companion/profile', async (c) => {
       gender || null,
       coverPhoto || null,
       profilePhoto || null,
+      location || null,
+      Array.isArray(languages) ? JSON.stringify(languages) : null,
+      Array.isArray(specialization) ? JSON.stringify(specialization) : null,
+      Array.isArray(certifications) ? JSON.stringify(certifications) : null,
       new Date().toISOString(),
       new Date().toISOString()
     ).run();
 
     const row = await c.env.DB.prepare('SELECT * FROM companion_profiles WHERE user_id = ?').bind(userId).first();
-    return jsonSuccess(c, row, 'Companion profile created successfully', 201);
+    // Parse JSON fields for response
+    const profile = {
+      ...row,
+      languages: typeof row?.languages === 'string' ? JSON.parse(row.languages) : [],
+      specialization: typeof row?.specialization === 'string' ? JSON.parse(row.specialization) : [],
+      certifications: typeof row?.certifications === 'string' ? JSON.parse(row.certifications) : []
+    };
+    return jsonSuccess(c, profile, 'Companion profile created successfully', 201);
   } catch (error) {
     console.error('Create companion profile error:', error);
     return jsonError(c, 'Failed to create companion profile', 'An error occurred while creating the companion profile', 500);
+  }
+});
+
+// Get current user's companion profile
+users.get('/companion/profile', async (c) => {
+  const userId = c.get('userId') as string;
+  try {
+    const row = await c.env.DB.prepare('SELECT * FROM companion_profiles WHERE user_id = ?').bind(userId).first();
+    if (!row) {
+      return jsonError(c, 'Not found', 'Companion profile does not exist', 404);
+    }
+    // Fetch user for email/phone
+    const user = await getUserById(userId, c.env.DB);
+    // Parse JSON fields for response
+    const location = row.location || '';
+    const languages = typeof row.languages === 'string' ? JSON.parse(row.languages) : [];
+    const specialization = typeof row.specialization === 'string' ? JSON.parse(row.specialization) : [];
+    const certifications = typeof row.certifications === 'string' ? JSON.parse(row.certifications) : [];
+    // Hardcoded values for demonstration
+    const experienceStats = {
+      yearsOfExperience: 5,
+      totalGuests: 120,
+      averageRating: 4.8,
+      responseTime: '1 hour'
+    };
+    return jsonSuccess(c, {
+      ...row,
+      email: user?.email || '',
+      phone: user?.phone || '',
+      location,
+      languages,
+      specialization,
+      certifications,
+      experienceStats
+    }, 'Companion profile retrieved successfully');
+  } catch (error) {
+    console.error('Get companion profile error:', error);
+    return jsonError(c, 'Failed to get companion profile', 'An error occurred while fetching the companion profile', 500);
   }
 });
 
