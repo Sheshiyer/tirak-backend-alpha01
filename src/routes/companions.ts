@@ -530,8 +530,8 @@ companions.post('/:id/experiences', validateUUID('id'), zValidator('json', exper
     await c.env.DB.prepare(`
       INSERT INTO companion_experiences (
         id, companion_id, title, description, duration_minutes, 
-        keywords, price, currency, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        keywords, price, currency, is_active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       experienceId,
       companionId,
@@ -541,6 +541,7 @@ companions.post('/:id/experiences', validateUUID('id'), zValidator('json', exper
       JSON.stringify(experienceData.keywords || []),
       experienceData.price,
       experienceData.currency,
+      experienceData.is_active === undefined ? true : experienceData.is_active,
       now,
       now
     ).run();

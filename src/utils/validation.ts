@@ -81,7 +81,8 @@ export const experienceSchema = z.object({
   durationMinutes: z.number().min(30, 'Minimum duration is 30 minutes').max(1440, 'Maximum duration is 24 hours'),
   keywords: z.array(z.string()).max(20, 'Too many keywords').optional(),
   price: z.number().min(0, 'Price cannot be negative'),
-  currency: z.enum(['THB', 'USD', 'EUR']).default('THB')
+  currency: z.enum(['THB', 'USD', 'EUR']).default('THB'),
+  is_active: z.boolean().optional()
 });
 
 // Companion location schema
