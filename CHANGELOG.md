@@ -13,6 +13,7 @@ All notable changes to the Tirak Backend will be documented in this file.
 - Added graceful error handling for missing tables in companions route
 - Created utility scripts for applying specific migrations
 - **Database**: Fixed "no such table: companion_profiles" error by creating migration 010_add_companion_profiles_table.sql to add the missing companion_profiles table
+- **Storage**: Fixed image serving issue by creating a new `/api/uploads/:type/:userId/:filename` route to serve images from R2 storage through Workers API instead of relying on custom domain
 
 ### Added
 - Database migration documentation in DATABASE_MIGRATIONS.md

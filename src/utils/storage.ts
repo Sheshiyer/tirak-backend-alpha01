@@ -41,9 +41,12 @@ export async function uploadFile(
 
   const size = file instanceof File ? file.size : file.byteLength;
 
+  // Use direct R2 public URLs - requires R2 bucket to be configured for public access
+  // Account ID: 2c0c96c68f0ee73b6d980054557bca5b
+  // Bucket name: tirak-storage-dev (from wrangler.toml)
   return {
     key,
-    url: `https://storage.tirak.app/${key}`, // This would be your R2 custom domain
+    url: `https://pub-d0cdbd8b05514a17a5ad06b463346769.r2.dev/${key}`,
     size,
     contentType
   };

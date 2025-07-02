@@ -23,74 +23,120 @@ uploads.use('*', authMiddleware);
 uploads.use('*', createRateLimit('upload'));
 
 /**
- * Upload image file
+ * Upload a single image
  */
-uploads.post('/image', async (c) => {
-  const userId = c.get('userId');
-  
+uploads.post('/image', authMiddleware, async (c) => {
   try {
     const formData = await c.req.formData();
     const file = formData.get('file') as unknown as File;
-    if (!(file instanceof File)) {
+    const type = formData.get('type') as string;
+    const userId = c.get('userId') as string;
+
+    if (!file) {
       return jsonError(c, 'No file provided', 'Please select a file to upload', 400);
     }
-    const category = formData.get('category') as string || 'general';
-    
-    // Validate file
-    const validation = validateImageFile(file);
-    if (!validation.isValid) {
-      return jsonError(c, 'Invalid file', validation.errors.join(', '), 400);
+
+    if (!type || !['profile', 'gallery', 'verification', 'chat', 'companion-covers', 'companion-profiles'].includes(type)) {
+      return jsonError(c, 'Invalid type', 'Type must be one of: profile, gallery, verification, chat, companion-covers, companion-profiles', 400);
     }
 
-    // Check file size (max 10MB for images)
-    const maxSize = 10 * 1024 * 1024;
-    if (file.size > maxSize) {
-      return jsonError(c, 'File too large', `Maximum file size is ${formatFileSize(maxSize)}`, 400);
+    // Validate image file
+    const validation = validateImageFile(file);
+    if (!validation.isValid) {
+      return jsonError(c, 'Invalid image', validation.errors.join(', '), 400);
     }
 
     // Generate unique file key
-    const fileKey = generateFileKey(userId || '', file.name || '', `images/${category}`);
+    const fileKey = generateFileKey(userId, file.name, type);
     
     // Upload to R2
     const uploadResult = await uploadFile(
       c.env.STORAGE,
       file,
       fileKey,
-      file.type || '',
+      file.type,
       {
-        userId: userId || '',
-        category,
-        originalName: file.name || '',
-        uploadedAt: new Date().toISOString()
+        userId,
+        purpose: type,
+        originalName: file.name
       }
     );
 
-    // Track upload event
-    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
-      await c.env.ANALYTICS_QUEUE.send({
-        eventType: 'image_upload',
-        userId,
-        properties: { 
-          fileSize: file.size,
-          fileType: file.type,
-          category,
-          fileName: file.name
-        },
-        timestamp: new Date().toISOString()
-      });
-    }
-
     return jsonSuccess(c, {
       url: uploadResult.url,
-      key: uploadResult.key,
+      filename: uploadResult.key,
       size: uploadResult.size,
-      contentType: uploadResult.contentType,
-      category
+      mimeType: uploadResult.contentType
     }, 'Image uploaded successfully', 201);
 
   } catch (error) {
     console.error('Image upload error:', error);
     return jsonError(c, 'Upload failed', 'An error occurred while uploading the image', 500);
+  }
+});
+
+/**
+ * Upload multiple images
+ */
+uploads.post('/multiple', authMiddleware, async (c) => {
+  try {
+    const formData = await c.req.formData();
+    const files = formData.getAll('files') as unknown as File[];
+    const type = formData.get('type') as string;
+    const userId = c.get('userId') as string;
+
+    if (!files || files.length === 0) {
+      return jsonError(c, 'No files provided', 'Please select files to upload', 400);
+    }
+
+    if (!type || !['gallery', 'verification'].includes(type)) {
+      return jsonError(c, 'Invalid type', 'Type must be one of: gallery, verification', 400);
+    }
+
+    if (files.length > 10) {
+      return jsonError(c, 'Too many files', 'Maximum 10 files allowed per upload', 400);
+    }
+
+    const uploadResults = [];
+
+    for (const file of files) {
+      // Validate image file
+      const validation = validateImageFile(file);
+      if (!validation.isValid) {
+        return jsonError(c, 'Invalid image', `File ${file.name}: ${validation.errors.join(', ')}`, 400);
+      }
+
+      // Generate unique file key
+      const fileKey = generateFileKey(userId, file.name, type);
+      
+      // Upload to R2
+      const uploadResult = await uploadFile(
+        c.env.STORAGE,
+        file,
+        fileKey,
+        file.type,
+        {
+          userId,
+          purpose: type,
+          originalName: file.name
+        }
+      );
+
+      uploadResults.push({
+        url: uploadResult.url,
+        filename: uploadResult.key,
+        size: uploadResult.size,
+        mimeType: uploadResult.contentType
+      });
+    }
+
+    return jsonSuccess(c, {
+      urls: uploadResults
+    }, 'Images uploaded successfully', 201);
+
+  } catch (error) {
+    console.error('Multiple image upload error:', error);
+    return jsonError(c, 'Upload failed', 'An error occurred while uploading the images', 500);
   }
 });
 
@@ -383,6 +429,47 @@ uploads.get('/metadata/:fileKey', async (c) => {
   } catch (error) {
     console.error('Get file metadata error:', error);
     return jsonError(c, 'Failed to retrieve metadata', 'An error occurred while fetching file metadata', 500);
+  }
+});
+
+/**
+ * Serve images from R2 storage
+ * This route allows public access to uploaded images
+ */
+uploads.get('/:type/:userId/:filename', async (c) => {
+  try {
+    const type = c.req.param('type');
+    const userId = c.req.param('userId');
+    const filename = c.req.param('filename');
+    
+    // Validate type
+    if (!['profile', 'gallery', 'verification', 'chat', 'companion-covers', 'companion-profiles'].includes(type)) {
+      return jsonError(c, 'Invalid type', 'Invalid image type', 400);
+    }
+
+    // Construct the key
+    const key = `${type}/${userId}/${filename}`;
+    
+    // Get the file from R2
+    const object = await c.env.STORAGE.get(key);
+    
+    if (!object) {
+      return jsonError(c, 'File not found', 'The requested image does not exist', 404);
+    }
+
+    // Return the image with proper headers
+    const headers = new Headers();
+    headers.set('Content-Type', object.httpMetadata?.contentType || 'image/jpeg');
+    headers.set('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+    headers.set('Access-Control-Allow-Origin', '*');
+    
+    return new Response(object.body, {
+      headers
+    });
+
+  } catch (error) {
+    console.error('Image serve error:', error);
+    return jsonError(c, 'Failed to serve image', 'An error occurred while serving the image', 500);
   }
 });
 
