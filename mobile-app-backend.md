@@ -500,44 +500,25 @@ endDate: string (YYYY-MM-DD)
 {
     "success": true,
     "data": {
-        "id": null,
-        "user_id": "921b41cd-c8b6-4962-9d5b-8e3b2fdf195c",
-        "first_name": "test",
-        "last_name": "Doe",
-        "display_name": "Johnny",
-        "bio": "Professional companion with 5 years of experience",
-        "social_links": "{\"instagram\":\"https://instagram.com/johnny_doe\",\"facebook\":\"https://facebook.com/johnny.doe\",\"website\":\"https://johnnydoe.com\"}",
-        "date_of_birth": "1990-05-15",
-        "gender": "male",
-        "cover_photo": null,
-        "profile_photo": null,
-        "location": "Bangkok, Thailand",
-        "languages": [
-            "English",
-            "Thai",
-            "Chinese"
-        ],
-        "specialization": [
-            "City Tours",
-            "Cultural Experiences",
-            "Nightlife"
-        ],
-        "certifications": [
-            "Tourism License",
-            "First Aid Certified"
-        ],
-        "created_at": "2025-07-02T04:29:32.272Z",
-        "updated_at": "2025-07-02T05:25:46.559Z",
-        "email": "designerali08@gmail.com",
-        "phone": "+66784934903",
-        "experienceStats": {
-            "yearsOfExperience": 5,
-            "totalGuests": 120,
-            "averageRating": 4.8,
-            "responseTime": "1 hour"
-        }
+        "id": "string?",
+        "user_id": "string",
+        "first_name": "string?",
+        "last_name": "string?",
+        "display_name": "string?",
+        "bio": "string?",
+        "social_links": "string", // JSON string
+        "date_of_birth": "string?",
+        "gender": "male" | "female" | "other"?,
+        "cover_photo": "string?",
+        "profile_photo": "string?",
+        "location": "string?",
+        "languages": ["string"],
+        "specialization": ["string"],
+        "certifications": ["string"],
+        "created_at": "string",
+        "updated_at": "string"
     },
-    "message": "Companion profile retrieved successfully"
+    "message": "Companion profile updated successfully"
 }
 ```
 
@@ -1928,29 +1909,31 @@ limit?: number
 {
   "success": true,
   "data": {
-    "id": "string",
-    "userId": "string",
-    "firstName": "string",
-    "lastName": "string",
-    "displayName": "string",
-    "coverPhoto": "string?",
-    "profilePhoto": "string?",
+    "id": "string?",
+    "user_id": "string",
+    "first_name": "string?",
+    "last_name": "string?",
+    "display_name": "string?",
     "bio": "string?",
-    "socialLinks": {},
-    "dateOfBirth": "string?",
-    "gender": "string?",
-    "location": "string",
+    "social_links": "string", // JSON string
+    "date_of_birth": "string?",
+    "gender": "male" | "female" | "other"?,
+    "cover_photo": "string?",
+    "profile_photo": "string?",
+    "location": "string?",
     "languages": ["string"],
     "specialization": ["string"],
     "certifications": ["string"],
+    "created_at": "string",
+    "updated_at": "string",
+    "email": "string",
+    "phone": "string",
     "experienceStats": {
       "yearsOfExperience": 5,
       "totalGuests": 120,
       "averageRating": 4.8,
       "responseTime": "1 hour"
-    },
-    "createdAt": "string",
-    "updatedAt": "string"
+    }
   },
   "message": "Companion profile retrieved successfully"
 }
@@ -1987,29 +1970,23 @@ limit?: number
 {
   "success": true,
   "data": {
-    "id": "string",
-    "userId": "string",
-    "firstName": "string",
-    "lastName": "string",
-    "displayName": "string",
-    "coverPhoto": "string?",
-    "profilePhoto": "string?",
+    "id": "string?",
+    "user_id": "string",
+    "first_name": "string?",
+    "last_name": "string?",
+    "display_name": "string?",
     "bio": "string?",
-    "socialLinks": {},
-    "dateOfBirth": "string?",
-    "gender": "string?",
-    "location": "string",
+    "social_links": "string", // JSON string
+    "date_of_birth": "string?",
+    "gender": "male" | "female" | "other"?,
+    "cover_photo": "string?",
+    "profile_photo": "string?",
+    "location": "string?",
     "languages": ["string"],
     "specialization": ["string"],
     "certifications": ["string"],
-    "experienceStats": {
-      "yearsOfExperience": 5,
-      "totalGuests": 120,
-      "averageRating": 4.8,
-      "responseTime": "1 hour"
-    },
-    "createdAt": "string",
-    "updatedAt": "string"
+    "created_at": "string",
+    "updated_at": "string"
   },
   "message": "Companion profile created successfully"
 }
