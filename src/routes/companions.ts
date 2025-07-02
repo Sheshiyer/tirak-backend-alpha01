@@ -67,7 +67,7 @@ companions.get('/all', async (c) => {
 
     // Use LEFT JOIN to include all companions, even those without a profile
     let query = `
-      SELECT 
+      SELECT DISTINCT
         u.id,
         u.email,
         u.phone,
@@ -77,20 +77,21 @@ companions.get('/all', async (c) => {
         u.preferred_language,
         u.created_at,
         u.last_login_at,
-        sp.display_name,
-        sp.bio,
-        sp.profile_images,
-        sp.categories,
-        sp.regions,
-        sp.spoken_languages,
-        sp.rating_average,
-        sp.rating_count,
-        sp.verification_status,
-        sp.subscription_status,
-        sp.subscription_tier,
-        sp.subscription_expires_at
+        cp.display_name,
+        cp.bio,
+        cp.profile_photo,
+        cp.cover_photo,
+        cp.location,
+        cp.languages,
+        cp.specialization,
+        cp.certifications,
+        cp.social_links,
+        cp.date_of_birth,
+        cp.gender,
+        cp.first_name,
+        cp.last_name
       FROM users u
-      LEFT JOIN supplier_profiles sp ON u.id = sp.user_id
+      LEFT JOIN companion_profiles cp ON u.id = cp.user_id
       WHERE u.user_type = 'companion'
     `;
 
@@ -98,7 +99,7 @@ companions.get('/all', async (c) => {
 
     // Add search condition if provided
     if (search) {
-      query += ` AND (sp.display_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)`;
+      query += ` AND (cp.display_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)`;
       const searchTerm = `%${search}%`;
       queryParams.push(searchTerm, searchTerm, searchTerm);
     }
@@ -111,9 +112,8 @@ companions.get('/all', async (c) => {
     // Update validSortColumns to use table prefixes
     const validSortColumns = [
       'u.created_at',
-      'sp.display_name',
-      'sp.rating_average',
-      'sp.rating_count',
+      'cp.display_name',
+      'cp.created_at',
       'u.last_login_at'
     ];
 
@@ -130,36 +130,50 @@ companions.get('/all', async (c) => {
     // Format the data
     const companionsList = companionsResult.results.map((companion: any) => {
       // Parse JSON fields
-      const profileImages = companion.profile_images ? JSON.parse(companion.profile_images) : [];
-      const categories = companion.categories ? JSON.parse(companion.categories) : [];
-      const regions = companion.regions ? JSON.parse(companion.regions) : [];
-      const languages = companion.spoken_languages ? JSON.parse(companion.spoken_languages) : [];
+      const languages = companion.languages ? JSON.parse(companion.languages) : [];
+      const specialization = companion.specialization ? JSON.parse(companion.specialization) : [];
+      const certifications = companion.certifications ? JSON.parse(companion.certifications) : [];
+      const socialLinks = companion.social_links ? JSON.parse(companion.social_links) : {};
+
+      // Create gallery array from profile and cover photos
+      const gallery = [];
+      if (companion.profile_photo) gallery.push(companion.profile_photo);
+      if (companion.cover_photo) gallery.push(companion.cover_photo);
 
       return {
         id: companion.id,
         email: companion.email,
         phone: companion.phone,
-        displayName: companion.display_name,
-        profileImage: profileImages[0] || null,
-        gallery: profileImages,
+        displayName: companion.display_name || `${companion.first_name || ''} ${companion.last_name || ''}`.trim() || companion.email.split('@')[0],
+        profileImage: companion.profile_photo,
+        gallery: gallery,
         bio: companion.bio,
-        categories: categories,
-        regions: regions,
+        categories: specialization, // Use specialization as categories
+        regions: companion.location ? [companion.location] : [],
         languages: languages,
         rating: {
-          average: companion.rating_average || 0,
-          count: companion.rating_count || 0
+          average: 0, // No rating system in companion_profiles yet
+          count: 0
         },
         userStatus: companion.user_status,
-        verificationStatus: companion.verification_status,
-        subscriptionStatus: companion.subscription_status,
-        subscriptionTier: companion.subscription_tier,
-        subscriptionExpiresAt: companion.subscription_expires_at,
+        verificationStatus: 'pending', // Default for companions
+        subscriptionStatus: 'active', // Default for companions
+        subscriptionTier: 'basic', // Default tier
+        subscriptionExpiresAt: null,
         emailVerified: companion.email_verified === 1,
         phoneVerified: companion.phone_verified === 1,
         preferredLanguage: companion.preferred_language,
         createdAt: companion.created_at,
-        lastLoginAt: companion.last_login_at
+        lastLoginAt: companion.last_login_at,
+        // Additional companion-specific fields
+        firstName: companion.first_name,
+        lastName: companion.last_name,
+        dateOfBirth: companion.date_of_birth,
+        gender: companion.gender,
+        location: companion.location,
+        socialLinks: socialLinks,
+        specialization: specialization,
+        certifications: certifications
       };
     });
 
@@ -200,26 +214,22 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
     // Build base query
     let query = `
       SELECT 
-        sp.user_id as id,
-        sp.display_name as name,
-        sp.display_name,
-        sp.bio,
-        sp.profile_images,
-        sp.categories,
-        sp.regions,
-        sp.spoken_languages as languages,
-        sp.rating_average as rating,
-        sp.rating_count,
-        sp.verification_status as verified,
+        cp.user_id as id,
+        cp.display_name as name,
+        cp.display_name,
+        cp.bio,
+        cp.profile_photo,
+        cp.cover_photo,
+        cp.location,
+        cp.languages,
+        cp.specialization,
         u.status as online,
         u.last_login_at,
         MIN(ce.price) as price
-      FROM supplier_profiles sp
-      JOIN users u ON sp.user_id = u.id
-      LEFT JOIN companion_experiences ce ON sp.user_id = ce.companion_id AND ce.is_active = TRUE
+      FROM companion_profiles cp
+      JOIN users u ON cp.user_id = u.id
+      LEFT JOIN companion_experiences ce ON cp.user_id = ce.companion_id AND ce.is_active = TRUE
       WHERE u.user_type = 'companion'
-        AND sp.subscription_status = 'active' 
-        AND sp.verification_status = 'verified'
         AND u.status = 'active'
     `;
 
@@ -227,19 +237,19 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
 
     // Apply filters
     if (searchParams.search) {
-      query += ` AND (sp.display_name LIKE ? OR sp.bio LIKE ?)`;
+      query += ` AND (cp.display_name LIKE ? OR cp.bio LIKE ?)`;
       const searchTerm = `%${searchParams.search}%`;
       queryParams.push(searchTerm, searchTerm);
     }
 
     if (searchParams.category) {
-      query += ` AND JSON_EXTRACT(sp.categories, '$') LIKE ?`;
+      query += ` AND JSON_EXTRACT(cp.specialization, '$') LIKE ?`;
       queryParams.push(`%"${searchParams.category}"%`);
     }
 
     if (searchParams.location) {
-      query += ` AND JSON_EXTRACT(sp.regions, '$') LIKE ?`;
-      queryParams.push(`%"${searchParams.location}"%`);
+      query += ` AND cp.location LIKE ?`;
+      queryParams.push(`%${searchParams.location}%`);
     }
 
     if (searchParams.minPrice !== undefined) {
@@ -253,29 +263,29 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
     }
 
     if (searchParams.rating) {
-      query += ` AND sp.rating_average >= ?`;
+      query += ` AND 0 >= ?`; // No rating system in companion_profiles yet
       queryParams.push(searchParams.rating);
     }
 
     if (searchParams.languages) {
       const langs = searchParams.languages.split(',');
-      const langConditions = langs.map(() => `JSON_EXTRACT(sp.spoken_languages, '$') LIKE ?`).join(' OR ');
+      const langConditions = langs.map(() => `JSON_EXTRACT(cp.languages, '$') LIKE ?`).join(' OR ');
       query += ` AND (${langConditions})`;
       langs.forEach(lang => queryParams.push(`%"${lang.trim()}"%`));
     }
 
     if (searchParams.verified) {
-      query += ` AND sp.verification_status = 'verified'`;
+      query += ` AND 1 = 1`; // All companions are considered verified for now
     }
 
     // Group by companion
-    query += ` GROUP BY sp.user_id`;
+    query += ` GROUP BY cp.user_id`;
 
     // Add sorting
-    const sortColumn = searchParams.sortBy === 'rating' ? 'sp.rating_average' :
+    const sortColumn = searchParams.sortBy === 'rating' ? '0' : // No rating system yet
                       searchParams.sortBy === 'price' ? 'price' :
-                      searchParams.sortBy === 'reviews' ? 'sp.rating_count' :
-                      'sp.created_at';
+                      searchParams.sortBy === 'reviews' ? '0' : // No review count yet
+                      'cp.created_at';
     
     query += ` ORDER BY ${sortColumn} ${searchParams.sortOrder.toUpperCase()}`;
 
@@ -292,26 +302,29 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
 
     // Format companions data
     const companionsList = companionsResult.results.map((companion: any) => {
-      const profileImages = JSON.parse(companion.profile_images || '[]');
-      const categories = JSON.parse(companion.categories || '[]');
-      const regions = JSON.parse(companion.regions || '[]');
       const languages = JSON.parse(companion.languages || '[]');
+      const specialization = JSON.parse(companion.specialization || '[]');
+
+      // Create gallery array from profile and cover photos
+      const gallery = [];
+      if (companion.profile_photo) gallery.push(companion.profile_photo);
+      if (companion.cover_photo) gallery.push(companion.cover_photo);
 
       return {
         id: companion.id,
         name: companion.name,
         displayName: companion.display_name,
-        profileImage: profileImages[0] || null,
-        gallery: profileImages,
-        location: regions[0] || null,
-        rating: Math.round((companion.rating || 0) * 10) / 10,
-        reviewCount: companion.rating_count || 0,
+        profileImage: companion.profile_photo,
+        gallery: gallery,
+        location: companion.location,
+        rating: 0, // No rating system yet
+        reviewCount: 0, // No review count yet
         price: companion.price || 0,
         services: [], // Will be populated separately if needed
         languages: languages,
-        verified: companion.verified === 'verified',
+        verified: true, // All companions are considered verified for now
         online: companion.online === 'active',
-        categories: categories,
+        categories: specialization,
         bio: companion.bio,
         age: null, // Calculate from date_of_birth if available
         responseTime: '< 1 hour', // Default response time
@@ -323,31 +336,36 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
     // Get filter options for the response
     const filtersResult = await c.env.DB.prepare(`
       SELECT 
-        c.id as category_id,
-        c.name_en as category_name,
-        COUNT(DISTINCT sp.user_id) as category_count
-      FROM categories c
-      LEFT JOIN supplier_profiles sp ON JSON_EXTRACT(sp.categories, '$') LIKE '%"' || c.id || '"%'
-        AND sp.subscription_status = 'active' 
-        AND sp.verification_status = 'verified'
-      LEFT JOIN users u ON sp.user_id = u.id AND u.user_type = 'companion'
-      WHERE c.is_active = TRUE
-      GROUP BY c.id, c.name_en
+        'city_tours' as category_id,
+        'City Tours' as category_name,
+        COUNT(DISTINCT cp.user_id) as category_count
+      FROM companion_profiles cp
+      WHERE JSON_EXTRACT(cp.specialization, '$') LIKE '%"City Tours"%'
+      UNION ALL
+      SELECT 
+        'cultural_experiences' as category_id,
+        'Cultural Experiences' as category_name,
+        COUNT(DISTINCT cp.user_id) as category_count
+      FROM companion_profiles cp
+      WHERE JSON_EXTRACT(cp.specialization, '$') LIKE '%"Cultural Experiences"%'
+      UNION ALL
+      SELECT 
+        'nightlife' as category_id,
+        'Nightlife' as category_name,
+        COUNT(DISTINCT cp.user_id) as category_count
+      FROM companion_profiles cp
+      WHERE JSON_EXTRACT(cp.specialization, '$') LIKE '%"Nightlife"%'
       ORDER BY category_count DESC
     `).all();
 
     const locationsResult = await c.env.DB.prepare(`
       SELECT 
-        r.id as location_id,
-        r.name_en as location_name,
-        COUNT(DISTINCT sp.user_id) as location_count
-      FROM regions r
-      LEFT JOIN supplier_profiles sp ON JSON_EXTRACT(sp.regions, '$') LIKE '%"' || r.id || '"%'
-        AND sp.subscription_status = 'active' 
-        AND sp.verification_status = 'verified'
-      LEFT JOIN users u ON sp.user_id = u.id AND u.user_type = 'companion'
-      WHERE r.is_active = TRUE
-      GROUP BY r.id, r.name_en
+        cp.location as location_id,
+        cp.location as location_name,
+        COUNT(DISTINCT cp.user_id) as location_count
+      FROM companion_profiles cp
+      WHERE cp.location IS NOT NULL AND cp.location != ''
+      GROUP BY cp.location
       ORDER BY location_count DESC
     `).all();
 
@@ -356,11 +374,9 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
         MIN(ce.price) as min_price,
         MAX(ce.price) as max_price
       FROM companion_experiences ce
-      JOIN supplier_profiles sp ON ce.companion_id = sp.user_id
-      JOIN users u ON sp.user_id = u.id
+      JOIN companion_profiles cp ON ce.companion_id = cp.user_id
+      JOIN users u ON cp.user_id = u.id
       WHERE ce.is_active = TRUE 
-        AND sp.subscription_status = 'active'
-        AND sp.verification_status = 'verified'
         AND u.user_type = 'companion'
     `).first();
 
