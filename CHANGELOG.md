@@ -12,6 +12,7 @@ All notable changes to the Tirak Backend will be documented in this file.
 - Fixed "no such table: companion_experiences" error by adding automatic database migration checks
 - Added graceful error handling for missing tables in companions route
 - Created utility scripts for applying specific migrations
+- **Database**: Fixed "no such table: companion_profiles" error by creating migration 010_add_companion_profiles_table.sql to add the missing companion_profiles table
 
 ### Added
 - Database migration documentation in DATABASE_MIGRATIONS.md
