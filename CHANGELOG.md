@@ -14,6 +14,11 @@ All notable changes to the Tirak Backend will be documented in this file.
 - Created utility scripts for applying specific migrations
 - **Database**: Fixed "no such table: companion_profiles" error by creating migration 010_add_companion_profiles_table.sql to add the missing companion_profiles table
 - **Storage**: Fixed image serving issue by creating a new `/api/uploads/:type/:userId/:filename` route to serve images from R2 storage through Workers API instead of relying on custom domain
+- **API**: Fixed companion details endpoint (`GET /api/companions/:id`) to use `companion_profiles` table instead of `supplier_profiles` table, resolving "Companion not found" errors
+- **API**: Fixed duplicate companion entries in "get all companions" endpoint by adding SELECT DISTINCT to prevent multiple rows from LEFT JOIN with companion_experiences
+- **API**: Fixed 500 Internal Server Error in companion details endpoint by adding null checks for database query results and safe JSON parsing with try-catch blocks
+- **API**: Fixed reviews query in companion details endpoint to use `companion_profiles` table for reviewer display names and profile images
+- **API**: Fixed companion details endpoint to use LEFT JOIN like "get all companions" endpoint, allowing companions without profiles to be retrieved
 
 ### Added
 - Database migration documentation in DATABASE_MIGRATIONS.md

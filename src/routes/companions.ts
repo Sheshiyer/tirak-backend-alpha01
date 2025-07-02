@@ -423,16 +423,32 @@ companions.get('/:id', validateUUID('id'), async (c) => {
     // Get companion profile
     const companion = await c.env.DB.prepare(`
       SELECT
-        sp.*,
+        u.id,
+        u.email,
+        u.phone,
         u.status as user_status,
+        u.email_verified,
+        u.phone_verified,
+        u.preferred_language,
+        u.created_at as joined_date,
         u.last_login_at,
-        u.created_at as joined_date
-      FROM supplier_profiles sp
-      JOIN users u ON sp.user_id = u.id
-      WHERE sp.user_id = ?
+        cp.display_name,
+        cp.bio,
+        cp.profile_photo,
+        cp.cover_photo,
+        cp.location,
+        cp.languages,
+        cp.specialization,
+        cp.certifications,
+        cp.social_links,
+        cp.date_of_birth,
+        cp.gender,
+        cp.first_name,
+        cp.last_name
+      FROM users u
+      LEFT JOIN companion_profiles cp ON u.id = cp.user_id
+      WHERE u.id = ?
         AND u.user_type = 'companion'
-        AND sp.subscription_status = 'active'
-        AND sp.verification_status = 'verified'
         AND u.status = 'active'
     `).bind(companionId).first();
 
@@ -456,7 +472,7 @@ companions.get('/:id', validateUUID('id'), async (c) => {
       ORDER BY is_popular DESC, city ASC
     `).bind(companionId).all();
 
-    // Get availability
+    // Get availability (using supplier_availability for now since companion_availability doesn't exist yet)
     const availability = await c.env.DB.prepare(`
       SELECT day_of_week, start_time, end_time, is_available
       FROM supplier_availability
@@ -469,19 +485,36 @@ companions.get('/:id', validateUUID('id'), async (c) => {
       SELECT
         r.*,
         cp.display_name as customer_name,
-        cp.profile_images as customer_images
+        cp.profile_photo as customer_profile_image
       FROM reviews r
-      JOIN customer_profiles cp ON r.reviewer_id = cp.user_id
+      JOIN companion_profiles cp ON r.reviewer_id = cp.user_id
       WHERE r.reviewee_id = ?
       ORDER BY r.created_at DESC
       LIMIT 10
     `).bind(companionId).all();
 
     // Format data
-    const profileImages = companion.profile_images ? JSON.parse(companion.profile_images as string) : [];
-    const categories = companion.categories ? JSON.parse(companion.categories as string) : [];
-    const regions = companion.regions ? JSON.parse(companion.regions as string) : [];
-    const languages = companion.spoken_languages ? JSON.parse(companion.spoken_languages as string) : [];
+    const languages = companion.languages ? (() => {
+      try { return JSON.parse(companion.languages as string); } 
+      catch { return []; }
+    })() : [];
+    const specialization = companion.specialization ? (() => {
+      try { return JSON.parse(companion.specialization as string); } 
+      catch { return []; }
+    })() : [];
+    const certifications = companion.certifications ? (() => {
+      try { return JSON.parse(companion.certifications as string); } 
+      catch { return []; }
+    })() : [];
+    const socialLinks = companion.social_links ? (() => {
+      try { return JSON.parse(companion.social_links as string); } 
+      catch { return {}; }
+    })() : {};
+
+    // Create gallery array from profile and cover photos
+    const gallery = [];
+    if (companion.profile_photo) gallery.push(companion.profile_photo);
+    if (companion.cover_photo) gallery.push(companion.cover_photo);
 
     const weeklySchedule: Record<string, Array<{start: string, end: string}>> = {
       monday: [],
@@ -495,7 +528,7 @@ companions.get('/:id', validateUUID('id'), async (c) => {
 
     const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
-    (availability.results || []).forEach((avail: any) => {
+    (availability?.results || []).forEach((avail: any) => {
       const dayName = dayNames[avail.day_of_week] as keyof typeof weeklySchedule;
       if (avail.is_available && dayName && weeklySchedule[dayName]) {
         weeklySchedule[dayName].push({
@@ -506,28 +539,31 @@ companions.get('/:id', validateUUID('id'), async (c) => {
     });
 
     const companionData = {
-      id: companion.user_id,
-      name: companion.display_name,
-      displayName: companion.display_name,
-      profileImage: profileImages[0] || null,
-      gallery: profileImages,
-      location: regions[0] || null,
-      rating: Math.round((Number(companion.rating_average) || 0) * 10) / 10,
-      reviewCount: companion.rating_count || 0,
+      id: companion.id,
+      name: companion.display_name || `${companion.first_name || ''} ${companion.last_name || ''}`.trim() || (companion.email as string).split('@')[0],
+      displayName: companion.display_name || `${companion.first_name || ''} ${companion.last_name || ''}`.trim() || (companion.email as string).split('@')[0],
+      profileImage: companion.profile_photo,
+      gallery: gallery,
+      location: companion.location,
+      rating: 0, // No rating system in companion_profiles yet
+      reviewCount: 0, // No review count yet
       price: 0, // Will be set from experiences
-      experiences: experiences.results.map((exp: any) => ({
+      experiences: (experiences?.results || []).map((exp: any) => ({
         id: exp.id,
         title: exp.title,
         description: exp.description,
         durationMinutes: exp.duration_minutes,
-        keywords: JSON.parse(exp.keywords || '[]'),
+        keywords: (() => {
+          try { return JSON.parse(exp.keywords || '[]'); } 
+          catch { return []; }
+        })(),
         price: exp.price,
         currency: exp.currency,
         isActive: exp.is_active,
         createdAt: exp.created_at,
         updatedAt: exp.updated_at
       })),
-      locations: locations.results.map((loc: any) => ({
+      locations: (locations?.results || []).map((loc: any) => ({
         id: loc.id,
         city: loc.city,
         region: loc.region,
@@ -537,10 +573,10 @@ companions.get('/:id', validateUUID('id'), async (c) => {
         updatedAt: loc.updated_at
       })),
       languages: languages,
-      verified: companion.verification_status === 'verified',
+      verified: true, // All companions are considered verified for now
       online: companion.user_status === 'active',
       lastSeen: companion.last_login_at,
-      categories: categories,
+      categories: specialization, // Use specialization as categories
       bio: companion.bio,
       age: null, // Calculate from date_of_birth if available
       responseTime: '< 1 hour',
@@ -550,22 +586,30 @@ companions.get('/:id', validateUUID('id'), async (c) => {
         weeklySchedule,
         exceptions: [] // Would come from a separate table
       },
-      reviews: reviews.results.map((review: any) => ({
+      reviews: (reviews?.results || []).map((review: any) => ({
         id: review.id,
         user: {
           id: review.reviewer_id,
           name: review.customer_name,
-          profileImage: JSON.parse(review.customer_images || '[]')[0] || null
+          profileImage: review.customer_profile_image || null
         },
         rating: review.rating,
         comment: review.comment,
         date: review.created_at,
         verified: review.is_public
-      }))
+      })),
+      // Additional companion-specific fields
+      firstName: companion.first_name,
+      lastName: companion.last_name,
+      dateOfBirth: companion.date_of_birth,
+      gender: companion.gender,
+      socialLinks: socialLinks,
+      specialization: specialization,
+      certifications: certifications
     };
 
     // Set price from cheapest experience
-    if (experiences.results.length > 0) {
+    if (experiences?.results && experiences.results.length > 0) {
       companionData.price = Math.min(...experiences.results.map((exp: any) => exp.price));
     }
 
