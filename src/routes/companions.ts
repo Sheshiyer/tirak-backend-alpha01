@@ -728,19 +728,19 @@ companions.get('/:id/availability', async (c) => {
     }
 
     // Get availability for the date range
+    // Using day_of_week since the table doesn't have start_date/end_date columns yet
     const availabilityResult = await c.env.DB.prepare(`
-      SELECT start_date, end_date, start_time, end_time, is_available
+      SELECT day_of_week, start_time, end_time, is_available
       FROM supplier_availability
       WHERE supplier_id = ?
-        AND ((start_date <= ? AND end_date >= ?) OR (start_date <= ? AND end_date >= ?))
-    `).bind(companionId, startDateStr, startDateStr, endDateStr, endDateStr).all();
+    `).bind(companionId).all();
 
     // Get existing bookings in the date range
     const bookings = await c.env.DB.prepare(`
-      SELECT date, start_time, end_time
+      SELECT scheduled_at, duration
       FROM bookings
-      WHERE companion_id = ?
-        AND date BETWEEN ? AND ?
+      WHERE supplier_id = ?
+        AND DATE(scheduled_at) BETWEEN ? AND ?
         AND status IN ('confirmed', 'in_progress')
     `).bind(companionId, startDateStr, endDateStr).all();
 
@@ -752,18 +752,17 @@ companions.get('/:id/availability', async (c) => {
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const dateStr = d.toISOString().split('T')[0];
       
-      // Find availability for this date
+      // Find availability for this date based on day of week
+      const dayOfWeek = d.getDay(); // 0 = Sunday, 1 = Monday, etc.
       const dateAvailability = availabilityResult.results.filter((avail: any) => {
-        if (!avail.start_date || !avail.end_date) return false;
-        
-        const availStartDate = new Date(avail.start_date as string);
-        const availEndDate = new Date(avail.end_date as string);
-        const currentDate = new Date(dateStr as string);
-        return currentDate >= availStartDate && currentDate <= availEndDate && avail.is_available;
+        return avail.day_of_week === dayOfWeek && avail.is_available === 1;
       });
       
       // Check for existing bookings on this date
-      const dayBookings = bookings.results.filter((booking: any) => booking.date === dateStr);
+      const dayBookings = bookings.results.filter((booking: any) => {
+        const bookingDate = (booking.scheduled_at as string).split('T')[0];
+        return bookingDate === dateStr;
+      });
       
       const availableSlots: Array<{start: string, end: string, available: boolean}> = [];
       
@@ -772,9 +771,13 @@ companions.get('/:id/availability', async (c) => {
         dateAvailability.forEach((avail: any) => {
           // Check if the slot conflicts with any booking
           const isSlotAvailable = !dayBookings.some((booking: any) => {
+            const bookingStartDateTime = new Date(booking.scheduled_at);
+            const bookingEndDateTime = new Date(bookingStartDateTime.getTime() + booking.duration * 60000); // duration is in minutes
+
+            const bookingStart = bookingStartDateTime.toTimeString().substring(0, 5);
+            const bookingEnd = bookingEndDateTime.toTimeString().substring(0, 5);
+            
             // Simple overlap check
-            const bookingStart = booking.start_time;
-            const bookingEnd = booking.end_time;
             return !(avail.end_time <= bookingStart || avail.start_time >= bookingEnd);
           });
           
@@ -1378,8 +1381,7 @@ companions.delete('/:id/locations/:locationId',
  *                   type: string
  *                   example: Availability updated successfully
  */
-companions.post('/:id/availability', 
-  async (c) => {
+companions.post('/:id/availability', async (c) => {
   const companionId = c.req.param('id');
   const userId = c.get('userId');
   const userType = c.get('userType');
@@ -1394,22 +1396,16 @@ companions.post('/:id/availability',
       return jsonError(c, 'Invalid request format', 'Request body must be an array of availability objects', 400);
     }
     
-    // Validate each item in the array
+    // Validate each item in the array using our schema
     for (const item of availabilityData) {
-      if (!item.startDate || !item.endDate || !item.startTime || !item.endTime) {
-        return jsonError(c, 'Missing required fields', 'Each availability object must include startDate, endDate, startTime, and endTime', 400);
-      }
-      
-      // Validate date format (YYYY-MM-DD)
-      const dateFormatRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateFormatRegex.test(item.startDate) || !dateFormatRegex.test(item.endDate)) {
-        return jsonError(c, 'Invalid date format', 'Dates must be in YYYY-MM-DD format', 400);
-      }
-      
-      // Validate time format (HH:MM)
-      const timeFormatRegex = /^\d{2}:\d{2}$/;
-      if (!timeFormatRegex.test(item.startTime) || !timeFormatRegex.test(item.endTime)) {
-        return jsonError(c, 'Invalid time format', 'Times must be in HH:MM format', 400);
+      try {
+        const result = availabilitySchema.safeParse(item);
+        if (!result.success) {
+          const error = result.error;
+          return jsonError(c, 'Validation error', error?.errors[0]?.message || 'Invalid availability data', 400);
+        }
+      } catch (error) {
+        return jsonError(c, 'Invalid data', 'Each availability object must be valid', 400);
       }
     }
   } catch (error) {
@@ -1430,18 +1426,21 @@ companions.post('/:id/availability',
       // Insert new availability
       for (const avail of availabilityData) {
         const availId = crypto.randomUUID();
+        // Convert startDate to day of week (0-6, where 0 is Sunday)
+        const startDate = new Date(avail.startDate);
+        const dayOfWeek = startDate.getDay();
+        
         await c.env.DB.prepare(`
           INSERT INTO supplier_availability (
-            id, supplier_id, start_date, end_date, start_time, end_time, is_available, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            id, supplier_id, day_of_week, start_time, end_time, is_available, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           availId,
           companionId,
-          avail.startDate,
-          avail.endDate,
+          dayOfWeek,
           avail.startTime,
           avail.endTime,
-          avail.isAvailable,
+          avail.isAvailable !== false, // Default to true if not specified
           new Date().toISOString(),
           new Date().toISOString()
         ).run();

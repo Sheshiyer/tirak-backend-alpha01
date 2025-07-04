@@ -95,10 +95,11 @@ export const locationSchema = z.object({
 
 // Companion availability schema
 export const availabilitySchema = z.object({
-  dayOfWeek: z.number().min(0, 'Day must be between 0 and 6').max(6, 'Day must be between 0 and 6'),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Start date must be in YYYY-MM-DD format'),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'End date must be in YYYY-MM-DD format'),
   startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Start time must be in HH:MM format'),
   endTime: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be in HH:MM format'),
-  isAvailable: z.boolean()
+  isAvailable: z.boolean().default(true)
 });
 
 // Enhanced booking schema with customer preferences
