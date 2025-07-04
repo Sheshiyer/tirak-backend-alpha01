@@ -814,7 +814,7 @@ companions.use('/*/availability*', authMiddleware);
 /**
  * Create companion experience
  */
-companions.post('/:id/experiences', validateUUID('id'), zValidator('json', experienceSchema), async (c) => {
+companions.post('/:id/experiences', zValidator('json', experienceSchema), async (c) => {
   const companionId = c.req.param('id');
   const userId = c.get('userId');
   const userType = c.get('userType');
@@ -898,7 +898,7 @@ companions.post('/:id/experiences', validateUUID('id'), zValidator('json', exper
 /**
  * Get companion experiences
  */
-companions.get('/:id/experiences', validateUUID('id'), async (c) => {
+companions.get('/:id/experiences', async (c) => {
   const companionId = c.req.param('id');
   const page = parseInt(c.req.query('page') || '1');
   const limit = parseInt(c.req.query('limit') || '20');
@@ -1044,7 +1044,6 @@ companions.get('/:id/experiences-debug', validateUUID('id'), async (c) => {
  * Update companion experience
  */
 companions.put('/:id/experiences/:experienceId', 
-  validateUUID('id'), 
   validateUUID('experienceId'), 
   zValidator('json', experienceSchema), 
   async (c) => {
@@ -1102,7 +1101,6 @@ companions.put('/:id/experiences/:experienceId',
  * Delete companion experience
  */
 companions.delete('/:id/experiences/:experienceId', 
-  validateUUID('id'), 
   validateUUID('experienceId'), 
   async (c) => {
     const companionId = c.req.param('id');
@@ -1145,7 +1143,7 @@ companions.delete('/:id/experiences/:experienceId',
 /**
  * Create companion location
  */
-companions.post('/:id/locations', validateUUID('id'), zValidator('json', locationSchema), async (c) => {
+companions.post('/:id/locations', zValidator('json', locationSchema), async (c) => {
   const companionId = c.req.param('id');
   const userId = c.get('userId');
   const userType = c.get('userType');
@@ -1189,7 +1187,7 @@ companions.post('/:id/locations', validateUUID('id'), zValidator('json', locatio
 /**
  * Get companion locations
  */
-companions.get('/:id/locations', validateUUID('id'), async (c) => {
+companions.get('/:id/locations', async (c) => {
   const companionId = c.req.param('id');
 
   try {
@@ -1222,7 +1220,6 @@ companions.get('/:id/locations', validateUUID('id'), async (c) => {
  * Update companion location
  */
 companions.put('/:id/locations/:locationId', 
-  validateUUID('id'), 
   validateUUID('locationId'), 
   zValidator('json', locationSchema), 
   async (c) => {
@@ -1277,7 +1274,6 @@ companions.put('/:id/locations/:locationId',
  * Delete companion location
  */
 companions.delete('/:id/locations/:locationId', 
-  validateUUID('id'), 
   validateUUID('locationId'), 
   async (c) => {
     const companionId = c.req.param('id');
