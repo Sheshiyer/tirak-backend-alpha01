@@ -111,4 +111,68 @@ INSERT OR IGNORE INTO supplier_availability (
 ('avail_010_3', 'companion_010', 3, '09:00', '17:00', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 ('avail_010_4', 'companion_010', 4, '09:00', '17:00', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 ('avail_010_5', 'companion_010', 5, '09:00', '17:00', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('avail_010_6', 'companion_010', 6, '09:00', '17:00', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP); 
+('avail_010_6', 'companion_010', 6, '09:00', '17:00', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- === Companion Experiences ===
+INSERT OR IGNORE INTO companion_experiences (
+    id, companion_id, title, description, duration_minutes, keywords, price, currency, is_active, created_at, updated_at
+) VALUES
+-- Malai Somboon (Bangkok) - City Tours, Cultural Experiences
+('exp_001_1', 'companion_001', 'Grand Palace & Wat Phra Kaew Tour', 'A guided tour of the most iconic landmarks in Bangkok, including the Grand Palace and the Temple of the Emerald Buddha.', 180, '["history", "culture", "sightseeing"]', 1500, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_001_2', 'companion_001', 'Bangkok Canal Tour (Klongs)', 'Explore the traditional life along Bangkok''s canals on a long-tail boat.', 120, '["local life", "boating", "sightseeing"]', 1200, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_001_3', 'companion_001', 'Floating Market Adventure', 'Visit the vibrant Damnoen Saduak floating market and experience local commerce on the water.', 240, '["market", "food", "boating"]', 2000, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_001_4', 'companion_001', 'Street Food Discovery', 'A walking tour through Yaowarat (Chinatown) to sample the best of Bangkok''s street food.', 150, '["food", "dining", "local"]', 1000, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+-- Pranee Navin (Chiang Mai) - Cultural Experiences, Shopping
+('exp_002_1', 'companion_002', 'Doi Suthep Temple Visit', 'Journey up the mountain to the sacred Wat Phra That Doi Suthep temple for panoramic views and cultural insights.', 180, '["temple", "culture", "mountain"]', 1300, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_002_2', 'companion_002', 'Old City Temple Walk', 'A walking tour of the most significant temples within Chiang Mai''s ancient city walls.', 150, '["history", "culture", "walking tour"]', 900, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_002_3', 'companion_002', 'Traditional Lanna Crafts Workshop', 'Visit local artisan villages to see and try traditional crafts like silk weaving and umbrella painting.', 240, '["crafts", "workshop", "local"]', 1800, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_002_4', 'companion_002', 'Nimman Road Shopping Spree', 'Explore the trendy Nimmanhaemin Road, known for its boutiques, art galleries, and coffee shops.', 180, '["shopping", "fashion", "art"]', 1000, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+-- Sunisa Chaiwat (Pattaya) - Nightlife, City Tours
+('exp_003_1', 'companion_003', 'Pattaya Walking Street Night Tour', 'Experience the vibrant and electrifying atmosphere of Pattaya''s famous Walking Street.', 180, '["nightlife", "party", "entertainment"]', 2000, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_003_2', 'companion_003', 'Sanctuary of Truth Tour', 'Visit the magnificent all-wood building filled with sculptures based on traditional Buddhist and Hindu motifs.', 120, '["culture", "architecture", "sightseeing"]', 1500, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_003_3', 'companion_003', 'Island Hopping to Koh Larn', 'A day trip to the beautiful Coral Island (Koh Larn) for swimming, sunbathing, and water sports.', 360, '["beach", "island", "snorkeling"]', 2500, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_003_4', 'companion_003', 'Pattaya Viewpoint & City Highlights', 'A tour of Pattaya''s best viewpoints and key city landmarks.', 150, '["sightseeing", "viewpoint", "city tour"]', 1100, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+-- Ratana Sunan (Phuket) - Dining, Cultural Experiences
+('exp_004_1', 'companion_004', 'Phuket Old Town Food & Culture Tour', 'Explore the charming Sino-Portuguese architecture of Phuket Old Town and taste local delicacies.', 180, '["food", "history", "walking tour"]', 1400, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_004_2', 'companion_004', 'Big Buddha & Wat Chalong Visit', 'A trip to two of Phuket''s most revered landmarks: the Big Buddha and Wat Chalong temple.', 150, '["culture", "sightseeing", "temple"]', 1200, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_004_3', 'companion_004', 'Authentic Southern Thai Cooking Class', 'Learn to cook famous Southern Thai dishes in a hands-on class with a local expert.', 210, '["cooking", "food", "workshop"]', 1800, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_004_4', 'companion_004', 'Sunset Dinner at Promthep Cape', 'Enjoy a delicious seafood dinner while watching the breathtaking sunset at Promthep Cape.', 120, '["dining", "sunset", "romantic"]', 2200, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+-- Malee Somsak (Bangkok) - Shopping, Nightlife
+('exp_005_1', 'companion_005', 'Luxury Mall Shopping Experience', 'A guided shopping tour of Bangkok''s high-end malls like Siam Paragon and CentralWorld.', 240, '["shopping", "luxury", "fashion"]', 1500, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_005_2', 'companion_005', 'Chatuchak Weekend Market Hunt', 'Navigate the world''s largest weekend market to find unique items and bargain deals.', 240, '["shopping", "market", "local"]', 1200, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_005_3', 'companion_005', 'Rooftop Bar Hopping Tour', 'Visit some of Bangkok''s most stunning rooftop bars for amazing views and cocktails.', 180, '["nightlife", "drinks", "viewpoint"]', 2500, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_005_4', 'companion_005', 'Asiatique The Riverfront Evening', 'An evening of shopping, dining, and entertainment at the Asiatique open-air mall.', 210, '["shopping", "dining", "entertainment"]', 1300, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+-- Wandee Samart (Hua Hin) - Cultural Experiences, City Tours
+('exp_006_1', 'companion_006', 'Hua Hin Railway Station & Maruekhathaiyawan Palace', 'Visit the iconic Hua Hin railway station and the beautiful teakwood palace by the sea.', 180, '["history", "architecture", "sightseeing"]', 1200, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_006_2', 'companion_006', 'Khao Sam Roi Yot National Park', 'A day trip to the stunning national park to see the Phraya Nakhon Cave.', 360, '["nature", "hiking", "cave"]', 3000, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_006_3', 'companion_006', 'Hua Hin Night Market Food Tour', 'Explore the bustling night market and sample a variety of delicious local street food.', 120, '["food", "market", "nightlife"]', 800, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_006_4', 'companion_006', 'Pala-U Waterfall Adventure', 'A trip to the beautiful Pala-U waterfall located in the Kaeng Krachan National Park.', 240, '["nature", "waterfall", "hiking"]', 2200, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+-- Siriwan Prasert (Khon Kaen) - City Tours, Cultural Experiences
+('exp_007_1', 'companion_007', 'Khon Kaen City & Temple Tour', 'A tour of the main sights in Khon Kaen, including the nine-storey stupa at Wat Nong Wang.', 180, '["city tour", "temple", "culture"]', 1000, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_007_2', 'companion_007', 'Dinosaur Park Si Wiang', 'Visit the Phu Wiang Dinosaur Museum and excavation sites.', 240, '["history", "museum", "dinosaur"]', 1500, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_007_3', 'companion_007', 'Isan Culture & Food Experience', 'Discover the unique culture and spicy cuisine of the Isan region.', 210, '["culture", "food", "local"]', 1200, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_007_4', 'companion_007', 'Ubolratana Dam Visit', 'A trip to the impressive Ubolratana Dam for scenic views and relaxation.', 240, '["sightseeing", "nature", "dam"]', 1400, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+-- Nattaya Somchai (Phuket) - Nightlife, Dining
+('exp_008_1', 'companion_008', 'Bangla Road Nightlife Experience', 'A guided tour of the most famous party street in Phuket.', 180, '["nightlife", "party", "drinks"]', 2200, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_008_2', 'companion_008', 'Phuket Beach Club Tour', 'Visit some of the trendiest beach clubs in Phuket for music, drinks, and sun.', 300, '["beach", "party", "nightlife"]', 3000, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_008_3', 'companion_008', 'Fine Dining Seafood Experience', 'Enjoy a curated seafood dinner at one of Phuket''s top-rated restaurants.', 150, '["dining", "seafood", "luxury"]', 3500, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_008_4', 'companion_008', 'Simon Cabaret Show', 'An evening of spectacular entertainment at the famous Simon Cabaret show.', 120, '["entertainment", "show", "nightlife"]', 1500, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+-- Pimchanok Anand (Bangkok) - Shopping, City Tours
+('exp_009_1', 'companion_009', 'Vintage Shopping in Siam Square', 'Explore hidden thrift stores and vintage shops around Siam Square.', 180, '["shopping", "fashion", "vintage"]', 1000, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_009_2', 'companion_009', 'Jim Thompson House Museum Tour', 'Discover the beautiful traditional Thai house of Jim Thompson and learn about the silk industry.', 120, '["museum", "history", "culture"]', 800, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_009_3', 'companion_009', 'IconSiam & River Cruise', 'Visit the luxurious IconSiam mall and take a scenic dinner cruise on the Chao Phraya River.', 240, '["shopping", "dining", "cruise"]', 2800, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_009_4', 'companion_009', 'Bangkok Art & Culture Centre (BACC)', 'A guided tour of the contemporary art exhibits at BACC.', 150, '["art", "culture", "museum"]', 700, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+-- Lalana Wichit (Chiang Mai) - Dining, Cultural Experiences
+('exp_010_1', 'companion_010', 'Northern Thai Cuisine Discovery', 'A food tour dedicated to tasting famous Lanna dishes like Khao Soi and Sai Oua.', 180, '["food", "dining", "local"]', 1300, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_010_2', 'companion_010', 'Elephant Sanctuary Visit', 'An ethical experience visiting an elephant sanctuary to feed and bathe the elephants.', 240, '["nature", "animals", "ethical tourism"]', 2500, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_010_3', 'companion_010', 'Wiang Kum Kam Ancient City Tour', 'Explore the ruins of the ancient city of Wiang Kum Kam by horse-drawn carriage.', 150, '["history", "ruins", "culture"]', 1100, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('exp_010_4', 'companion_010', 'Chiang Mai Night Safari', 'An evening adventure at the Chiang Mai Night Safari to see nocturnal animals.', 210, '["animals", "nightlife", "nature"]', 1800, 'THB', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP); 
