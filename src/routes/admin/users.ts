@@ -682,5 +682,57 @@ users.post('/bulk-action', zValidator('json', bulkActionSchema), async (c) => {
   }
 });
 
+/**
+ * Update a companion's verification status
+ */
+const companionStatusSchema = z.object({
+  status: z.enum(['pending', 'verified', 'rejected']),
+  rejectionReason: z.string().optional()
+});
+
+users.put('/:id/status', validateUUID('id'), zValidator('json', companionStatusSchema), async (c) => {
+  const userId = c.req.param('id');
+  const { status, rejectionReason } = c.req.valid('json');
+
+  try {
+    // Check if the user is a companion/supplier
+    const user = await c.env.DB.prepare('SELECT user_type FROM users WHERE id = ?').bind(userId).first();
+
+    if (!user) {
+      return jsonError(c, 'User not found', 'The specified user does not exist.', 404);
+    }
+
+    if (user.user_type !== 'supplier' && user.user_type !== 'companion') {
+      return jsonError(c, 'Invalid user type', 'This action can only be performed on a companion.', 400);
+    }
+    
+    // Update the verification_status in the supplier_profiles table
+    const result = await c.env.DB.prepare(
+      'UPDATE supplier_profiles SET verification_status = ?, rejection_reason = ? WHERE user_id = ?'
+    ).bind(status, status === 'rejected' ? rejectionReason : null, userId).run();
+
+    if (result.meta.changes === 0) {
+      return jsonError(c, 'Profile not found', 'No companion profile exists for this user to update.', 404);
+    }
+
+    // Optionally, send a notification to the companion about the status change
+    if (c.env.NOTIFICATION_QUEUE) {
+      await c.env.NOTIFICATION_QUEUE.send({
+        type: 'verification_status_update',
+        userId: userId,
+        payload: {
+          status,
+          reason: rejectionReason
+        }
+      });
+    }
+
+    return jsonSuccess(c, { updated: true, status: status }, `Companion verification status updated to ${status}.`);
+
+  } catch (error) {
+    console.error(`Failed to update companion status for ${userId}:`, error);
+    return jsonError(c, 'Database Error', 'Failed to update companion verification status.', 500);
+  }
+});
 
 export { users as userManagementRoutes };
