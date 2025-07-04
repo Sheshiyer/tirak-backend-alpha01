@@ -1221,7 +1221,13 @@ companions.delete('/:id/locations/:locationId',
  */
 companions.post('/:id/availability', 
   validateUUID('id'), 
-  zValidator('json', z.array(availabilitySchema)), 
+  zValidator('json', z.array(z.object({
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD format
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),   // YYYY-MM-DD format
+    startTime: z.string().regex(/^\d{2}:\d{2}$/),       // HH:MM format
+    endTime: z.string().regex(/^\d{2}:\d{2}$/),         // HH:MM format
+    isAvailable: z.boolean().default(true)
+  }))), 
   async (c) => {
     const companionId = c.req.param('id');
     const userId = c.get('userId');
@@ -1244,12 +1250,13 @@ companions.post('/:id/availability',
         const availId = crypto.randomUUID();
         await c.env.DB.prepare(`
           INSERT INTO supplier_availability (
-            id, supplier_id, day_of_week, start_time, end_time, is_available, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            id, supplier_id, start_date, end_date, start_time, end_time, is_available, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           availId,
           companionId,
-          avail.dayOfWeek,
+          avail.startDate,
+          avail.endDate,
           avail.startTime,
           avail.endTime,
           avail.isAvailable,
