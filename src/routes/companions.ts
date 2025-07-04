@@ -416,7 +416,7 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
 /**
  * Get companion details
  */
-companions.get('/:id', validateUUID('id'), async (c) => {
+companions.get('/:id', async (c) => {
   const companionId = c.req.param('id');
 
   try {
@@ -623,8 +623,80 @@ companions.get('/:id', validateUUID('id'), async (c) => {
 
 /**
  * Get companion availability
+ * 
+ * @swagger
+ * /companions/{id}/availability:
+ *   get:
+ *     summary: Get companion availability
+ *     description: Get availability for a companion within a date range
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         description: Companion ID
+ *         schema:
+ *           type: string
+ *       - name: startDate
+ *         in: query
+ *         required: true
+ *         description: Start date in YYYY-MM-DD format
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - name: endDate
+ *         in: query
+ *         required: true
+ *         description: End date in YYYY-MM-DD format
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Availability retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     availability:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           date:
+ *                             type: string
+ *                             format: date
+ *                             example: "2023-10-15"
+ *                           available:
+ *                             type: boolean
+ *                             example: true
+ *                           slots:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                               properties:
+ *                                 start:
+ *                                   type: string
+ *                                   format: time
+ *                                   example: "09:00"
+ *                                 end:
+ *                                   type: string
+ *                                   format: time
+ *                                   example: "17:00"
+ *                                 available:
+ *                                   type: boolean
+ *                                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Availability retrieved successfully"
  */
-companions.get('/:id/availability', validateUUID('id'), async (c) => {
+companions.get('/:id/availability', async (c) => {
   const companionId = c.req.param('id');
   const startDate = c.req.query('startDate');
   const endDate = c.req.query('endDate');
@@ -633,25 +705,35 @@ companions.get('/:id/availability', validateUUID('id'), async (c) => {
     return jsonError(c, 'Missing parameters', 'startDate and endDate are required', 400);
   }
 
+  // Validate date format (YYYY-MM-DD)
+  const dateFormatRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateFormatRegex.test(startDate) || !dateFormatRegex.test(endDate)) {
+    return jsonError(c, 'Invalid date format', 'Dates must be in YYYY-MM-DD format', 400);
+  }
+
+  // We've already validated that startDate and endDate exist and have the correct format
+  const startDateStr = startDate as string;
+  const endDateStr = endDate as string;
+
   try {
     // Verify companion exists
     const companion = await c.env.DB.prepare(`
-      SELECT user_id FROM supplier_profiles sp
-      JOIN users u ON sp.user_id = u.id
-      WHERE sp.user_id = ? AND u.user_type = 'companion' 
-        AND sp.subscription_status = 'active' AND sp.verification_status = 'verified'
+      SELECT user_id FROM companion_profiles cp
+      JOIN users u ON cp.user_id = u.id
+      WHERE cp.user_id = ? AND u.user_type = 'companion' AND u.status = 'active'
     `).bind(companionId).first();
 
     if (!companion) {
       return jsonError(c, 'Companion not found', 'The requested companion does not exist', 404);
     }
 
-    // Get weekly availability
-    const weeklyAvailability = await c.env.DB.prepare(`
-      SELECT day_of_week, start_time, end_time, is_available
+    // Get availability for the date range
+    const availabilityResult = await c.env.DB.prepare(`
+      SELECT start_date, end_date, start_time, end_time, is_available
       FROM supplier_availability
       WHERE supplier_id = ?
-    `).bind(companionId).all();
+        AND ((start_date <= ? AND end_date >= ?) OR (start_date <= ? AND end_date >= ?))
+    `).bind(companionId, startDateStr, startDateStr, endDateStr, endDateStr).all();
 
     // Get existing bookings in the date range
     const bookings = await c.env.DB.prepare(`
@@ -660,42 +742,57 @@ companions.get('/:id/availability', validateUUID('id'), async (c) => {
       WHERE companion_id = ?
         AND date BETWEEN ? AND ?
         AND status IN ('confirmed', 'in_progress')
-    `).bind(companionId, startDate, endDate).all();
+    `).bind(companionId, startDateStr, endDateStr).all();
 
     // Generate availability for each day in the range
     const availability = [];
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    const start = new Date(startDateStr);
+    const end = new Date(endDateStr);
 
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const dayOfWeek = d.getDay();
       const dateStr = d.toISOString().split('T')[0];
       
-      // Find weekly availability for this day
-      const dayAvailability = weeklyAvailability.results.find((wa: any) => wa.day_of_week === dayOfWeek);
-      
-      if (dayAvailability && dayAvailability.is_available) {
-        // Check for existing bookings on this date
-        const dayBookings = bookings.results.filter((booking: any) => booking.date === dateStr);
+      // Find availability for this date
+      const dateAvailability = availabilityResult.results.filter((avail: any) => {
+        if (!avail.start_date || !avail.end_date) return false;
         
-        availability.push({
-          date: dateStr,
-          available: dayBookings.length === 0, // Simplified - would need more complex logic for partial availability
-          slots: dayBookings.length === 0 ? [
-            {
-              start: dayAvailability.start_time,
-              end: dayAvailability.end_time,
+        const availStartDate = new Date(avail.start_date as string);
+        const availEndDate = new Date(avail.end_date as string);
+        const currentDate = new Date(dateStr as string);
+        return currentDate >= availStartDate && currentDate <= availEndDate && avail.is_available;
+      });
+      
+      // Check for existing bookings on this date
+      const dayBookings = bookings.results.filter((booking: any) => booking.date === dateStr);
+      
+      const availableSlots: Array<{start: string, end: string, available: boolean}> = [];
+      
+      if (dateAvailability.length > 0) {
+        // For each availability period, create slots
+        dateAvailability.forEach((avail: any) => {
+          // Check if the slot conflicts with any booking
+          const isSlotAvailable = !dayBookings.some((booking: any) => {
+            // Simple overlap check
+            const bookingStart = booking.start_time;
+            const bookingEnd = booking.end_time;
+            return !(avail.end_time <= bookingStart || avail.start_time >= bookingEnd);
+          });
+          
+          if (isSlotAvailable) {
+            availableSlots.push({
+              start: avail.start_time,
+              end: avail.end_time,
               available: true
-            }
-          ] : []
-        });
-      } else {
-        availability.push({
-          date: dateStr,
-          available: false,
-          slots: []
+            });
+          }
         });
       }
+      
+      availability.push({
+        date: dateStr,
+        available: availableSlots.length > 0,
+        slots: availableSlots
+      });
     }
 
     return jsonSuccess(c, { availability }, 'Availability retrieved successfully');
@@ -1218,21 +1315,106 @@ companions.delete('/:id/locations/:locationId',
 
 /**
  * Set companion availability
+ * 
+ * @swagger
+ * /companions/{id}/availability:
+ *   post:
+ *     summary: Set companion availability
+ *     description: Set availability for a companion
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         description: Companion ID
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: array
+ *             items:
+ *               type: object
+ *               properties:
+ *                 startDate:
+ *                   type: string
+ *                   format: date
+ *                   description: Start date in YYYY-MM-DD format
+ *                 endDate:
+ *                   type: string
+ *                   format: date
+ *                   description: End date in YYYY-MM-DD format
+ *                 startTime:
+ *                   type: string
+ *                   format: time
+ *                   description: Start time in HH:MM format
+ *                 endTime:
+ *                   type: string
+ *                   format: time
+ *                   description: End time in HH:MM format
+ *                 isAvailable:
+ *                   type: boolean
+ *                   default: true
+ *                   description: Whether the companion is available during this period
+ *     responses:
+ *       200:
+ *         description: Availability updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     updated:
+ *                       type: boolean
+ *                       example: true
+ *                 message:
+ *                   type: string
+ *                   example: Availability updated successfully
  */
 companions.post('/:id/availability', 
-  validateUUID('id'), 
-  zValidator('json', z.array(z.object({
-    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD format
-    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),   // YYYY-MM-DD format
-    startTime: z.string().regex(/^\d{2}:\d{2}$/),       // HH:MM format
-    endTime: z.string().regex(/^\d{2}:\d{2}$/),         // HH:MM format
-    isAvailable: z.boolean().default(true)
-  }))), 
   async (c) => {
-    const companionId = c.req.param('id');
-    const userId = c.get('userId');
-    const userType = c.get('userType');
-    const availabilityData = c.req.valid('json');
+  const companionId = c.req.param('id');
+  const userId = c.get('userId');
+  const userType = c.get('userType');
+  
+  // Parse and validate the request body
+  let availabilityData;
+  try {
+    availabilityData = await c.req.json();
+    
+    // Validate the data structure
+    if (!Array.isArray(availabilityData)) {
+      return jsonError(c, 'Invalid request format', 'Request body must be an array of availability objects', 400);
+    }
+    
+    // Validate each item in the array
+    for (const item of availabilityData) {
+      if (!item.startDate || !item.endDate || !item.startTime || !item.endTime) {
+        return jsonError(c, 'Missing required fields', 'Each availability object must include startDate, endDate, startTime, and endTime', 400);
+      }
+      
+      // Validate date format (YYYY-MM-DD)
+      const dateFormatRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateFormatRegex.test(item.startDate) || !dateFormatRegex.test(item.endDate)) {
+        return jsonError(c, 'Invalid date format', 'Dates must be in YYYY-MM-DD format', 400);
+      }
+      
+      // Validate time format (HH:MM)
+      const timeFormatRegex = /^\d{2}:\d{2}$/;
+      if (!timeFormatRegex.test(item.startTime) || !timeFormatRegex.test(item.endTime)) {
+        return jsonError(c, 'Invalid time format', 'Times must be in HH:MM format', 400);
+      }
+    }
+  } catch (error) {
+    return jsonError(c, 'Invalid JSON', 'Request body must be valid JSON', 400);
+  }
 
     // Only companions can set their own availability
     if (userType !== 'companion' || userId !== companionId) {

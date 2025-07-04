@@ -392,8 +392,8 @@ sortOrder?: "asc" | "desc"
 ### GET /companions/{id}/availability
 **Query Parameters:**
 ```
-startDate: string (YYYY-MM-DD)
-endDate: string (YYYY-MM-DD)
+startDate: string (YYYY-MM-DD) - Required
+endDate: string (YYYY-MM-DD) - Required
 ```
 
 **Response:**
@@ -403,12 +403,33 @@ endDate: string (YYYY-MM-DD)
   "data": {
     "availability": [
       {
-        "date": "YYYY-MM-DD",
+        "date": "2023-10-15",
         "available": true,
         "slots": [
           {
-            "start": "HH:MM",
-            "end": "HH:MM",
+            "start": "09:00",
+            "end": "17:00",
+            "available": true
+          },
+          {
+            "start": "18:00",
+            "end": "22:00",
+            "available": true
+          }
+        ]
+      },
+      {
+        "date": "2023-10-16",
+        "available": false,
+        "slots": []
+      },
+      {
+        "date": "2023-10-17",
+        "available": true,
+        "slots": [
+          {
+            "start": "10:00",
+            "end": "16:00",
             "available": true
           }
         ]
@@ -419,14 +440,36 @@ endDate: string (YYYY-MM-DD)
 }
 ```
 
-### POST /companions/:id/availability
+### POST /companions/{id}/availability
 **Request:**
 ```json
 [
   {
-    "dayOfWeek": 1,
+    "startDate": "2023-10-15",
+    "endDate": "2023-10-15",
     "startTime": "09:00",
     "endTime": "17:00",
+    "isAvailable": true
+  },
+  {
+    "startDate": "2023-10-15",
+    "endDate": "2023-10-15",
+    "startTime": "18:00",
+    "endTime": "22:00",
+    "isAvailable": true
+  },
+  {
+    "startDate": "2023-10-17",
+    "endDate": "2023-10-17",
+    "startTime": "10:00",
+    "endTime": "16:00",
+    "isAvailable": true
+  },
+  {
+    "startDate": "2023-10-20",
+    "endDate": "2023-10-25",
+    "startTime": "09:00",
+    "endTime": "18:00",
     "isAvailable": true
   }
 ]

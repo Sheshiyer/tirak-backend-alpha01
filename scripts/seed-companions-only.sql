@@ -26,34 +26,4 @@ INSERT OR IGNORE INTO companion_profiles (
 ('cp_007', 'companion_007', 'Siriwan', 'Prasert', 'Siriwan Prasert', 'Tour guide in Khon Kaen with focus on local traditions', NULL, '1992-07-27', 'female', 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=facearea&w=600&q=80', 'https://randomuser.me/api/portraits/women/27.jpg', 'Khon Kaen', '["th","en"]', '["City Tours","Cultural Experiences"]', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 ('cp_008', 'companion_008', 'Nattaya', 'Somchai', 'Nattaya Somchai', 'Nightlife and events specialist in Phuket', NULL, '1993-08-18', 'female', 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=facearea&w=600&q=80', 'https://randomuser.me/api/portraits/women/28.jpg', 'Phuket', '["th","en","ru"]', '["Nightlife","Dining"]', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 ('cp_009', 'companion_009', 'Pimchanok', 'Anand', 'Pimchanok Anand', 'Tour and shopping expert in Bangkok with fashion background', NULL, '1990-09-09', 'female', 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=facearea&w=600&q=80', 'https://randomuser.me/api/portraits/women/29.jpg', 'Bangkok', '["th","en","kr"]', '["Shopping","City Tours"]', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('cp_010', 'companion_010', 'Lalana', 'Wichit', 'Lalana Wichit', 'Dining and cultural experiences specialist in Chiang Mai', NULL, '1991-10-30', 'female', 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=facearea&w=600&q=80', 'https://randomuser.me/api/portraits/women/30.jpg', 'Chiang Mai', '["th","en"]', '["Dining","Cultural Experiences"]', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-
--- === 10 Customers (seeded) ===
--- Password for all: customer123 (hash below is bcrypt for 'customer123')
-INSERT OR IGNORE INTO users (
-    id, email, phone, password_hash, user_type, status, email_verified, phone_verified, preferred_language, created_at, updated_at
-) VALUES 
-('customer_011', 'wichai.srisuk.11@gmail.com', '+66812341011', '$2a$12$LQv3c1yqBwEHXw.9UdN.ue6tMZjz2Z8qJ5U5J5U5J5U5J5U5J5U5J5', 'customer', 'active', TRUE, TRUE, 'th', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_012', 'supaporn.jaidee.12@gmail.com', '+66812341012', '$2a$12$LQv3c1yqBwEHXw.9UdN.ue6tMZjz2Z8qJ5U5J5U5J5U5J5U5J5U5J5', 'customer', 'active', TRUE, TRUE, 'th', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_013', 'preecha.sukjai.13@gmail.com', '+66812341013', '$2a$12$LQv3c1yqBwEHXw.9UdN.ue6tMZjz2Z8qJ5U5J5U5J5U5J5U5J5U5J5', 'customer', 'active', TRUE, TRUE, 'th', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_014', 'siriporn.thongdee.14@gmail.com', '+66812341014', '$2a$12$LQv3c1yqBwEHXw.9UdN.ue6tMZjz2Z8qJ5U5J5U5J5U5J5U5J5U5J5', 'customer', 'active', TRUE, TRUE, 'th', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_015', 'anan.janphen.15@gmail.com', '+66812341015', '$2a$12$LQv3c1yqBwEHXw.9UdN.ue6tMZjz2Z8qJ5U5J5U5J5U5J5U5J5U5J5', 'customer', 'active', TRUE, TRUE, 'th', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_016', 'jaruwan.boonmee.16@gmail.com', '+66812341016', '$2a$12$LQv3c1yqBwEHXw.9UdN.ue6tMZjz2Z8qJ5U5J5U5J5U5J5U5J5U5J5', 'customer', 'active', TRUE, TRUE, 'th', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_017', 'kanya.rattanakul.17@gmail.com', '+66812341017', '$2a$12$LQv3c1yqBwEHXw.9UdN.ue6tMZjz2Z8qJ5U5J5U5J5U5J5U5J5U5J5', 'customer', 'active', TRUE, TRUE, 'th', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_018', 'manop.srisuk.18@gmail.com', '+66812341018', '$2a$12$LQv3c1yqBwEHXw.9UdN.ue6tMZjz2Z8qJ5U5J5U5J5U5J5U5J5U5J5', 'customer', 'active', TRUE, TRUE, 'th', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_019', 'somchai.jaidee.19@gmail.com', '+66812341019', '$2a$12$LQv3c1yqBwEHXw.9UdN.ue6tMZjz2Z8qJ5U5J5U5J5U5J5U5J5U5J5', 'customer', 'active', TRUE, TRUE, 'th', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_020', 'orathai.wattanakul.20@gmail.com', '+66812341020', '$2a$12$LQv3c1yqBwEHXw.9UdN.ue6tMZjz2Z8qJ5U5J5U5J5U5J5U5J5U5J5', 'customer', 'active', TRUE, TRUE, 'th', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-
-INSERT OR IGNORE INTO customer_profiles (
-    user_id, display_name, preferences, created_at, updated_at
-) VALUES 
-('customer_011', 'Wichai Srisuk', '{"language":"th"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_012', 'Supaporn Jaidee', '{"language":"th"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_013', 'Preecha Sukjai', '{"language":"th"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_014', 'Siriporn Thongdee', '{"language":"th"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_015', 'Anan Janphen', '{"language":"th"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_016', 'Jaruwan Boonmee', '{"language":"th"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_017', 'Kanya Rattanakul', '{"language":"th"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_018', 'Manop Srisuk', '{"language":"th"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_019', 'Somchai Jaidee', '{"language":"th"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('customer_020', 'Orathai Wattanakul', '{"language":"th"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+('cp_010', 'companion_010', 'Lalana', 'Wichit', 'Lalana Wichit', 'Dining and cultural experiences specialist in Chiang Mai', NULL, '1991-10-30', 'female', 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=facearea&w=600&q=80', 'https://randomuser.me/api/portraits/women/30.jpg', 'Chiang Mai', '["th","en"]', '["Dining","Cultural Experiences"]', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP); 
