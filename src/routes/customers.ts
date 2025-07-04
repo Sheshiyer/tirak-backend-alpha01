@@ -5,7 +5,7 @@ import {
   reviewSchema
 } from '../utils/validation';
 import { validateUUID, validatePagination } from '../middleware/validation';
-import { authMiddleware, customerOnly, adminOnly } from '../middleware/auth';
+import { authMiddleware, adminOnly } from '../middleware/auth';
 import { createRateLimit } from '../middleware/rateLimit';
 import { 
   getUserById, 
@@ -131,7 +131,6 @@ customers.get('/all', async (c) => {
 
 // Now apply middleware for all other routes
 customers.use('*', authMiddleware);
-customers.use('*', customerOnly);
 
 // Apply rate limiting
 customers.use('*', createRateLimit('general'));

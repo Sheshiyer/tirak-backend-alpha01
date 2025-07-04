@@ -282,9 +282,9 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
     query += ` GROUP BY cp.user_id`;
 
     // Add sorting
-    const sortColumn = searchParams.sortBy === 'rating' ? '0' : // No rating system yet
+    const sortColumn = searchParams.sortBy === 'rating' ? 'cp.created_at' : // Use created_at instead of '0'
                       searchParams.sortBy === 'price' ? 'price' :
-                      searchParams.sortBy === 'reviews' ? '0' : // No review count yet
+                      searchParams.sortBy === 'reviews' ? 'cp.created_at' : // Use created_at instead of '0'
                       'cp.created_at';
     
     query += ` ORDER BY ${sortColumn} ${searchParams.sortOrder.toUpperCase()}`;

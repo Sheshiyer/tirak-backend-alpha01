@@ -31,12 +31,14 @@
   "author": "Tirak Team",
   "license": "MIT",
   "dependencies": {
+    "@faker-js/faker": "^9.9.0",
     "@hono/zod-validator": "^0.7.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.9",
     "bcryptjs": "^3.0.2",
     "hono": "^4.7.11",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250607.0",
