@@ -24,8 +24,7 @@ const createBookingSchema = z.object({
   endTime: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be in HH:MM format'),
   duration: z.number().min(30, 'Minimum duration is 30 minutes').max(1440, 'Maximum duration is 24 hours'),
   location: z.string().max(500, 'Location too long').optional(),
-  specialRequests: z.string().max(1000, 'Special requests too long').optional(),
-  paymentMethodId: z.string().uuid('Invalid payment method ID')
+  specialRequests: z.string().max(1000, 'Special requests too long').optional()
 });
 
 // Booking status update schema
@@ -137,15 +136,15 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
         id, customer_id, companion_id, service_id, experience_id, date, start_time, end_time,
         duration, location, special_requests, customer_preferences, preferred_language,
         group_composition, dietary_requirements, status, total_amount, service_fee,
-        payment_method_id, payment_status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        payment_status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       bookingId, userId, bookingData.companionId, bookingData.serviceId, bookingData.experienceId,
       bookingData.date, bookingData.startTime, bookingData.endTime,
       bookingData.duration, bookingData.location, bookingData.specialRequests,
       JSON.stringify(bookingData.customerPreferences || {}), bookingData.preferredLanguage,
       bookingData.groupComposition, bookingData.dietaryRequirements,
-      'pending', totalAmount, serviceFee, bookingData.paymentMethodId,
+      'pending', totalAmount, serviceFee,
       'pending', now, now
     ).run();
 

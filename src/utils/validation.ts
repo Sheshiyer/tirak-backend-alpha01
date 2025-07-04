@@ -112,15 +112,28 @@ export const enhancedBookingSchema = z.object({
   endTime: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be in HH:MM format'),
   duration: z.number().min(30, 'Minimum duration is 30 minutes').max(1440, 'Maximum duration is 24 hours'),
   location: z.string().max(500, 'Location too long').optional(),
-  customerPreferences: z.object({
-    title: z.string().max(255, 'Title too long').optional(),
-    description: z.string().max(1000, 'Description too long').optional()
-  }).optional(),
   specialRequests: z.string().max(1000, 'Special requests too long').optional(),
-  preferredLanguage: z.string().max(50, 'Language name too long').optional(),
-  groupComposition: z.string().max(255, 'Group composition too long').optional(),
-  dietaryRequirements: z.string().max(500, 'Dietary requirements too long').optional(),
-  paymentMethodId: z.string().uuid('Invalid payment method ID')
+  customerPreferences: z.record(z.any()).optional(),
+  preferredLanguage: z.string().optional(),
+  groupComposition: z.string().optional(),
+  dietaryRequirements: z.string().optional()
+});
+
+// For backward compatibility with simple booking
+export const simpleBookingSchema = enhancedBookingSchema.omit({
+  companionId: true,
+  serviceId: true,
+  experienceId: true,
+  date: true,
+  startTime: true,
+  endTime: true,
+  duration: true,
+  location: true,
+  specialRequests: true,
+  customerPreferences: true,
+  preferredLanguage: true,
+  groupComposition: true,
+  dietaryRequirements: true
 });
 
 // Supplier search schema
