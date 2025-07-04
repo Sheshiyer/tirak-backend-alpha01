@@ -696,23 +696,48 @@ users.put('/:id/status', validateUUID('id'), zValidator('json', companionStatusS
 
   try {
     // Check if the user is a companion/supplier
-    const user = await c.env.DB.prepare('SELECT user_type FROM users WHERE id = ?').bind(userId).first();
+    const user = await c.env.DB.prepare('SELECT id, user_type, email FROM users WHERE id = ?').bind(userId).first();
 
     if (!user) {
       return jsonError(c, 'User not found', 'The specified user does not exist.', 404);
     }
 
-    if (user.user_type !== 'supplier' && user.user_type !== 'companion') {
-      return jsonError(c, 'Invalid user type', 'This action can only be performed on a companion.', 400);
+    let profileTable = '';
+    if (user.user_type === 'supplier') {
+      profileTable = 'supplier_profiles';
+    } else if (user.user_type === 'companion') {
+      profileTable = 'companion_profiles';
+    } else {
+      return jsonError(c, 'Invalid user type', 'This action can only be performed on a companion or supplier.', 400);
     }
     
-    // Update the verification_status in the supplier_profiles table
-    const result = await c.env.DB.prepare(
-      'UPDATE supplier_profiles SET verification_status = ?, rejection_reason = ? WHERE user_id = ?'
-    ).bind(status, status === 'rejected' ? rejectionReason : null, userId).run();
+    // Check if a profile already exists
+    const existingProfile = await c.env.DB.prepare(`SELECT user_id FROM ${profileTable} WHERE user_id = ?`)
+      .bind(userId)
+      .first();
 
-    if (result.meta.changes === 0) {
-      return jsonError(c, 'Profile not found', 'No companion profile exists for this user to update.', 404);
+    if (existingProfile) {
+      // Update the existing profile
+      await c.env.DB.prepare(
+        `UPDATE ${profileTable} SET verification_status = ?, rejection_reason = ? WHERE user_id = ?`
+      ).bind(status, status === 'rejected' ? rejectionReason : null, userId).run();
+    } else {
+      // If no profile exists, create one with the new status
+      await c.env.DB.prepare(`
+        INSERT INTO ${profileTable} (
+          user_id, 
+          display_name, 
+          verification_status, 
+          rejection_reason,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).bind(
+        userId,
+        user.email || 'New Profile', // Fallback display name
+        status,
+        status === 'rejected' ? rejectionReason : null
+      ).run();
     }
 
     // Optionally, send a notification to the companion about the status change
