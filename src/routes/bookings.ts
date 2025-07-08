@@ -181,14 +181,16 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
     }
 
     // Send notification to companion
-    await c.env.NOTIFICATION_QUEUE.send({
-      type: 'booking_request',
-      userId: bookingData.companionId,
-      title: 'New Booking Request',
-      message: `You have a new booking request for ${bookingData.date}`,
-      data: { bookingId },
-      timestamp: now
-    });
+    if (c.env.NOTIFICATION_QUEUE && typeof c.env.NOTIFICATION_QUEUE.send === 'function') {
+      await c.env.NOTIFICATION_QUEUE.send({
+        type: 'booking_request',
+        userId: bookingData.companionId,
+        title: 'New Booking Request',
+        message: `You have a new booking request for ${bookingData.date}`,
+        data: { bookingId },
+        timestamp: now
+      });
+    }
 
     // Get created booking with details
     const createdBooking = await c.env.DB.prepare(`
@@ -766,14 +768,16 @@ bookings.put('/:id/status', validateUUID('id'), zValidator('json', updateBooking
 
     // Send notifications
     const otherUserId = booking.customer_id === userId ? booking.companion_id : booking.customer_id;
-    await c.env.NOTIFICATION_QUEUE.send({
-      type: 'booking_status_update',
-      userId: otherUserId,
-      title: 'Booking Status Updated',
-      message: `Your booking status has been changed to ${status}`,
-      data: { bookingId, status, reason },
-      timestamp: now
-    });
+    if (c.env.NOTIFICATION_QUEUE && typeof c.env.NOTIFICATION_QUEUE.send === 'function') {
+      await c.env.NOTIFICATION_QUEUE.send({
+        type: 'booking_status_update',
+        userId: otherUserId,
+        title: 'Booking Status Updated',
+        message: `Your booking status has been changed to ${status}`,
+        data: { bookingId, status, reason },
+        timestamp: now
+      });
+    }
 
     // Track status change event
     if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
