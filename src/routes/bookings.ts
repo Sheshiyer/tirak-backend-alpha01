@@ -147,7 +147,8 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
       bookingData.groupComposition, bookingData.dietaryRequirements,
       bookingData.meetingPoint, bookingData.template, 
       JSON.stringify(bookingData.preferredLanguages || []), 
-      bookingData.dietaryRestrictions, bookingData.accessibilityNeeds,
+      JSON.stringify(bookingData.dietaryRestrictions || []), 
+      JSON.stringify(bookingData.accessibilityNeeds || []),
       'pending', totalAmount, serviceFee,
       'pending', now, now
     ).run();
@@ -423,8 +424,20 @@ bookings.get('/:id/summary', validateUUID('id'), async (c) => {
           return [];
         }
       })(),
-      dietaryRestrictions: booking.dietary_restrictions,
-      accessibilityNeeds: booking.accessibility_needs,
+      dietaryRestrictions: (() => {
+        try {
+          return booking.dietary_restrictions ? JSON.parse(booking.dietary_restrictions as string) : [];
+        } catch {
+          return [];
+        }
+      })(),
+      accessibilityNeeds: (() => {
+        try {
+          return booking.accessibility_needs ? JSON.parse(booking.accessibility_needs as string) : [];
+        } catch {
+          return [];
+        }
+      })(),
       status: booking.status,
       totalAmount: booking.total_amount,
       serviceFee: booking.service_fee,
@@ -669,8 +682,20 @@ bookings.get('/:id', validateUUID('id'), async (c) => {
             return [];
           }
         })(),
-        dietaryRestrictions: booking.dietary_restrictions,
-        accessibilityNeeds: booking.accessibility_needs,
+        dietaryRestrictions: (() => {
+          try {
+            return booking.dietary_restrictions ? JSON.parse(booking.dietary_restrictions as string) : [];
+          } catch {
+            return [];
+          }
+        })(),
+        accessibilityNeeds: (() => {
+          try {
+            return booking.accessibility_needs ? JSON.parse(booking.accessibility_needs as string) : [];
+          } catch {
+            return [];
+          }
+        })(),
         status: booking.status,
         totalAmount: booking.total_amount,
         serviceFee: booking.service_fee,

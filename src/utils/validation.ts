@@ -121,8 +121,8 @@ export const enhancedBookingSchema = z.object({
   preferredLanguages: z.array(z.string()).optional(),
   groupComposition: z.string().optional(),
   dietaryRequirements: z.string().optional(),
-  dietaryRestrictions: z.string().max(500, 'Dietary restrictions too long').optional(),
-  accessibilityNeeds: z.string().max(500, 'Accessibility needs too long').optional()
+  dietaryRestrictions: z.array(z.string()).optional(),
+  accessibilityNeeds: z.array(z.string()).optional()
 });
 
 // For backward compatibility with simple booking

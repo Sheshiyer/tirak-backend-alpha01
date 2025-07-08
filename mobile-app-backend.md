@@ -845,8 +845,8 @@ endDate: string (YYYY-MM-DD) - Required
   "preferredLanguages": ["string"]?,
   "groupComposition": "string?",
   "dietaryRequirements": "string?",
-  "dietaryRestrictions": "string?",
-  "accessibilityNeeds": "string?",
+  "dietaryRestrictions": ["string"]?,
+  "accessibilityNeeds": ["string"]?,
   "paymentMethodId": "string"
 }
 ```
@@ -892,8 +892,8 @@ endDate: string (YYYY-MM-DD) - Required
       "preferredLanguages": ["string"]?,
       "groupComposition": "string?",
       "dietaryRequirements": "string?",
-      "dietaryRestrictions": "string?",
-      "accessibilityNeeds": "string?",
+      "dietaryRestrictions": ["string"]?,
+      "accessibilityNeeds": ["string"]?,
       "status": "pending" | "confirmed" | "in_progress" | "completed" | "cancelled",
       "totalAmount": number,
       "serviceFee": number,
@@ -1008,8 +1008,8 @@ limit?: number
       "preferredLanguages": ["string"]?,
       "groupComposition": "string?",
       "dietaryRequirements": "string?",
-      "dietaryRestrictions": "string?",
-      "accessibilityNeeds": "string?",
+      "dietaryRestrictions": ["string"]?,
+      "accessibilityNeeds": ["string"]?,
       "status": "string",
       "totalAmount": number,
       "serviceFee": number,
