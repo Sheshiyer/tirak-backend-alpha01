@@ -144,7 +144,7 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
         duration, location, special_requests, meeting_point, template, preferred_languages,
         dietary_restrictions, accessibility_needs, status, total_amount, service_fee,
         payment_status, scheduled_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       bookingId, userId, bookingData.companionId, bookingData.companionId, bookingData.serviceId,
       bookingData.date, bookingData.startTime, endTime,
