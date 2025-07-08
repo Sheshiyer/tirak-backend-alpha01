@@ -136,16 +136,17 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
     // Create booking
     const bookingId = crypto.randomUUID();
     const now = new Date().toISOString();
+    const scheduledAt = new Date(`${bookingData.date}T${bookingData.startTime}`).toISOString();
 
     await c.env.DB.prepare(`
       INSERT INTO bookings (
-        id, customer_id, companion_id, service_id, experience_id, date, start_time, end_time,
+        id, customer_id, supplier_id, companion_id, service_id, experience_id, date, start_time, end_time,
         duration, location, special_requests, meeting_point, template, preferred_languages,
         dietary_restrictions, accessibility_needs, status, total_amount, service_fee,
-        payment_status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        payment_status, scheduled_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      bookingId, userId, bookingData.companionId, bookingData.serviceId,
+      bookingId, userId, bookingData.companionId, bookingData.companionId, bookingData.serviceId,
       bookingData.date, bookingData.startTime, endTime,
       bookingData.duration, bookingData.location || null, bookingData.specialRequests || null,
       bookingData.meetingPoint || null, bookingData.template || null, 
@@ -153,7 +154,7 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
       JSON.stringify(bookingData.dietaryRestrictions || null), 
       JSON.stringify(bookingData.accessibilityNeeds || null),
       'pending', totalAmount, serviceFee,
-      'pending', now, now
+      'pending', scheduledAt, now, now
     ).run();
 
     // Create booking timeline entry
