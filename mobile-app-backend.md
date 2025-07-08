@@ -829,32 +829,24 @@ endDate: string (YYYY-MM-DD) - Required
 {
   "companionId": "string",
   "serviceId": "string?",
-  "experienceId": "string?",
   "date": "string",
   "startTime": "string",
-  "endTime": "string",
+  "endTime": "string?",
   "duration": number,
   "location": "string?",
+  "specialRequests": "string?",
   "meetingPoint": "string?",
   "template": "string?",
-  "specialRequests": "string?",
-  "customerPreferences": {
-    "key": "value"
-  }?,
-  "preferredLanguage": "string?",
   "preferredLanguages": ["string"]?,
-  "groupComposition": "string?",
-  "dietaryRequirements": "string?",
   "dietaryRestrictions": ["string"]?,
-  "accessibilityNeeds": ["string"]?,
-  "paymentMethodId": "string"
+  "accessibilityNeeds": ["string"]?
 }
 ```
 
 **Response:**
 ```json
 {
-  "success": boolean,
+  "success": true,
   "data": {
     "booking": {
       "id": "string",
@@ -862,47 +854,35 @@ endDate: string (YYYY-MM-DD) - Required
       "companion": {
         "id": "string",
         "name": "string",
-        "profileImage": "string"
+        "profileImage": "string?"
       },
       "customerId": "string",
       "serviceId": "string?",
       "service": {
-        "id": "string",
-        "name": "string",
-        "price": number
-      }?,
-      "experienceId": "string?",
-      "experience": {
-        "id": "string",
-        "name": "string",
-        "price": number
-      }?,
+        "id": "string?",
+        "name": "string?",
+        "price": number?
+      },
       "date": "string",
       "startTime": "string",
       "endTime": "string",
       "duration": number,
       "location": "string?",
+      "specialRequests": "string?",
       "meetingPoint": "string?",
       "template": "string?",
-      "specialRequests": "string?",
-      "customerPreferences": {
-        "key": "value"
-      }?,
-      "preferredLanguage": "string?",
-      "preferredLanguages": ["string"]?,
-      "groupComposition": "string?",
-      "dietaryRequirements": "string?",
-      "dietaryRestrictions": ["string"]?,
-      "accessibilityNeeds": ["string"]?,
+      "preferredLanguages": ["string"],
+      "dietaryRestrictions": ["string"],
+      "accessibilityNeeds": ["string"],
       "status": "pending" | "confirmed" | "in_progress" | "completed" | "cancelled",
       "totalAmount": number,
       "serviceFee": number,
-      "paymentStatus": "pending" | "paid" | "refunded",
+      "paymentStatus": "pending" | "paid" | "refunded" | "failed",
       "createdAt": "string",
       "updatedAt": "string"
     }
   },
-  "message": "string"
+  "message": "Booking created successfully"
 }
 ```
 

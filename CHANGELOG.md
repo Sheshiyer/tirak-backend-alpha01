@@ -4,6 +4,17 @@ All notable changes to the Tirak Backend will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Bookings**: Simplified booking creation API to only require essential fields and made `endTime` optional (automatically calculated from `startTime` + `duration` if not provided).
+
+### Added
+- **Bookings**: Enhanced booking system with additional fields: `meetingPoint`, `template`, `preferredLanguages` (array), `dietaryRestrictions` (array), and `accessibilityNeeds` (array) to better accommodate customer requirements.
+- Database migration documentation in DATABASE_MIGRATIONS.md
+- Error fix guide in ERROR_COMPANION_EXPERIENCES_FIX.md
+- Automatic database table check on application startup
+- Helper scripts for database migration management
+- **Bookings**: Enhanced booking system with additional fields: `meetingPoint`, `template`, `preferredLanguages` (array), `dietaryRestrictions` (array), and `accessibilityNeeds` (array) to better accommodate customer requirements.
+
 ### Fixed
 - **Auth**: Fixed an issue in the login route where the display name for 'companion' users was being looked up in the wrong table. It now correctly queries `companion_profiles`.
 - **Auth**: Fixed user registration to use the provided `name` for the profile's `displayName` instead of deriving it from the email.
@@ -21,13 +32,6 @@ All notable changes to the Tirak Backend will be documented in this file.
 - **API**: Fixed 500 Internal Server Error in companion details endpoint by adding null checks for database query results and safe JSON parsing with try-catch blocks
 - **API**: Fixed reviews query in companion details endpoint to use `companion_profiles` table for reviewer display names and profile images
 - **API**: Fixed companion details endpoint to use LEFT JOIN like "get all companions" endpoint, allowing companions without profiles to be retrieved
-
-### Added
-- Database migration documentation in DATABASE_MIGRATIONS.md
-- Error fix guide in ERROR_COMPANION_EXPERIENCES_FIX.md
-- Automatic database table check on application startup
-- Helper scripts for database migration management
-- **Bookings**: Enhanced booking system with additional fields: `meetingPoint`, `template`, `preferredLanguages` (array), `dietaryRestrictions` (array), and `accessibilityNeeds` (array) to better accommodate customer requirements.
 
 ## [1.0.0] - 2023-06-30
 

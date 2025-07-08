@@ -107,20 +107,15 @@ export const availabilitySchema = z.object({
 export const enhancedBookingSchema = z.object({
   companionId: z.string().uuid('Invalid companion ID'),
   serviceId: z.string().uuid('Invalid service ID').optional(),
-  experienceId: z.string().uuid('Invalid experience ID').optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
   startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Start time must be in HH:MM format'),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be in HH:MM format'),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be in HH:MM format').optional(),
   duration: z.number().min(30, 'Minimum duration is 30 minutes').max(1440, 'Maximum duration is 24 hours'),
   location: z.string().max(500, 'Location too long').optional(),
-  meetingPoint: z.string().max(500, 'Meeting point too long').optional(),
-  template: z.string().max(100, 'Template name too long').optional(),
   specialRequests: z.string().max(1000, 'Special requests too long').optional(),
-  customerPreferences: z.record(z.any()).optional(),
-  preferredLanguage: z.string().optional(),
+  meetingPoint: z.string().max(500, 'Meeting point too long').optional(),
+  template: z.string().max(500, 'Template too long').optional(),
   preferredLanguages: z.array(z.string()).optional(),
-  groupComposition: z.string().optional(),
-  dietaryRequirements: z.string().optional(),
   dietaryRestrictions: z.array(z.string()).optional(),
   accessibilityNeeds: z.array(z.string()).optional()
 });
@@ -129,17 +124,17 @@ export const enhancedBookingSchema = z.object({
 export const simpleBookingSchema = enhancedBookingSchema.omit({
   companionId: true,
   serviceId: true,
-  experienceId: true,
   date: true,
   startTime: true,
   endTime: true,
   duration: true,
   location: true,
   specialRequests: true,
-  customerPreferences: true,
-  preferredLanguage: true,
-  groupComposition: true,
-  dietaryRequirements: true
+  meetingPoint: true,
+  template: true,
+  preferredLanguages: true,
+  dietaryRestrictions: true,
+  accessibilityNeeds: true
 });
 
 // Supplier search schema

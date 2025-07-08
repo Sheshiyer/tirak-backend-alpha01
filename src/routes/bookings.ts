@@ -49,6 +49,29 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
       return jsonError(c, 'Access denied', 'Only customers can create bookings', 403);
     }
 
+    // Calculate endTime if not provided
+    let endTime: string = bookingData.endTime || '';
+    if (!endTime) {
+      // Parse startTime and add duration in minutes
+      const timeParts = bookingData.startTime.split(':');
+      if (timeParts.length === 2) {
+        const hours = parseInt(timeParts[0] || '0', 10);
+        const minutes = parseInt(timeParts[1] || '0', 10);
+        
+        if (!isNaN(hours) && !isNaN(minutes)) {
+          let endHours = hours + Math.floor((minutes + bookingData.duration) / 60);
+          let endMinutes = (minutes + bookingData.duration) % 60;
+          
+          // Format properly with leading zeros
+          endTime = `${endHours.toString().padStart(2, '0')}:${endMinutes.toString().padStart(2, '0')}`;
+        } else {
+          return jsonError(c, 'Invalid time format', 'Start time must be in HH:MM format', 400);
+        }
+      } else {
+        return jsonError(c, 'Invalid time format', 'Start time must be in HH:MM format', 400);
+      }
+    }
+
     // Validate companion exists and is available
     const companion = await c.env.DB.prepare(`
       SELECT sp.user_id, sp.display_name, sp.verification_status, sp.subscription_status,
@@ -62,20 +85,6 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
 
     if (!companion) {
       return jsonError(c, 'Companion not found', 'The selected companion is not available', 404);
-    }
-
-    // Validate experience if provided (for companions)
-    let experience = null;
-    if (bookingData.experienceId) {
-      experience = await c.env.DB.prepare(`
-        SELECT id, title, price, currency, duration_minutes
-        FROM companion_experiences
-        WHERE id = ? AND companion_id = ? AND is_active = TRUE
-      `).bind(bookingData.experienceId, bookingData.companionId).first();
-
-      if (!experience) {
-        return jsonError(c, 'Experience not found', 'The selected experience is not available', 404);
-      }
     }
 
     // Validate service if provided (for suppliers)
@@ -106,8 +115,8 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
       bookingData.companionId,
       bookingData.date,
       bookingData.startTime, bookingData.startTime,
-      bookingData.endTime, bookingData.endTime,
-      bookingData.startTime, bookingData.endTime
+      endTime, endTime,
+      bookingData.startTime, endTime
     ).first();
 
     if (conflictCheck) {
@@ -116,9 +125,7 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
 
     // Calculate pricing
     let basePrice = 0;
-    if (experience) {
-      basePrice = Number(experience.price) || 0;
-    } else if (service) {
+    if (service) {
       basePrice = Number(service.price_min) || 0;
     } else {
       basePrice = 1000; // Default rate
@@ -134,21 +141,18 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
     await c.env.DB.prepare(`
       INSERT INTO bookings (
         id, customer_id, companion_id, service_id, experience_id, date, start_time, end_time,
-        duration, location, special_requests, customer_preferences, preferred_language,
-        group_composition, dietary_requirements, meeting_point, template, preferred_languages,
+        duration, location, special_requests, meeting_point, template, preferred_languages,
         dietary_restrictions, accessibility_needs, status, total_amount, service_fee,
         payment_status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      bookingId, userId, bookingData.companionId, bookingData.serviceId, bookingData.experienceId,
-      bookingData.date, bookingData.startTime, bookingData.endTime,
-      bookingData.duration, bookingData.location, bookingData.specialRequests,
-      JSON.stringify(bookingData.customerPreferences || {}), bookingData.preferredLanguage,
-      bookingData.groupComposition, bookingData.dietaryRequirements,
-      bookingData.meetingPoint, bookingData.template, 
-      JSON.stringify(bookingData.preferredLanguages || []), 
-      JSON.stringify(bookingData.dietaryRestrictions || []), 
-      JSON.stringify(bookingData.accessibilityNeeds || []),
+      bookingId, userId, bookingData.companionId, bookingData.serviceId,
+      bookingData.date, bookingData.startTime, endTime,
+      bookingData.duration, bookingData.location || null, bookingData.specialRequests || null,
+      bookingData.meetingPoint || null, bookingData.template || null, 
+      JSON.stringify(bookingData.preferredLanguages || null), 
+      JSON.stringify(bookingData.dietaryRestrictions || null), 
+      JSON.stringify(bookingData.accessibilityNeeds || null),
       'pending', totalAmount, serviceFee,
       'pending', now, now
     ).run();
@@ -168,10 +172,8 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
           bookingId,
           companionId: bookingData.companionId,
           serviceId: bookingData.serviceId,
-          experienceId: bookingData.experienceId,
           totalAmount,
           duration: bookingData.duration,
-          hasPreferences: !!bookingData.customerPreferences,
           hasSpecialRequests: !!bookingData.specialRequests
         },
         timestamp: now
@@ -211,8 +213,6 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
 
     const companionImages = createdBooking.companion_profile_image ? 
       JSON.parse(createdBooking.companion_profile_image as string) : [];
-    const customerPrefs = createdBooking.customer_preferences ? 
-      JSON.parse(createdBooking.customer_preferences as string) : {};
 
     return jsonSuccess(c, {
       booking: {
@@ -242,15 +242,29 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
         duration: createdBooking.duration,
         location: createdBooking.location,
         specialRequests: createdBooking.special_requests,
-        customerPreferences: customerPrefs,
-        preferredLanguage: createdBooking.preferred_language,
-        groupComposition: createdBooking.group_composition,
-        dietaryRequirements: createdBooking.dietary_requirements,
         meetingPoint: createdBooking.meeting_point,
         template: createdBooking.template,
-        preferredLanguages: createdBooking.preferred_languages ? JSON.parse(createdBooking.preferred_languages as string) : [],
-        dietaryRestrictions: createdBooking.dietary_restrictions,
-        accessibilityNeeds: createdBooking.accessibility_needs,
+        preferredLanguages: (() => {
+          try {
+            return createdBooking.preferred_languages ? JSON.parse(createdBooking.preferred_languages as string) : [];
+          } catch {
+            return [];
+          }
+        })(),
+        dietaryRestrictions: (() => {
+          try {
+            return createdBooking.dietary_restrictions ? JSON.parse(createdBooking.dietary_restrictions as string) : [];
+          } catch {
+            return [];
+          }
+        })(),
+        accessibilityNeeds: (() => {
+          try {
+            return createdBooking.accessibility_needs ? JSON.parse(createdBooking.accessibility_needs as string) : [];
+          } catch {
+            return [];
+          }
+        })(),
         status: createdBooking.status,
         totalAmount: createdBooking.total_amount,
         serviceFee: createdBooking.service_fee,
