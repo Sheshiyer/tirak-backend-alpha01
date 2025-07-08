@@ -74,12 +74,12 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
 
     // Validate companion exists and is available
     const companion = await c.env.DB.prepare(`
-      SELECT cp.user_id, cp.display_name, 
+      SELECT cp.user_id, cp.display_name,
              u.status as user_status, u.user_type
       FROM companion_profiles cp
       JOIN users u ON cp.user_id = u.id
       WHERE cp.user_id = ? AND u.status = 'active'
-        AND u.user_type = 'companion'
+        AND u.user_type IN ('supplier', 'companion')
     `).bind(bookingData.companionId).first();
 
     if (!companion) {
@@ -103,19 +103,14 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
     // Check for booking conflicts
     const conflictCheck = await c.env.DB.prepare(`
       SELECT id FROM bookings
-      WHERE companion_id = ? AND date = ? 
+      WHERE companion_id = ? AND date = ?
         AND status IN ('pending', 'confirmed', 'in_progress')
-        AND (
-          (start_time <= ? AND end_time > ?) OR
-          (start_time < ? AND end_time >= ?) OR
-          (start_time >= ? AND end_time <= ?)
-        )
+        AND (start_time < ? AND end_time > ?)
     `).bind(
       bookingData.companionId,
       bookingData.date,
-      bookingData.startTime, bookingData.startTime,
-      endTime, endTime,
-      bookingData.startTime, endTime
+      endTime,
+      bookingData.startTime
     ).first();
 
     if (conflictCheck) {
