@@ -829,12 +829,24 @@ endDate: string (YYYY-MM-DD) - Required
 {
   "companionId": "string",
   "serviceId": "string?",
+  "experienceId": "string?",
   "date": "string",
   "startTime": "string",
   "endTime": "string",
   "duration": number,
   "location": "string?",
+  "meetingPoint": "string?",
+  "template": "string?",
   "specialRequests": "string?",
+  "customerPreferences": {
+    "key": "value"
+  }?,
+  "preferredLanguage": "string?",
+  "preferredLanguages": ["string"]?,
+  "groupComposition": "string?",
+  "dietaryRequirements": "string?",
+  "dietaryRestrictions": "string?",
+  "accessibilityNeeds": "string?",
   "paymentMethodId": "string"
 }
 ```
@@ -859,12 +871,29 @@ endDate: string (YYYY-MM-DD) - Required
         "name": "string",
         "price": number
       }?,
+      "experienceId": "string?",
+      "experience": {
+        "id": "string",
+        "name": "string",
+        "price": number
+      }?,
       "date": "string",
       "startTime": "string",
       "endTime": "string",
       "duration": number,
       "location": "string?",
+      "meetingPoint": "string?",
+      "template": "string?",
       "specialRequests": "string?",
+      "customerPreferences": {
+        "key": "value"
+      }?,
+      "preferredLanguage": "string?",
+      "preferredLanguages": ["string"]?,
+      "groupComposition": "string?",
+      "dietaryRequirements": "string?",
+      "dietaryRestrictions": "string?",
+      "accessibilityNeeds": "string?",
       "status": "pending" | "confirmed" | "in_progress" | "completed" | "cancelled",
       "totalAmount": number,
       "serviceFee": number,
@@ -904,11 +933,17 @@ limit?: number
           "name": "string",
           "price": number
         }?,
+        "experience": {
+          "id": "string",
+          "name": "string",
+          "price": number
+        }?,
         "date": "string",
         "startTime": "string",
         "endTime": "string",
         "duration": number,
         "location": "string?",
+        "meetingPoint": "string?",
         "status": "string",
         "totalAmount": number,
         "paymentStatus": "string",
@@ -952,12 +987,29 @@ limit?: number
         "description": "string",
         "price": number
       }?,
+      "experience": {
+        "id": "string",
+        "name": "string",
+        "description": "string",
+        "price": number
+      }?,
       "date": "string",
       "startTime": "string",
       "endTime": "string",
       "duration": number,
       "location": "string?",
+      "meetingPoint": "string?",
+      "template": "string?",
       "specialRequests": "string?",
+      "customerPreferences": {
+        "key": "value"
+      }?,
+      "preferredLanguage": "string?",
+      "preferredLanguages": ["string"]?,
+      "groupComposition": "string?",
+      "dietaryRequirements": "string?",
+      "dietaryRestrictions": "string?",
+      "accessibilityNeeds": "string?",
       "status": "string",
       "totalAmount": number,
       "serviceFee": number,

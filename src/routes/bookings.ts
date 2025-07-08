@@ -135,15 +135,19 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
       INSERT INTO bookings (
         id, customer_id, companion_id, service_id, experience_id, date, start_time, end_time,
         duration, location, special_requests, customer_preferences, preferred_language,
-        group_composition, dietary_requirements, status, total_amount, service_fee,
+        group_composition, dietary_requirements, meeting_point, template, preferred_languages,
+        dietary_restrictions, accessibility_needs, status, total_amount, service_fee,
         payment_status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       bookingId, userId, bookingData.companionId, bookingData.serviceId, bookingData.experienceId,
       bookingData.date, bookingData.startTime, bookingData.endTime,
       bookingData.duration, bookingData.location, bookingData.specialRequests,
       JSON.stringify(bookingData.customerPreferences || {}), bookingData.preferredLanguage,
       bookingData.groupComposition, bookingData.dietaryRequirements,
+      bookingData.meetingPoint, bookingData.template, 
+      JSON.stringify(bookingData.preferredLanguages || []), 
+      bookingData.dietaryRestrictions, bookingData.accessibilityNeeds,
       'pending', totalAmount, serviceFee,
       'pending', now, now
     ).run();
@@ -241,6 +245,11 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
         preferredLanguage: createdBooking.preferred_language,
         groupComposition: createdBooking.group_composition,
         dietaryRequirements: createdBooking.dietary_requirements,
+        meetingPoint: createdBooking.meeting_point,
+        template: createdBooking.template,
+        preferredLanguages: createdBooking.preferred_languages ? JSON.parse(createdBooking.preferred_languages as string) : [],
+        dietaryRestrictions: createdBooking.dietary_restrictions,
+        accessibilityNeeds: createdBooking.accessibility_needs,
         status: createdBooking.status,
         totalAmount: createdBooking.total_amount,
         serviceFee: createdBooking.service_fee,
@@ -405,6 +414,17 @@ bookings.get('/:id/summary', validateUUID('id'), async (c) => {
       preferredLanguage: booking.preferred_language,
       groupComposition: booking.group_composition,
       dietaryRequirements: booking.dietary_requirements,
+      meetingPoint: booking.meeting_point,
+      template: booking.template,
+      preferredLanguages: (() => {
+        try {
+          return booking.preferred_languages ? JSON.parse(booking.preferred_languages as string) : [];
+        } catch {
+          return [];
+        }
+      })(),
+      dietaryRestrictions: booking.dietary_restrictions,
+      accessibilityNeeds: booking.accessibility_needs,
       status: booking.status,
       totalAmount: booking.total_amount,
       serviceFee: booking.service_fee,
@@ -640,6 +660,17 @@ bookings.get('/:id', validateUUID('id'), async (c) => {
         preferredLanguage: booking.preferred_language,
         groupComposition: booking.group_composition,
         dietaryRequirements: booking.dietary_requirements,
+        meetingPoint: booking.meeting_point,
+        template: booking.template,
+        preferredLanguages: (() => {
+          try {
+            return booking.preferred_languages ? JSON.parse(booking.preferred_languages as string) : [];
+          } catch {
+            return [];
+          }
+        })(),
+        dietaryRestrictions: booking.dietary_restrictions,
+        accessibilityNeeds: booking.accessibility_needs,
         status: booking.status,
         totalAmount: booking.total_amount,
         serviceFee: booking.service_fee,

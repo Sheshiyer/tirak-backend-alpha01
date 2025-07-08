@@ -27,6 +27,7 @@ All notable changes to the Tirak Backend will be documented in this file.
 - Error fix guide in ERROR_COMPANION_EXPERIENCES_FIX.md
 - Automatic database table check on application startup
 - Helper scripts for database migration management
+- **Bookings**: Enhanced booking system with additional fields: `meetingPoint`, `template`, `preferredLanguages`, `dietaryRestrictions`, and `accessibilityNeeds` to better accommodate customer requirements.
 
 ## [1.0.0] - 2023-06-30
 
