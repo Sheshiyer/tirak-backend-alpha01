@@ -59,10 +59,12 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
         const minutes = parseInt(timeParts[1] || '0', 10);
         
         if (!isNaN(hours) && !isNaN(minutes)) {
-          let endHours = hours + Math.floor((minutes + bookingData.duration) / 60);
-          let endMinutes = (minutes + bookingData.duration) % 60;
+          const totalStartMinutes = hours * 60 + minutes;
+          const totalEndMinutes = totalStartMinutes + bookingData.duration;
+
+          const endHours = Math.floor(totalEndMinutes / 60) % 24; // Wraps around midnight
+          const endMinutes = totalEndMinutes % 60;
           
-          // Format properly with leading zeros
           endTime = `${endHours.toString().padStart(2, '0')}:${endMinutes.toString().padStart(2, '0')}`;
         } else {
           return jsonError(c, 'Invalid time format', 'Start time must be in HH:MM format', 400);
