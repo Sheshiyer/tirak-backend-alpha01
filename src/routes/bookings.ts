@@ -107,17 +107,12 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
       SELECT id FROM bookings
       WHERE companion_id = ? AND date = ?
         AND status IN ('pending', 'confirmed', 'in_progress')
-        AND (
-          (? > start_time AND ? < end_time) OR
-          (? > start_time AND ? < end_time) OR
-          (start_time >= ? AND start_time < ?)
-        )
+        AND ? < end_time AND ? > start_time
     `).bind(
       bookingData.companionId,
       bookingData.date,
-      bookingData.startTime, bookingData.startTime,
-      endTime, endTime,
-      bookingData.startTime, endTime
+      bookingData.startTime,
+      endTime
     ).first();
 
     if (conflictCheck) {
