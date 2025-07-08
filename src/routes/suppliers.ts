@@ -475,4 +475,224 @@ suppliers.post('/:id/services',
   }
 );
 
+/**
+ * Get supplier statistics and performance metrics
+ */
+suppliers.get('/stats', authMiddleware, supplierOnly, async (c) => {
+  const userId = c.get('userId');
+  
+  // Ensure userId is defined
+  if (!userId) {
+    return jsonError(c, 'Authentication error', 'User ID not found', 401);
+  }
+  
+  try {
+    // Get supplier profile
+    const supplier = await getSupplierProfile(userId, c.env.DB);
+    if (!supplier) {
+      return jsonError(c, 'Supplier not found', 'Supplier profile does not exist', 404);
+    }
+
+    // Get user info
+    const user = await getUserById(userId, c.env.DB);
+    if (!user || user.userType !== 'supplier') {
+      return jsonError(c, 'Supplier not found', 'The requested supplier does not exist', 404);
+    }
+
+    // Get booking statistics
+    const bookingStats = await c.env.DB.prepare(`
+      SELECT 
+        COUNT(*) as total_bookings,
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_bookings,
+        SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_bookings,
+        SUM(CASE WHEN status = 'completed' THEN total_amount - service_fee ELSE 0 END) as total_earnings,
+        SUM(CASE WHEN status = 'completed' AND date >= DATE_FORMAT(NOW() ,'%Y-%m-01') THEN total_amount - service_fee ELSE 0 END) as this_month_earnings,
+        SUM(CASE WHEN status = 'completed' AND date >= DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 1 MONTH) ,'%Y-%m-01') AND date < DATE_FORMAT(NOW() ,'%Y-%m-01') THEN total_amount - service_fee ELSE 0 END) as last_month_earnings
+      FROM bookings
+      WHERE companion_id = ?
+    `).bind(userId).first();
+
+    // Get response rate
+    const responseStats = await c.env.DB.prepare(`
+      SELECT 
+        COUNT(*) as total_requests,
+        SUM(CASE WHEN status IN ('confirmed', 'completed', 'in_progress') THEN 1 ELSE 0 END) as accepted_requests
+      FROM bookings
+      WHERE companion_id = ?
+    `).bind(userId).first();
+
+    const totalRequests = responseStats?.total_requests ? Number(responseStats.total_requests) : 0;
+    const acceptedRequests = responseStats?.accepted_requests ? Number(responseStats.accepted_requests) : 0;
+    const responseRate = totalRequests > 0 ? Math.round((acceptedRequests / totalRequests) * 100) : 0;
+
+    // Get profile views
+    const viewsResult = await c.env.DB.prepare(`
+      SELECT COUNT(*) as view_count
+      FROM analytics_events
+      WHERE event_type = 'supplier_profile_view' AND JSON_EXTRACT(properties, '$.supplierId') = ?
+    `).bind(userId).first();
+
+    const profileViews = viewsResult?.view_count ? Number(viewsResult.view_count) : 0;
+
+    // Get average response time in hours
+    const responseTimeResult = await c.env.DB.prepare(`
+      SELECT AVG(TIMESTAMPDIFF(MINUTE, created_at, updated_at) / 60) as avg_response_time
+      FROM bookings
+      WHERE companion_id = ? AND status != 'pending'
+    `).bind(userId).first();
+
+    const responseTime = responseTimeResult?.avg_response_time ? Number(responseTimeResult.avg_response_time) : 0;
+
+    // Get monthly stats for the last 6 months
+    const monthlyStatsResult = await c.env.DB.prepare(`
+      SELECT 
+        DATE_FORMAT(date, '%Y-%m') as month,
+        COUNT(*) as bookings,
+        SUM(CASE WHEN status = 'completed' THEN total_amount - service_fee ELSE 0 END) as earnings,
+        AVG(CASE WHEN status = 'completed' THEN rating ELSE NULL END) as rating
+      FROM bookings
+      LEFT JOIN reviews ON bookings.id = reviews.booking_id
+      WHERE companion_id = ?
+      AND date >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 MONTH)
+      GROUP BY DATE_FORMAT(date, '%Y-%m')
+      ORDER BY month ASC
+    `).bind(userId).all();
+
+    const monthlyStats = monthlyStatsResult.results?.map((stat: any) => ({
+      month: stat.month,
+      bookings: stat.bookings,
+      earnings: stat.earnings || 0,
+      rating: stat.rating || 0
+    })) || [];
+
+    // Get weekly stats for the last 4 weeks
+    const weeklyStatsResult = await c.env.DB.prepare(`
+      SELECT 
+        DATE_FORMAT(date, '%Y-%u') as week,
+        COUNT(*) as bookings,
+        SUM(CASE WHEN status = 'completed' THEN total_amount - service_fee ELSE 0 END) as earnings,
+        AVG(CASE WHEN status = 'completed' THEN rating ELSE NULL END) as rating
+      FROM bookings
+      LEFT JOIN reviews ON bookings.id = reviews.booking_id
+      WHERE companion_id = ?
+      AND date >= DATE_SUB(CURRENT_DATE(), INTERVAL 4 WEEK)
+      GROUP BY DATE_FORMAT(date, '%Y-%u')
+      ORDER BY week ASC
+    `).bind(userId).all();
+
+    const weeklyStats = weeklyStatsResult.results?.map((stat: any) => ({
+      week: stat.week,
+      bookings: stat.bookings,
+      earnings: stat.earnings || 0,
+      rating: stat.rating || 0
+    })) || [];
+
+    // Get quarterly stats for the last 4 quarters
+    const quarterlyStatsResult = await c.env.DB.prepare(`
+      SELECT 
+        CONCAT(YEAR(date), '-Q', QUARTER(date)) as quarter,
+        COUNT(*) as bookings,
+        SUM(CASE WHEN status = 'completed' THEN total_amount - service_fee ELSE 0 END) as earnings,
+        AVG(CASE WHEN status = 'completed' THEN rating ELSE NULL END) as rating
+      FROM bookings
+      LEFT JOIN reviews ON bookings.id = reviews.booking_id
+      WHERE companion_id = ?
+      AND date >= DATE_SUB(CURRENT_DATE(), INTERVAL 4 QUARTER)
+      GROUP BY YEAR(date), QUARTER(date)
+      ORDER BY YEAR(date) ASC, QUARTER(date) ASC
+    `).bind(userId).all();
+
+    const quarterStats = quarterlyStatsResult.results?.map((stat: any) => ({
+      quarter: stat.quarter,
+      bookings: stat.bookings,
+      earnings: stat.earnings || 0,
+      rating: stat.rating || 0
+    })) || [];
+
+    // Get service performance
+    const servicePerformanceResult = await c.env.DB.prepare(`
+      SELECT 
+        s.title as service_name,
+        COUNT(b.id) as booking_count,
+        AVG(r.rating) as avg_rating,
+        SUM(CASE WHEN b.status = 'completed' THEN b.total_amount - b.service_fee ELSE 0 END) as total_earnings
+      FROM bookings b
+      JOIN supplier_services s ON b.service_id = s.id
+      LEFT JOIN reviews r ON b.id = r.booking_id
+      WHERE b.companion_id = ?
+      GROUP BY s.id
+      ORDER BY total_earnings DESC
+      LIMIT 3
+    `).bind(userId).all();
+
+    const servicePerformance = servicePerformanceResult.results?.map((service: any) => ({
+      name: service.service_name,
+      bookings: service.booking_count,
+      rating: service.avg_rating || 0,
+      earnings: service.total_earnings || 0
+    })) || [];
+
+    // Calculate profile completion percentage
+    const profileCompletion = (() => {
+      let total = 0;
+      let completed = 0;
+      
+      // Check profile fields
+      if (supplier.displayName) completed++;
+      total++;
+      
+      if (supplier.bio) completed++;
+      total++;
+      
+      if (supplier.profileImages && supplier.profileImages.length > 0) completed++;
+      total++;
+      
+      if (supplier.categories && supplier.categories.length > 0) completed++;
+      total++;
+      
+      if (supplier.regions && supplier.regions.length > 0) completed++;
+      total++;
+      
+      if (supplier.spokenLanguages && supplier.spokenLanguages.length > 0) completed++;
+      total++;
+      
+      return Math.round((completed / total) * 100);
+    })();
+
+    // Format the response
+    const stats = {
+      totalBookings: bookingStats?.total_bookings || 0,
+      completedBookings: bookingStats?.completed_bookings || 0,
+      cancelledBookings: bookingStats?.cancelled_bookings || 0,
+      totalEarnings: bookingStats?.total_earnings || 0,
+      thisMonthEarnings: bookingStats?.this_month_earnings || 0,
+      lastMonthEarnings: bookingStats?.last_month_earnings || 0,
+      profileViews: profileViews,
+      responseRate: responseRate,
+      responseTime: responseTime,
+      averageRating: supplier.ratingAverage || 0,
+      totalReviews: supplier.ratingCount || 0,
+      profileCompletion: profileCompletion,
+      monthlyStats,
+      weeklyStats,
+      quarterStats,
+      servicePerformance
+    };
+
+    return jsonSuccess(c, {
+      user: {
+        name: supplier.displayName,
+        status: user.status,
+        totalRatings: supplier.ratingAverage || 0,
+        totalReviews: supplier.ratingCount || 0
+      },
+      data: stats
+    }, 'Supplier statistics retrieved successfully');
+
+  } catch (error) {
+    console.error('Get supplier stats error:', error);
+    return jsonError(c, 'Failed to retrieve statistics', 'An error occurred while fetching supplier statistics', 500);
+  }
+});
+
 export { suppliers as supplierRoutes };

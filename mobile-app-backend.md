@@ -653,25 +653,60 @@ endDate: string (YYYY-MM-DD) - Required
 {
   "success": boolean,
   "data": {
-    "totalBookings": number,
-    "completedBookings": number,
-    "cancelledBookings": number,
-    "totalEarnings": number,
-    "thisMonthEarnings": number,
-    "lastMonthEarnings": number,
-    "profileViews": number,
-    "responseRate": number,
-    "averageRating": number,
-    "totalReviews": number,
-    "monthlyStats": [
-      {
-        "month": "string",
-        "bookings": number,
-        "earnings": number,
-        "rating": number
-      }
-    ]
-  }
+    "user": {
+      "name": "string",
+      "status": "string",
+      "totalRatings": number,
+      "totalReviews": number
+    },
+    "data": {
+      "totalBookings": number,
+      "completedBookings": number,
+      "cancelledBookings": number,
+      "totalEarnings": number,
+      "thisMonthEarnings": number,
+      "lastMonthEarnings": number,
+      "profileViews": number,
+      "responseRate": number,
+      "responseTime": number,
+      "averageRating": number,
+      "totalReviews": number,
+      "profileCompletion": number,
+      "monthlyStats": [
+        {
+          "month": "string",
+          "bookings": number,
+          "earnings": number,
+          "rating": number
+        }
+      ],
+      "weeklyStats": [
+        {
+          "week": "string",
+          "bookings": number,
+          "earnings": number,
+          "rating": number
+        }
+      ],
+      "quarterStats": [
+        {
+          "quarter": "string",
+          "bookings": number,
+          "earnings": number,
+          "rating": number
+        }
+      ],
+      "servicePerformance": [
+        {
+          "name": "string",
+          "bookings": number,
+          "rating": number,
+          "earnings": number
+        }
+      ]
+    }
+  },
+  "message": "string"
 }
 ```
 
