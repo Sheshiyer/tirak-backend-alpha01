@@ -45,7 +45,7 @@ auth.use('*', createRateLimit('auth'));
  * User registration endpoint
  */
 auth.post('/register', zValidator('json', registerSchema), async (c) => {
-  const { email, phone, password, userType, preferredLanguage } = c.req.valid('json');
+  const { email, phone, password, userType, preferredLanguage, display_name } = c.req.valid('json');
   
   try {
     // Normalize and validate inputs
@@ -86,7 +86,7 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
     }, c.env.DB);
 
     // Create user profile based on type
-    let displayName = normalizedEmail.split('@')[0] || 'User';
+    let displayName = display_name || '';
     if (userType === 'supplier') {
       await createSupplierProfile({
         userId,
@@ -162,8 +162,11 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
     if (user.userType === 'supplier') {
       const profile = await c.env.DB.prepare('SELECT display_name FROM supplier_profiles WHERE user_id = ?').bind(user.id).first();
       name = profile?.display_name || null;
-    } else if (user.userType === 'customer' || user.userType === 'companion') {
+    } else if (user.userType === 'customer') {
       const profile = await c.env.DB.prepare('SELECT display_name FROM customer_profiles WHERE user_id = ?').bind(user.id).first();
+      name = profile?.display_name || null;
+    } else if (user.userType === 'companion') {
+      const profile = await c.env.DB.prepare('SELECT display_name FROM companion_profiles WHERE user_id = ?').bind(user.id).first();
       name = profile?.display_name || null;
     }
 

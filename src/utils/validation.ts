@@ -9,6 +9,7 @@ import type { Env, Variables } from '../index';
 
 // User registration schema
 export const registerSchema = z.object({
+  display_name: z.string().min(1).max(100).optional(),
   email: z.string().email('Invalid email format'),
   phone: z.string().min(10, 'Phone number must be at least 10 digits'),
   password: z.string().min(8, 'Password must be at least 8 characters'),

@@ -5,6 +5,8 @@ All notable changes to the Tirak Backend will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- **Auth**: Fixed an issue in the login route where the display name for 'companion' users was being looked up in the wrong table. It now correctly queries `companion_profiles`.
+- **Auth**: Fixed user registration to use the provided `name` for the profile's `displayName` instead of deriving it from the email.
 - **API**: Resolved an issue where companion experiences were not being returned from the `GET /api/companions/:id/experiences` endpoint. The fix involved:
   - Removing a duplicate, conflicting route handler for the same path.
   - Correcting a JSON parsing error for the `keywords` field which could fail silently.
