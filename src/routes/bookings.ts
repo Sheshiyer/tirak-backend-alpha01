@@ -74,13 +74,12 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
 
     // Validate companion exists and is available
     const companion = await c.env.DB.prepare(`
-      SELECT sp.user_id, sp.display_name, sp.verification_status, sp.subscription_status,
+      SELECT cp.user_id, cp.display_name, 
              u.status as user_status, u.user_type
-      FROM supplier_profiles sp
-      JOIN users u ON sp.user_id = u.id
-      WHERE sp.user_id = ? AND sp.verification_status = 'verified' 
-        AND sp.subscription_status = 'active' AND u.status = 'active'
-        AND u.user_type IN ('supplier', 'companion')
+      FROM companion_profiles cp
+      JOIN users u ON cp.user_id = u.id
+      WHERE cp.user_id = ? AND u.status = 'active'
+        AND u.user_type = 'companion'
     `).bind(bookingData.companionId).first();
 
     if (!companion) {
@@ -195,13 +194,13 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
       SELECT 
         b.*,
         cp.display_name as companion_name,
-        cp.profile_images as companion_profile_image,
+        cp.profile_photo as companion_profile_image,
         s.title as service_name,
         s.price_min as service_price,
         ce.title as experience_name,
         ce.price as experience_price
       FROM bookings b
-      JOIN supplier_profiles cp ON b.companion_id = cp.user_id
+      JOIN companion_profiles cp ON b.companion_id = cp.user_id
       LEFT JOIN supplier_services s ON b.service_id = s.id
       LEFT JOIN companion_experiences ce ON b.experience_id = ce.id
       WHERE b.id = ?
@@ -211,8 +210,7 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
       return jsonError(c, 'Booking creation failed', 'Failed to retrieve created booking', 500);
     }
 
-    const companionImages = createdBooking.companion_profile_image ? 
-      JSON.parse(createdBooking.companion_profile_image as string) : [];
+    const companionProfileImage = createdBooking.companion_profile_image || null;
 
     return jsonSuccess(c, {
       booking: {
@@ -221,7 +219,7 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
         companion: {
           id: createdBooking.companion_id,
           name: createdBooking.companion_name,
-          profileImage: Array.isArray(companionImages) ? companionImages[0] || null : null
+          profileImage: companionProfileImage
         },
         customerId: createdBooking.customer_id,
         serviceId: createdBooking.service_id,
@@ -331,10 +329,10 @@ bookings.get('/:id/summary', validateUUID('id'), async (c) => {
       SELECT
         b.*,
         cp.display_name as companion_name,
-        cp.profile_images as companion_images,
+        cp.profile_photo as companion_images,
         cp.user_id as companion_user_id,
         cu.phone as companion_phone,
-        cp.rating_average as companion_rating,
+        0 as companion_rating,
         cust.display_name as customer_name,
         cust.profile_images as customer_images,
         cust.user_id as customer_user_id,
@@ -347,7 +345,7 @@ bookings.get('/:id/summary', validateUUID('id'), async (c) => {
         ce.price as experience_price,
         ce.duration_minutes as experience_duration
       FROM bookings b
-      JOIN supplier_profiles cp ON b.companion_id = cp.user_id
+      JOIN companion_profiles cp ON b.companion_id = cp.user_id
       JOIN users cu ON cp.user_id = cu.id
       JOIN customer_profiles cust ON b.customer_id = cust.user_id
       JOIN users custu ON cust.user_id = custu.id
@@ -384,8 +382,7 @@ bookings.get('/:id/summary', validateUUID('id'), async (c) => {
       }
     }
 
-    const companionImages = booking.companion_images ? 
-      JSON.parse(booking.companion_images as string) : [];
+    const companionImage = booking.companion_images || null;
     const customerImages = booking.customer_images ? 
       JSON.parse(booking.customer_images as string) : [];
     const customerPrefs = booking.customer_preferences ? 
@@ -396,7 +393,7 @@ bookings.get('/:id/summary', validateUUID('id'), async (c) => {
       companion: {
         id: booking.companion_user_id,
         name: booking.companion_name,
-        profileImage: Array.isArray(companionImages) ? companionImages[0] || null : null,
+        profileImage: companionImage,
         phone: booking.companion_phone,
         rating: booking.companion_rating
       },
@@ -489,7 +486,7 @@ bookings.get('/', validatePagination, async (c) => {
           ELSE cust.display_name
         END as other_party_name,
         CASE 
-          WHEN ? = 'customer' THEN cp.profile_images
+          WHEN ? = 'customer' THEN cp.profile_photo
           ELSE cust.profile_images
         END as other_party_image,
         CASE 
@@ -501,7 +498,7 @@ bookings.get('/', validatePagination, async (c) => {
         ce.title as experience_name,
         ce.price as experience_price
       FROM bookings b
-      LEFT JOIN supplier_profiles cp ON b.companion_id = cp.user_id
+      LEFT JOIN companion_profiles cp ON b.companion_id = cp.user_id
       LEFT JOIN customer_profiles cust ON b.customer_id = cust.user_id
       LEFT JOIN supplier_services s ON b.service_id = s.id
       LEFT JOIN companion_experiences ce ON b.experience_id = ce.id
@@ -533,7 +530,7 @@ bookings.get('/', validatePagination, async (c) => {
       [userType === 'customer' ? 'companion' : 'customer']: {
         id: booking.other_party_id,
         name: booking.other_party_name,
-        profileImage: JSON.parse(booking.other_party_image || '[]')[0] || null,
+        profileImage: userType === 'customer' ? booking.other_party_image : (JSON.parse(booking.other_party_image || '[]')[0] || null),
         rating: userType === 'customer' ? booking.companion_rating : null
       },
       service: booking.service_id ? {
@@ -577,10 +574,10 @@ bookings.get('/:id', validateUUID('id'), async (c) => {
       SELECT
         b.*,
         cp.display_name as companion_name,
-        cp.profile_images as companion_images,
+        cp.profile_photo as companion_images,
         cp.user_id as companion_user_id,
         cu.phone as companion_phone,
-        cp.rating_average as companion_rating,
+        0 as companion_rating,
         cust.display_name as customer_name,
         cust.profile_images as customer_images,
         cust.user_id as customer_user_id,
@@ -592,7 +589,7 @@ bookings.get('/:id', validateUUID('id'), async (c) => {
         ce.description as experience_description,
         ce.price as experience_price
       FROM bookings b
-      JOIN supplier_profiles cp ON b.companion_id = cp.user_id
+      JOIN companion_profiles cp ON b.companion_id = cp.user_id
       JOIN users cu ON cp.user_id = cu.id
       JOIN customer_profiles cust ON b.customer_id = cust.user_id
       JOIN users custu ON cust.user_id = custu.id
@@ -635,14 +632,7 @@ bookings.get('/:id', validateUUID('id'), async (c) => {
         companion: {
           id: booking.companion_user_id,
           name: booking.companion_name,
-          profileImage: (() => {
-            try {
-              const images = booking.companion_images ? JSON.parse(booking.companion_images as string) : [];
-              return Array.isArray(images) ? images[0] || null : null;
-            } catch {
-              return null;
-            }
-          })(),
+          profileImage: booking.companion_images || null,
           phone: booking.companion_phone,
           rating: booking.companion_rating
         },
