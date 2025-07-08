@@ -86,13 +86,13 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
       return jsonError(c, 'Companion not found', 'The selected companion is not available', 404);
     }
 
-    // Validate service if provided (for suppliers)
+    // Validate service/experience if provided (for companions)
     let service = null;
     if (bookingData.serviceId) {
       service = await c.env.DB.prepare(`
-        SELECT id, title, price_min, price_max, currency, duration_hours
-        FROM supplier_services
-        WHERE id = ? AND supplier_id = ? AND is_active = TRUE
+        SELECT id, title, price as price_min, price as price_max, currency, duration_minutes as duration_hours
+        FROM companion_experiences
+        WHERE id = ? AND companion_id = ? AND is_active = TRUE
       `).bind(bookingData.serviceId, bookingData.companionId).first();
 
       if (!service) {
@@ -195,14 +195,13 @@ bookings.post('/', zValidator('json', enhancedBookingSchema), async (c) => {
         b.*,
         cp.display_name as companion_name,
         cp.profile_photo as companion_profile_image,
-        s.title as service_name,
-        s.price_min as service_price,
+        ce.title as service_name,
+        ce.price as service_price,
         ce.title as experience_name,
         ce.price as experience_price
       FROM bookings b
       JOIN companion_profiles cp ON b.companion_id = cp.user_id
-      LEFT JOIN supplier_services s ON b.service_id = s.id
-      LEFT JOIN companion_experiences ce ON b.experience_id = ce.id
+      LEFT JOIN companion_experiences ce ON b.service_id = ce.id OR b.experience_id = ce.id
       WHERE b.id = ?
     `).bind(bookingId).first();
 
@@ -337,20 +336,20 @@ bookings.get('/:id/summary', validateUUID('id'), async (c) => {
         cust.profile_images as customer_images,
         cust.user_id as customer_user_id,
         custu.phone as customer_phone,
-        s.title as service_name,
-        s.description as service_description,
-        s.price_min as service_price,
-        ce.title as experience_name,
-        ce.description as experience_description,
-        ce.price as experience_price,
-        ce.duration_minutes as experience_duration
+        service_exp.title as service_name,
+        service_exp.description as service_description,
+        service_exp.price as service_price,
+        exp.title as experience_name,
+        exp.description as experience_description,
+        exp.price as experience_price,
+        exp.duration_minutes as experience_duration
       FROM bookings b
       JOIN companion_profiles cp ON b.companion_id = cp.user_id
       JOIN users cu ON cp.user_id = cu.id
       JOIN customer_profiles cust ON b.customer_id = cust.user_id
       JOIN users custu ON cust.user_id = custu.id
-      LEFT JOIN supplier_services s ON b.service_id = s.id
-      LEFT JOIN companion_experiences ce ON b.experience_id = ce.id
+      LEFT JOIN companion_experiences service_exp ON b.service_id = service_exp.id
+      LEFT JOIN companion_experiences exp ON b.experience_id = exp.id
       WHERE b.id = ? AND (b.customer_id = ? OR b.companion_id = ?)
     `).bind(bookingId, userId, userId).first();
 
@@ -493,15 +492,15 @@ bookings.get('/', validatePagination, async (c) => {
           WHEN ? = 'customer' THEN b.companion_id
           ELSE b.customer_id
         END as other_party_id,
-        s.title as service_name,
-        s.price_min as service_price,
-        ce.title as experience_name,
-        ce.price as experience_price
+        service_exp.title as service_name,
+        service_exp.price as service_price,
+        exp.title as experience_name,
+        exp.price as experience_price
       FROM bookings b
       LEFT JOIN companion_profiles cp ON b.companion_id = cp.user_id
       LEFT JOIN customer_profiles cust ON b.customer_id = cust.user_id
-      LEFT JOIN supplier_services s ON b.service_id = s.id
-      LEFT JOIN companion_experiences ce ON b.experience_id = ce.id
+      LEFT JOIN companion_experiences service_exp ON b.service_id = service_exp.id
+      LEFT JOIN companion_experiences exp ON b.experience_id = exp.id
       WHERE (b.customer_id = ? OR b.companion_id = ?)
     `;
 
@@ -582,19 +581,19 @@ bookings.get('/:id', validateUUID('id'), async (c) => {
         cust.profile_images as customer_images,
         cust.user_id as customer_user_id,
         custu.phone as customer_phone,
-        s.title as service_name,
-        s.description as service_description,
-        s.price_min as service_price,
-        ce.title as experience_name,
-        ce.description as experience_description,
-        ce.price as experience_price
+        service_exp.title as service_name,
+        service_exp.description as service_description,
+        service_exp.price as service_price,
+        exp.title as experience_name,
+        exp.description as experience_description,
+        exp.price as experience_price
       FROM bookings b
       JOIN companion_profiles cp ON b.companion_id = cp.user_id
       JOIN users cu ON cp.user_id = cu.id
       JOIN customer_profiles cust ON b.customer_id = cust.user_id
       JOIN users custu ON cust.user_id = custu.id
-      LEFT JOIN supplier_services s ON b.service_id = s.id
-      LEFT JOIN companion_experiences ce ON b.experience_id = ce.id
+      LEFT JOIN companion_experiences service_exp ON b.service_id = service_exp.id
+      LEFT JOIN companion_experiences exp ON b.experience_id = exp.id
       WHERE b.id = ? AND (b.customer_id = ? OR b.companion_id = ?)
     `).bind(bookingId, userId, userId).first();
 
