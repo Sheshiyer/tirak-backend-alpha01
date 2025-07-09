@@ -14,6 +14,7 @@ export interface User {
   updatedAt: string;
   lastLoginAt?: string;
   profile_image_url?: string;
+  notificationPreferences?: string;
 }
 
 export interface SupplierProfile {
