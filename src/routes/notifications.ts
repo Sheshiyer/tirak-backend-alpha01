@@ -16,7 +16,7 @@ notifications.use('*', createRateLimit('notification'));
 /**
  * Get user notifications
  */
-notifications.get('/', validatePagination, async (c) => {
+notifications.get('/', async (c) => {
   const userId = c.get('userId');
   const { page, limit } = c.get('pagination') || { page: 1, limit: 20 };
   const read = c.req.query('read');
@@ -67,11 +67,16 @@ notifications.get('/', validatePagination, async (c) => {
       createdAt: notification.created_at
     }));
 
+    const successMessage = notificationsList.length > 0 
+      ? 'Notifications retrieved successfully' 
+      : 'No notifications found';
+
     return jsonSuccess(c, {
       notifications: notificationsList,
       pagination: createPagination(page, limit, total),
-      unreadCount
-    }, 'Notifications retrieved successfully');
+      unreadCount,
+      isEmpty: notificationsList.length === 0
+    }, successMessage);
 
   } catch (error) {
     console.error('Get notifications error:', error);
@@ -94,7 +99,7 @@ notifications.put('/:id/read', validateUUID('id'), async (c) => {
     `).bind(notificationId, userId).first();
 
     if (!notification) {
-      return jsonError(c, 'Notification not found', 'The requested notification does not exist', 404);
+      return jsonError(c, 'Notification not found', 'No notification found with the provided ID', 404);
     }
 
     if (notification.read) {
@@ -145,7 +150,10 @@ notifications.put('/read-all', async (c) => {
     const unreadCount = unreadResult?.unread_count as number || 0;
 
     if (unreadCount === 0) {
-      return jsonSuccess(c, {}, 'No unread notifications to mark');
+      return jsonSuccess(c, {
+        isEmpty: true,
+        markedCount: 0
+      }, 'No unread notifications to mark');
     }
 
     // Mark all as read
@@ -251,9 +259,14 @@ notifications.get('/types', async (c) => {
       unreadCount: typeData.unread_count
     }));
 
+    const successMessage = types.length > 0 
+      ? 'Notification types retrieved successfully' 
+      : 'No notification types found';
+
     return jsonSuccess(c, {
-      types
-    }, 'Notification types retrieved successfully');
+      types,
+      isEmpty: types.length === 0
+    }, successMessage);
 
   } catch (error) {
     console.error('Get notification types error:', error);
@@ -276,7 +289,7 @@ notifications.delete('/:id', validateUUID('id'), async (c) => {
     `).bind(notificationId, userId).first();
 
     if (!notification) {
-      return jsonError(c, 'Notification not found', 'The requested notification does not exist', 404);
+      return jsonError(c, 'Notification not found', 'No notification found with the provided ID', 404);
     }
 
     // Delete notification
