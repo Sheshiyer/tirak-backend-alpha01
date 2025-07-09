@@ -30,7 +30,8 @@ import {
   getUserById,
   updateUser,
   getSupplierProfile,
-  getCustomerProfile
+  getCustomerProfile,
+  createCustomerProfile
 } from '../utils/database';
 import { uploadFile, generateFileKey, validateImageFile } from '../utils/storage';
 import { jsonSuccess, jsonError } from '../utils/response';
@@ -65,18 +66,117 @@ users.get('/profile', async (c) => {
     }
 
     // Get user preferences
-    const preferences = user.notificationPreferences ? 
-      JSON.parse(user.notificationPreferences) : {};
-      
-    const defaultPreferences = {
+    let finalPreferences: any = {
       language: user.preferredLanguage || 'en',
       currency: 'THB',
       notifications: {
-        push: preferences.push !== false,
-        email: preferences.email !== false,
-        sms: preferences.sms !== false
+        push: true,
+        email: true,
+        sms: false
       }
     };
+    
+    console.log('DEBUG - GET profile - User type:', user.userType);
+    
+    if (user.userType === 'customer') {
+      // For customers, get preferences from profile
+      const customerProfile = await getCustomerProfile(userId, c.env.DB);
+      console.log('DEBUG - GET profile - Customer profile:', JSON.stringify(customerProfile));
+      
+      if (customerProfile && customerProfile.preferences) {
+        try {
+          const customerPrefs = typeof customerProfile.preferences === 'string' 
+            ? JSON.parse(customerProfile.preferences) 
+            : customerProfile.preferences;
+            
+          console.log('DEBUG - GET profile - Parsed customer preferences:', JSON.stringify(customerPrefs));
+          
+          // Copy non-notification preferences
+          finalPreferences = {
+            ...finalPreferences,
+            ...customerPrefs
+          };
+          
+          // Handle notifications separately to preserve false values
+          if (customerPrefs.notifications) {
+            if ('push' in customerPrefs.notifications) {
+              finalPreferences.notifications.push = customerPrefs.notifications.push;
+            }
+            if ('email' in customerPrefs.notifications) {
+              finalPreferences.notifications.email = customerPrefs.notifications.email;
+            }
+            if ('sms' in customerPrefs.notifications) {
+              finalPreferences.notifications.sms = customerPrefs.notifications.sms;
+            }
+          }
+          
+          console.log('DEBUG - GET profile - Final preferences:', JSON.stringify(finalPreferences));
+        } catch (e) {
+          console.error('Error parsing customer preferences:', e);
+          // Keep default preferences
+        }
+      } else {
+        // If no profile exists, create one with default values
+        console.log('DEBUG - GET profile - No customer profile or preferences found, creating one');
+        
+        await createCustomerProfile({
+          userId,
+          displayName: user.email.split('@')[0],
+          preferences: finalPreferences
+        }, c.env.DB);
+      }
+    } else {
+      // For suppliers/others, get from user table
+      try {
+        console.log('DEBUG - GET profile - Getting supplier preferences from user record');
+        console.log('DEBUG - GET profile - User object:', JSON.stringify({
+          id: user.id,
+          userType: user.userType,
+          notificationPreferences: user.notificationPreferences
+        }));
+        
+        const notificationPrefs = user.notificationPreferences 
+          ? JSON.parse(user.notificationPreferences) 
+          : {};
+          
+        console.log('DEBUG - GET profile - Parsed supplier notification preferences:', JSON.stringify(notificationPrefs));
+        
+        // Start with defaults
+        finalPreferences = {
+          language: user.preferredLanguage || 'en',
+          currency: 'THB',
+          notifications: {
+            push: true,
+            email: true,
+            sms: false
+          }
+        };
+        
+        // Explicitly set each notification preference to preserve false values
+        if ('push' in notificationPrefs) {
+          finalPreferences.notifications.push = notificationPrefs.push;
+        }
+        if ('email' in notificationPrefs) {
+          finalPreferences.notifications.email = notificationPrefs.email;
+        }
+        if ('sms' in notificationPrefs) {
+          finalPreferences.notifications.sms = notificationPrefs.sms;
+        }
+        
+        console.log('DEBUG - GET profile - Final supplier preferences:', JSON.stringify(finalPreferences));
+      } catch (e) {
+        console.error('Error parsing supplier preferences:', e);
+        finalPreferences = {
+          language: user.preferredLanguage || 'en',
+          currency: 'THB',
+          notifications: {
+            push: true,
+            email: true,
+            sms: false
+          }
+        };
+      }
+    }
 
     // Parse profile images based on what's available
     let profileImage = null;
@@ -117,7 +217,7 @@ users.get('/profile', async (c) => {
       socialLinks,
       dateOfBirth: profile?.dateOfBirth || null,
       gender: profile?.gender || null,
-      preferences: defaultPreferences,
+      preferences: finalPreferences,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt
     };
@@ -216,12 +316,51 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
     if (updates.preferences?.language) {
       userUpdates.preferredLanguage = updates.preferences.language;
     }
-
+    
     // Update notification preferences
     if (updates.preferences?.notifications) {
-      const currentPrefs = JSON.parse(user.notificationPreferences || '{}');
-      const updatedPrefs = { ...currentPrefs, ...updates.preferences.notifications };
-      userUpdates.notificationPreferences = JSON.stringify(updatedPrefs);
+      try {
+        console.log('DEBUG - Updating notification preferences:', updates.preferences.notifications);
+        console.log('DEBUG - Current user object:', user);
+        
+        // Initialize with default values
+        let currentPrefs: any = {
+          push: true,
+          email: true,
+          sms: false
+        };
+        
+        if (user.notificationPreferences) {
+          try {
+            const parsedPrefs = JSON.parse(user.notificationPreferences);
+            console.log('DEBUG - Current notification preferences:', parsedPrefs);
+            
+            // Override defaults with existing values
+            if ('push' in parsedPrefs) currentPrefs.push = parsedPrefs.push;
+            if ('email' in parsedPrefs) currentPrefs.email = parsedPrefs.email;
+            if ('sms' in parsedPrefs) currentPrefs.sms = parsedPrefs.sms;
+          } catch (e) {
+            console.error('Error parsing existing notification preferences:', e);
+          }
+        } else {
+          console.log('DEBUG - No existing notification preferences found');
+        }
+        
+        // Use explicit checks to handle false values correctly
+        const updatedPrefs = { 
+          ...currentPrefs,
+          push: 'push' in updates.preferences.notifications ? !!updates.preferences.notifications.push : currentPrefs.push,
+          email: 'email' in updates.preferences.notifications ? !!updates.preferences.notifications.email : currentPrefs.email,
+          sms: 'sms' in updates.preferences.notifications ? !!updates.preferences.notifications.sms : currentPrefs.sms
+        };
+        
+        console.log('DEBUG - Updated notification preferences:', updatedPrefs);
+        userUpdates.notificationPreferences = JSON.stringify(updatedPrefs);
+      } catch (e) {
+        console.error('Error updating notification preferences:', e);
+        // Create new preferences if parsing fails
+        userUpdates.notificationPreferences = JSON.stringify(updates.preferences.notifications);
+      }
     }
 
     if (Object.keys(userUpdates).length > 0) {
@@ -307,13 +446,99 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
         values.push(JSON.stringify(profileImagesArray));
       }
 
-      // Update preferences
+      // Update preferences for customers
       if (updates.preferences) {
-        const currentProfile = await getCustomerProfile(userId, c.env.DB) as any;
-        const currentPrefs = currentProfile?.preferences ? JSON.parse(currentProfile.preferences) : {};
-        const updatedPrefs = { ...currentPrefs, ...updates.preferences };
-        profileUpdates.push('preferences = ?');
-        values.push(JSON.stringify(updatedPrefs));
+        try {
+          console.log('DEBUG - Updating customer preferences:', JSON.stringify(updates.preferences));
+          
+          const currentProfile = await getCustomerProfile(userId, c.env.DB) as any;
+          console.log('DEBUG - Current profile:', currentProfile);
+          
+          // Create a base preferences object with defaults if needed
+          let currentPrefs: any = {
+            language: 'en',
+            currency: 'THB',
+            notifications: {
+              push: true,
+              email: true,
+              sms: false
+            }
+          };
+          
+          if (currentProfile?.preferences) {
+            try {
+              const parsedPrefs = typeof currentProfile.preferences === 'string' ? 
+                JSON.parse(currentProfile.preferences) : currentProfile.preferences;
+              
+              console.log('DEBUG - Parsed profile preferences:', JSON.stringify(parsedPrefs));
+              
+              // Merge with defaults
+              currentPrefs = {
+                ...currentPrefs,
+                ...parsedPrefs,
+                notifications: {
+                  ...currentPrefs.notifications,
+                  ...(parsedPrefs.notifications || {})
+                }
+              };
+            } catch (e) {
+              console.error('Error parsing existing preferences:', e);
+            }
+          }
+          
+          console.log('DEBUG - Current preferences after merging:', JSON.stringify(currentPrefs));
+          
+          // Start with a clean slate for notifications if we're updating them
+          const newPrefs: any = {
+            language: updates.preferences.language || currentPrefs.language || 'en',
+            currency: updates.preferences.currency || currentPrefs.currency || 'THB',
+            notifications: { ...currentPrefs.notifications } // Copy existing notifications
+          };
+          
+          // Handle notifications separately to preserve false values
+          if (updates.preferences.notifications) {
+            console.log('DEBUG - Updating notifications with:', JSON.stringify(updates.preferences.notifications));
+            
+            // IMPORTANT: Directly set the notification values from the update
+            // DO NOT merge with existing values to ensure false values are preserved
+            if ('push' in updates.preferences.notifications) {
+              const pushValue = updates.preferences.notifications.push;
+              console.log('DEBUG - Setting push to:', pushValue);
+              newPrefs.notifications.push = pushValue;
+            }
+            
+            if ('email' in updates.preferences.notifications) {
+              const emailValue = updates.preferences.notifications.email;
+              console.log('DEBUG - Setting email to:', emailValue);
+              newPrefs.notifications.email = emailValue;
+            }
+            
+            if ('sms' in updates.preferences.notifications) {
+              const smsValue = updates.preferences.notifications.sms;
+              console.log('DEBUG - Setting sms to:', smsValue);
+              newPrefs.notifications.sms = smsValue;
+            }
+          }
+          
+          console.log('DEBUG - New preferences to save:', JSON.stringify(newPrefs));
+
+          profileUpdates.push('preferences = ?');
+          values.push(JSON.stringify(newPrefs));
+        } catch (e) {
+          console.error('Error updating customer preferences:', e);
+          // If parsing fails, just use the new preferences with defaults
+          const defaultPrefs = {
+            ...updates.preferences,
+            notifications: {
+              push: true,
+              email: true,
+              sms: false,
+              ...(updates.preferences.notifications || {})
+            }
+          };
+          profileUpdates.push('preferences = ?');
+          values.push(JSON.stringify(defaultPrefs));
+        }
       }
 
       if (profileUpdates.length > 0) {
@@ -348,6 +573,43 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
       profile = await getSupplierProfile(userId, c.env.DB);
     } else if (user.userType === 'customer') {
       profile = await getCustomerProfile(userId, c.env.DB);
+      
+      // If no profile exists, create one with default values
+      if (!profile) {
+        console.log('DEBUG - No customer profile found, creating one');
+        const defaultPreferences = {
+          language: user.preferredLanguage || 'en',
+          currency: 'THB',
+          notifications: {
+            push: true,
+            email: true,
+            sms: false
+          }
+        };
+        
+        // If we had preference updates, apply them
+        if (updates.preferences) {
+          if (updates.preferences.notifications) {
+            if ('push' in updates.preferences.notifications) {
+              defaultPreferences.notifications.push = !!updates.preferences.notifications.push;
+            }
+            if ('email' in updates.preferences.notifications) {
+              defaultPreferences.notifications.email = !!updates.preferences.notifications.email;
+            }
+            if ('sms' in updates.preferences.notifications) {
+              defaultPreferences.notifications.sms = !!updates.preferences.notifications.sms;
+            }
+          }
+        }
+        
+        await createCustomerProfile({
+          userId,
+          displayName: user.email.split('@')[0],
+          preferences: defaultPreferences
+        }, c.env.DB);
+        
+        profile = await getCustomerProfile(userId, c.env.DB);
+      }
     }
 
     const updatedUser = await getUserById(userId, c.env.DB) as any;
@@ -355,16 +617,140 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
       return jsonError(c, 'User not found', 'The requested user does not exist after update', 500);
     }
     
-    const preferences = JSON.parse(updatedUser.notificationPreferences || '{}');
-    const defaultPreferences = {
+    // Build preferences for response, respecting the single source of truth
+    // Start with default preferences
+    let finalPreferences: any = {
       language: updatedUser.preferredLanguage || 'en',
       currency: 'THB',
       notifications: {
-        push: preferences.push !== false,
-        email: preferences.email !== false,
-        sms: preferences.sms !== false
+        push: true,
+        email: true,
+        sms: false
       }
     };
+    
+    console.log('DEBUG - User type:', updatedUser.userType);
+    console.log('DEBUG - Profile:', JSON.stringify(profile));
+    
+    // IMPORTANT: If this is a response to the update request, use the values from the request
+    if (updates.preferences?.notifications) {
+      console.log('DEBUG - Using notification preferences from update request');
+      
+      // Directly use the values from the update request
+      if ('push' in updates.preferences.notifications) {
+        finalPreferences.notifications.push = updates.preferences.notifications.push;
+      }
+      if ('email' in updates.preferences.notifications) {
+        finalPreferences.notifications.email = updates.preferences.notifications.email;
+      }
+      if ('sms' in updates.preferences.notifications) {
+        finalPreferences.notifications.sms = updates.preferences.notifications.sms;
+      }
+    }
+    // Otherwise get from profile
+    else if (updatedUser.userType === 'customer') {
+        if (profile && profile.preferences) {
+            try {
+                const parsedPrefs = typeof profile.preferences === 'string'
+                    ? JSON.parse(profile.preferences)
+                    : profile.preferences;
+                    
+                console.log('DEBUG - Parsed customer preferences:', JSON.stringify(parsedPrefs));
+                
+                // Ensure we have a proper structure with defaults
+                finalPreferences = {
+                    ...finalPreferences,
+                    ...parsedPrefs
+                };
+                
+                // Handle notifications separately to preserve false values
+                if (parsedPrefs.notifications) {
+                  if ('push' in parsedPrefs.notifications) {
+                    finalPreferences.notifications.push = parsedPrefs.notifications.push;
+                  }
+                  if ('email' in parsedPrefs.notifications) {
+                    finalPreferences.notifications.email = parsedPrefs.notifications.email;
+                  }
+                  if ('sms' in parsedPrefs.notifications) {
+                    finalPreferences.notifications.sms = parsedPrefs.notifications.sms;
+                  }
+                }
+                
+                console.log('DEBUG - Final customer preferences:', JSON.stringify(finalPreferences));
+            } catch (e) {
+                console.error('Error parsing customer preferences:', e);
+            }
+        } else {
+            console.log('DEBUG - No profile or preferences found for customer');
+        }
+    } else if (updatedUser.userType === 'supplier') {
+        // If this is a response to an update request, prioritize those values
+        if (updates.preferences?.notifications) {
+            console.log('DEBUG - Using notification preferences from update request for supplier');
+            
+            try {
+                // Start with defaults
+                finalPreferences = {
+                    language: updatedUser.preferredLanguage || 'en',
+                    currency: 'THB',
+                    notifications: {
+                        push: true,
+                        email: true,
+                        sms: false
+                    }
+                };
+                
+                // Directly use the values from the update request
+                if ('push' in updates.preferences.notifications) {
+                    finalPreferences.notifications.push = updates.preferences.notifications.push;
+                }
+                if ('email' in updates.preferences.notifications) {
+                    finalPreferences.notifications.email = updates.preferences.notifications.email;
+                }
+                if ('sms' in updates.preferences.notifications) {
+                    finalPreferences.notifications.sms = updates.preferences.notifications.sms;
+                }
+                
+                console.log('DEBUG - Final supplier preferences from update:', JSON.stringify(finalPreferences));
+            } catch (e) {
+                console.error('Error setting supplier preferences from update:', e);
+            }
+        } 
+        // Otherwise get from user record
+        else {
+            try {
+                console.log('DEBUG - Getting supplier preferences from user record');
+                const supplierPrefs = updatedUser.notificationPreferences 
+                    ? JSON.parse(updatedUser.notificationPreferences) 
+                    : {};
+                    
+                console.log('DEBUG - Parsed supplier preferences:', JSON.stringify(supplierPrefs));
+                
+                finalPreferences = {
+                    language: updatedUser.preferredLanguage || 'en',
+                    currency: 'THB',
+                    notifications: {
+                        push: 'push' in supplierPrefs ? supplierPrefs.push : true,
+                        email: 'email' in supplierPrefs ? supplierPrefs.email : true,
+                        sms: 'sms' in supplierPrefs ? supplierPrefs.sms : false,
+                    }
+                };
+                
+                console.log('DEBUG - Final supplier preferences:', JSON.stringify(finalPreferences));
+            } catch (e) {
+                console.error('Error parsing supplier preferences:', e);
+                finalPreferences = {
+                    language: updatedUser.preferredLanguage || 'en',
+                    currency: 'THB',
+                    notifications: {
+                        push: true,
+                        email: true,
+                        sms: false,
+                    }
+                };
+            }
+        }
+    }
 
     // Parse profile images based on what's available
     let profileImage = null;
@@ -390,6 +776,14 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
     // Get social links
     const socialLinks = profile?.socialLinks ? JSON.parse(profile.socialLinks) : {};
 
+    // Log the final data that will be sent in the response
+    console.log('DEBUG - Final profile data to return:', {
+      id: updatedUser.id,
+      userType: updatedUser.userType,
+      profile: profile,
+      finalPreferences: finalPreferences
+    });
+    
     const profileData = {
       id: updatedUser.id,
       name: profile?.displayName || updatedUser.email.split('@')[0],
@@ -403,7 +797,7 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
       socialLinks,
       dateOfBirth: profile?.dateOfBirth || null,
       gender: profile?.gender || null,
-      preferences: defaultPreferences,
+      preferences: finalPreferences,
       createdAt: updatedUser.createdAt,
       updatedAt: updatedUser.updatedAt
     };
@@ -803,6 +1197,34 @@ users.put('/companion/profile', async (c) => {
       // JSON body
       updates = await c.req.json();
     }
+    
+    // Handle notification preferences update if present
+    if (updates.preferences?.notifications) {
+      const user = await getUserById(userId, c.env.DB) as any;
+      if (user) {
+        try {
+          const currentPrefs = user.notificationPreferences ? JSON.parse(user.notificationPreferences) : {};
+          // Use explicit checks to handle false values correctly
+          const updatedPrefs = { 
+            ...currentPrefs,
+            push: 'push' in updates.preferences.notifications ? updates.preferences.notifications.push : currentPrefs.push,
+            email: 'email' in updates.preferences.notifications ? updates.preferences.notifications.email : currentPrefs.email,
+            sms: 'sms' in updates.preferences.notifications ? updates.preferences.notifications.sms : currentPrefs.sms
+          };
+          
+          // Update user table with notification preferences
+          await updateUser(userId, { 
+            notificationPreferences: JSON.stringify(updatedPrefs) 
+          }, c.env.DB);
+        } catch (e) {
+          console.error('Error updating companion notification preferences:', e);
+          // Create new preferences if parsing fails
+          await updateUser(userId, { 
+            notificationPreferences: JSON.stringify(updates.preferences.notifications) 
+          }, c.env.DB);
+        }
+      }
+    }
 
     // Validate firstName/lastName
     if (updates.firstName && typeof updates.firstName !== 'string') {
@@ -981,6 +1403,46 @@ users.get('/companion/profile', async (c) => {
     const languages = typeof row.languages === 'string' ? JSON.parse(row.languages) : [];
     const specialization = typeof row.specialization === 'string' ? JSON.parse(row.specialization) : [];
     const certifications = typeof row.certifications === 'string' ? JSON.parse(row.certifications) : [];
+    
+    // Get user preferences
+    let preferences: any = {
+      language: user?.preferredLanguage || 'en',
+      currency: 'THB',
+      notifications: {
+        push: true,
+        email: true,
+        sms: false
+      }
+    };
+    
+    // Parse notification preferences from user record
+    if (user && user.notificationPreferences) {
+      try {
+        console.log('DEBUG - GET companion profile - User notification preferences:', user.notificationPreferences);
+        
+        const notificationPrefs = JSON.parse(user.notificationPreferences);
+        console.log('DEBUG - GET companion profile - Parsed notification preferences:', JSON.stringify(notificationPrefs));
+        
+        // Explicitly set each notification preference to preserve false values
+        if ('push' in notificationPrefs) {
+          preferences.notifications.push = notificationPrefs.push;
+          console.log('DEBUG - GET companion profile - Setting push to:', notificationPrefs.push);
+        }
+        if ('email' in notificationPrefs) {
+          preferences.notifications.email = notificationPrefs.email;
+          console.log('DEBUG - GET companion profile - Setting email to:', notificationPrefs.email);
+        }
+        if ('sms' in notificationPrefs) {
+          preferences.notifications.sms = notificationPrefs.sms;
+          console.log('DEBUG - GET companion profile - Setting sms to:', notificationPrefs.sms);
+        }
+        
+        console.log('DEBUG - GET companion profile - Final preferences:', JSON.stringify(preferences));
+      } catch (e) {
+        console.error('Error parsing companion notification preferences:', e);
+      }
+    }
+    
     // Hardcoded values for demonstration
     const experienceStats = {
       yearsOfExperience: 5,
@@ -996,6 +1458,7 @@ users.get('/companion/profile', async (c) => {
       languages,
       specialization,
       certifications,
+      preferences,
       experienceStats
     }, 'Companion profile retrieved successfully');
   } catch (error) {

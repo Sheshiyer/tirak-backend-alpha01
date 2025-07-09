@@ -66,6 +66,7 @@ export async function getUserByEmail(email: string, db: D1Database): Promise<Use
     createdAt: result.created_at as string,
     updatedAt: result.updated_at as string,
     lastLoginAt: result.last_login_at as string | undefined,
+    notificationPreferences: result.notificationPreferences as string | undefined,
   };
 }
 
@@ -92,6 +93,7 @@ export async function getUserByPhone(phone: string, db: D1Database): Promise<Use
     createdAt: result.created_at as string,
     updatedAt: result.updated_at as string,
     lastLoginAt: result.last_login_at as string | undefined,
+    notificationPreferences: result.notificationPreferences as string | undefined,
   };
 }
 
@@ -104,6 +106,8 @@ export async function getUserById(id: string, db: D1Database): Promise<User | nu
   `).bind(id).first();
 
   if (!result) return null;
+
+  console.log('DEBUG - getUserById raw result:', result);
 
   return {
     id: result.id as string,
@@ -118,6 +122,7 @@ export async function getUserById(id: string, db: D1Database): Promise<User | nu
     createdAt: result.created_at as string,
     updatedAt: result.updated_at as string,
     lastLoginAt: result.last_login_at as string | undefined,
+    notificationPreferences: result.notificationPreferences as string | undefined,
   };
 }
 
@@ -125,9 +130,23 @@ export async function getUserById(id: string, db: D1Database): Promise<User | nu
  * Update user profile
  */
 export async function updateUser(id: string, updates: Partial<User>, db: D1Database): Promise<void> {
+  // Log the updates being applied
+  console.log('DEBUG - updateUser updates:', updates);
+  
+  // Map camelCase property names to database column names if needed
+  const columnMap: Record<string, string> = {
+    // These are already the same in our case, but keeping for clarity
+    'notificationPreferences': 'notificationPreferences',
+    'preferredLanguage': 'preferredLanguage'
+  };
+  
   const setClause = Object.keys(updates)
     .filter(key => key !== 'id')
-    .map(key => `${key} = ?`)
+    .map(key => {
+      // Use the mapped column name if it exists, otherwise use the key as is
+      const columnName = columnMap[key] || key;
+      return `${columnName} = ?`;
+    })
     .join(', ');
 
   if (!setClause) return;
@@ -135,6 +154,9 @@ export async function updateUser(id: string, updates: Partial<User>, db: D1Datab
   const values = Object.entries(updates)
     .filter(([key]) => key !== 'id')
     .map(([, value]) => value);
+
+  console.log('DEBUG - updateUser SQL:', `UPDATE users SET ${setClause}, updated_at = ? WHERE id = ?`);
+  console.log('DEBUG - updateUser values:', [...values, new Date().toISOString(), id]);
 
   await db.prepare(`
     UPDATE users SET ${setClause}, updated_at = ? WHERE id = ?
