@@ -13,6 +13,7 @@ export interface User {
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;
+  profile_image_url?: string;
 }
 
 export interface SupplierProfile {

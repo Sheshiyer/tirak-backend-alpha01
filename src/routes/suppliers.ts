@@ -215,6 +215,14 @@ suppliers.get('/stats', authMiddleware, async (c) => {
       return jsonError(c, 'Invalid user type', 'Only suppliers and companions can access stats', 403);
     }
 
+    // Calculate profile image
+    let profileImage = null;
+    if (userType === 'supplier' && profile) {
+      profileImage = profile.profileImages?.[0] || null;
+    } else if (userType === 'companion' && profile) {
+      profileImage = (profile as any).profile_photo || null;
+    }
+
     // Get booking statistics
     const bookingStats = await c.env.DB.prepare(`
       SELECT 
@@ -444,7 +452,8 @@ suppliers.get('/stats', authMiddleware, async (c) => {
         status: user.status,
         totalRatings: ratingAverage,
         totalReviews: ratingCount,
-        userType: userType
+        userType: userType,
+        profileImage: user.profile_image_url || profileImage
       },
       data: stats
     }, `${userType === 'supplier' ? 'Supplier' : 'Companion'} statistics retrieved successfully`);
