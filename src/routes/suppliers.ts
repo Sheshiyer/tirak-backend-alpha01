@@ -478,7 +478,7 @@ suppliers.post('/:id/services',
 /**
  * Get supplier statistics and performance metrics
  */
-suppliers.get('/stats', authMiddleware, supplierOnly, async (c) => {
+suppliers.get('/stats', authMiddleware, validateUUID('id'), supplierOnly, async (c) => {
   const userId = c.get('userId');
   
   // Ensure userId is defined
