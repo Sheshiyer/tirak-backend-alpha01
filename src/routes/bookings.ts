@@ -470,7 +470,7 @@ bookings.get('/:id/summary', validateUUID('id'), async (c) => {
 /**
  * Get user bookings
  */
-bookings.get('/', validatePagination, async (c) => {
+bookings.get('/', async (c) => {
   const userId = c.get('userId');
   const userType = c.get('userType');
   const pagination = c.get('pagination');

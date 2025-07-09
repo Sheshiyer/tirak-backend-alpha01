@@ -224,7 +224,7 @@ export async function requireActiveSubscription(c: Context<{ Bindings: Env; Vari
   }
   
   // Check if subscription has expired
-  if (supplier.subscription_expires_at && new Date(supplier.subscription_expires_at) < new Date()) {
+  if (supplier.subscription_expires_at && (typeof supplier.subscription_expires_at === 'string' || typeof supplier.subscription_expires_at === 'number') && new Date(supplier.subscription_expires_at) < new Date()) {
     return jsonError(c, 'Subscription expired', 'Please renew your subscription', 403);
   }
   

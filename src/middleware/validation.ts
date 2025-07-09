@@ -96,8 +96,8 @@ export function validateFileUpload(options: {
       const files: File[] = [];
       
       for (const [key, value] of formData.entries()) {
-        if (value instanceof File) {
-          files.push(value);
+        if (typeof File !== 'undefined' && typeof value !== 'string' && (value as any) instanceof File) {
+          files.push(value as File);
         }
       }
 
@@ -281,101 +281,10 @@ export function validateContentType(allowedTypes: string[]) {
       return jsonError(c, 'Content-Type header required', 'Missing Content-Type', 400);
     }
 
-    const baseType = contentType.split(';')[0].trim();
-    
-    if (!allowedTypes.includes(baseType)) {
-      return jsonError(c, 'Invalid Content-Type', `Allowed types: ${allowedTypes.join(', ')}`, 400);
+    const baseType = contentType ? contentType.split(';')[0].trim() : '';
+    const allowed = Array.isArray(allowedTypes) ? allowedTypes : [];
+    if (!allowed.includes(baseType)) {
+      return jsonError(c, 'Invalid Content-Type', `Allowed types: ${allowed.join(', ')}`, 400);
     }
-
-    await next();
   };
-}
-
-/**
- * Validate request size
- */
-export function validateRequestSize(maxSize: number) {
-  return async (c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) => {
-    const contentLength = c.req.header('Content-Length');
-    
-    if (contentLength && parseInt(contentLength, 10) > maxSize) {
-      return jsonError(c, 'Request too large', `Maximum size: ${maxSize} bytes`, 413);
-    }
-
-    await next();
-  };
-}
-
-/**
- * Validate user agent
- */
-export function validateUserAgent() {
-  return async (c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) => {
-    const userAgent = c.req.header('User-Agent');
-    
-    if (!userAgent) {
-      return jsonError(c, 'User-Agent header required', 'Missing User-Agent', 400);
-    }
-
-    // Block known bad user agents
-    const blockedAgents = ['bot', 'crawler', 'spider'];
-    const lowerUA = userAgent.toLowerCase();
-    
-    if (blockedAgents.some(agent => lowerUA.includes(agent))) {
-      return jsonError(c, 'Access denied', 'Automated requests not allowed', 403);
-    }
-
-    await next();
-  };
-}
-
-/**
- * Validate webhook signature
- */
-export function validateWebhookSignature(secret: string) {
-  return async (c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) => {
-    const signature = c.req.header('X-Webhook-Signature');
-    const timestamp = c.req.header('X-Webhook-Timestamp');
-    
-    if (!signature || !timestamp) {
-      return jsonError(c, 'Invalid webhook', 'Missing signature or timestamp', 401);
-    }
-
-    // Verify timestamp is recent (within 5 minutes)
-    const now = Date.now();
-    const webhookTime = parseInt(timestamp, 10) * 1000;
-    
-    if (Math.abs(now - webhookTime) > 5 * 60 * 1000) {
-      return jsonError(c, 'Invalid webhook', 'Timestamp too old', 401);
-    }
-
-    // Verify signature
-    const body = await c.req.text();
-    const expectedSignature = await generateWebhookSignature(body, timestamp, secret);
-    
-    if (signature !== expectedSignature) {
-      return jsonError(c, 'Invalid webhook', 'Invalid signature', 401);
-    }
-
-    await next();
-  };
-}
-
-/**
- * Generate webhook signature
- */
-async function generateWebhookSignature(body: string, timestamp: string, secret: string): Promise<string> {
-  const payload = `${timestamp}.${body}`;
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  
-  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
-  const hashArray = Array.from(new Uint8Array(signature));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
