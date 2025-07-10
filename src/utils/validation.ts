@@ -105,7 +105,7 @@ export const availabilitySchema = z.object({
 
 // Enhanced booking schema with customer preferences
 export const enhancedBookingSchema = z.object({
-  companionId: z.string(),
+  companionId: z.string().min(1, 'Companion ID is required'),
   serviceId: z.string().optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
   startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Start time must be in HH:MM format'),
