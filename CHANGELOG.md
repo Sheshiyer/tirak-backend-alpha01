@@ -15,6 +15,7 @@ All notable changes to the Tirak Backend will be documented in this file.
 - Helper scripts for database migration management
 - **Bookings**: Enhanced booking system with additional fields: `meetingPoint`, `template`, `preferredLanguages` (array), `dietaryRestrictions` (array), and `accessibilityNeeds` (array) to better accommodate customer requirements.
 - **Suppliers**: Added new `/suppliers/stats` endpoint for retrieving comprehensive supplier performance metrics and analytics.
+- **Services**: Added `PUT /api/suppliers/services/:serviceId` endpoint for updating existing services with partial updates support.
 
 ### Fixed
 - **Auth**: Fixed an issue in the login route where the display name for 'companion' users was being looked up in the wrong table. It now correctly queries `companion_profiles`.

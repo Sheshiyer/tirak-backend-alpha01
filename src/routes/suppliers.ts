@@ -3,7 +3,8 @@ import { zValidator } from '@hono/zod-validator';
 import {
   supplierSearchSchema,
   supplierProfileSchema,
-  serviceSchema
+  serviceSchema,
+  serviceUpdateSchema
 } from '../utils/validation';
 import { validateUUID, validatePagination } from '../middleware/validation';
 import { authMiddleware, supplierOnly, optionalAuthMiddleware } from '../middleware/auth';
@@ -782,5 +783,137 @@ suppliers.post('/:id/services',
   }
 );
 
+/**
+ * Update service (supplier only)
+ */
+suppliers.put('/services/:serviceId', 
+  validateUUID('serviceId'), 
+  authMiddleware, 
+  supplierOnly,
+  zValidator('json', serviceUpdateSchema),
+  async (c) => {
+    const serviceId = c.req.param('serviceId');
+    const userId = c.get('userId');
+    const updates = c.req.valid('json');
+    
+    try {
+      // Check if service exists and belongs to the supplier
+      const serviceResult = await c.env.DB.prepare(`
+        SELECT id, supplier_id, title, description, price_min, price_max, 
+               currency, duration_hours, is_active, created_at, updated_at
+        FROM supplier_services 
+        WHERE id = ? AND supplier_id = ?
+      `).bind(serviceId, userId).first();
+
+      if (!serviceResult) {
+        return jsonError(c, 'Service not found', 'Service does not exist or you do not have permission to update it', 404);
+      }
+
+      // Build update query dynamically
+      const updateFields = [];
+      const params = [];
+
+      if (updates.title !== undefined) {
+        updateFields.push('title = ?');
+        params.push(updates.title);
+      }
+
+      if (updates.description !== undefined) {
+        updateFields.push('description = ?');
+        params.push(updates.description);
+      }
+
+      if (updates.priceMin !== undefined) {
+        updateFields.push('price_min = ?');
+        params.push(updates.priceMin);
+      }
+
+      if (updates.priceMax !== undefined) {
+        updateFields.push('price_max = ?');
+        params.push(updates.priceMax);
+      }
+
+      if (updates.currency !== undefined) {
+        updateFields.push('currency = ?');
+        params.push(updates.currency);
+      }
+
+      if (updates.durationHours !== undefined) {
+        updateFields.push('duration_hours = ?');
+        params.push(updates.durationHours);
+      }
+
+      if (updates.isActive !== undefined) {
+        updateFields.push('is_active = ?');
+        params.push(updates.isActive ? 1 : 0);
+      }
+
+      if (updateFields.length === 0) {
+        return jsonError(c, 'No updates provided', 'At least one field must be updated', 400);
+      }
+
+      updateFields.push('updated_at = ?');
+      params.push(new Date().toISOString());
+      params.push(serviceId);
+
+      // Update service
+      await c.env.DB.prepare(`
+        UPDATE supplier_services 
+        SET ${updateFields.join(', ')}
+        WHERE id = ?
+      `).bind(...params).run();
+
+      // Clear supplier cache
+      await c.env.CACHE.delete(`supplier:${userId}`);
+
+      // Track service update
+      if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+        await c.env.ANALYTICS_QUEUE.send({
+          eventType: 'service_updated',
+          userId: userId,
+          properties: { 
+            serviceId,
+            updatedFields: Object.keys(updates),
+            priceRange: updates.priceMin !== undefined || updates.priceMax !== undefined 
+              ? `${updates.priceMin || serviceResult.price_min}-${updates.priceMax || serviceResult.price_max}`
+              : undefined
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Get updated service data
+      const updatedService = await c.env.DB.prepare(`
+        SELECT id, title, description, price_min, price_max, 
+               currency, duration_hours, is_active, created_at, updated_at
+        FROM supplier_services 
+        WHERE id = ?
+      `).bind(serviceId).first();
+
+      if (!updatedService) {
+        return jsonError(c, 'Service not found', 'Service was not found after update', 404);
+      }
+
+      const service = {
+        id: updatedService.id,
+        title: updatedService.title,
+        description: updatedService.description,
+        priceMin: updatedService.price_min,
+        priceMax: updatedService.price_max,
+        currency: updatedService.currency,
+        durationHours: updatedService.duration_hours,
+        isActive: Boolean(updatedService.is_active),
+        createdAt: updatedService.created_at,
+        updatedAt: updatedService.updated_at
+      };
+
+      return jsonSuccess(c, { service }, 'Service updated successfully');
+
+    } catch (error) {
+      console.error('Update service error:', error);
+      return jsonError(c, 'Failed to update service', 'An error occurred while updating the service', 500);
+    }
+  }
+);
 
 export { suppliers as supplierRoutes };

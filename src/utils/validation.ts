@@ -75,6 +75,25 @@ export const serviceSchema = z.object({
   path: ['priceMax']
 });
 
+// Service update schema (all fields optional)
+export const serviceUpdateSchema = z.object({
+  title: z.string().min(1, 'Service title is required').max(200, 'Title too long').optional(),
+  description: z.string().max(2000, 'Description too long').optional(),
+  priceMin: z.number().min(0, 'Price must be positive').optional(),
+  priceMax: z.number().min(0, 'Price must be positive').optional(),
+  currency: z.string().length(3, 'Currency must be 3 characters').optional(),
+  durationHours: z.number().min(0.5, 'Duration must be at least 30 minutes').max(24, 'Duration cannot exceed 24 hours').optional(),
+  isActive: z.boolean().optional()
+}).refine(data => {
+  if (data.priceMin !== undefined && data.priceMax !== undefined) {
+    return data.priceMax >= data.priceMin;
+  }
+  return true;
+}, {
+  message: 'Maximum price must be greater than or equal to minimum price',
+  path: ['priceMax']
+});
+
 // Companion experience schema
 export const experienceSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters').max(255, 'Title too long'),
