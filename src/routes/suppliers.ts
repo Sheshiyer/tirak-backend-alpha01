@@ -716,19 +716,24 @@ suppliers.get('/:id/services', validateUUID('id'), validatePagination(), async (
 });
 
 /**
- * Create new service (supplier only)
+ * Create new service (supplier and companion only)
  */
 suppliers.post('/:id/services', 
   validateUUID('id'), 
   authMiddleware, 
-  supplierOnly,
   zValidator('json', serviceSchema),
   async (c) => {
     const supplierId = c.req.param('id');
     const userId = c.get('userId');
+    const userType = c.get('userType');
     const serviceData = c.req.valid('json');
     
-    // Ensure supplier can only create services for themselves
+    // Only suppliers and companions can create services
+    if (userType !== 'supplier' && userType !== 'companion') {
+      return jsonError(c, 'Access denied', 'Only suppliers and companions can create services', 403);
+    }
+    
+    // Ensure user can only create services for themselves
     if (userId !== supplierId) {
       return jsonError(c, 'Access denied', 'You can only create services for your own profile', 403);
     }
@@ -784,17 +789,22 @@ suppliers.post('/:id/services',
 );
 
 /**
- * Update service (supplier only)
+ * Update service (supplier and companion only)
  */
 suppliers.put('/services/:serviceId', 
   validateUUID('serviceId'), 
   authMiddleware, 
-  supplierOnly,
   zValidator('json', serviceUpdateSchema),
   async (c) => {
     const serviceId = c.req.param('serviceId');
     const userId = c.get('userId');
+    const userType = c.get('userType');
     const updates = c.req.valid('json');
+    
+    // Only suppliers and companions can update services
+    if (userType !== 'supplier' && userType !== 'companion') {
+      return jsonError(c, 'Access denied', 'Only suppliers and companions can update services', 403);
+    }
     
     try {
       // Check if service exists and belongs to the supplier
