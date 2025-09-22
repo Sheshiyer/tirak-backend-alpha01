@@ -7,7 +7,8 @@ This guide explains how to set up Cloudflare Email Workers for sending password 
 The email system consists of:
 - **Email Worker**: A separate Cloudflare Worker that handles email sending
 - **Email Templates**: HTML templates stored in KV storage
-- **Email Routing**: Cloudflare Email Routing for actual email delivery
+- **Resend API**: Third-party email service for actual email delivery
+- **Fallback Logging**: Console logging for development and debugging
 
 ## Setup Steps
 
@@ -31,13 +32,15 @@ Email templates are stored in `src/email-templates/`:
 
 Templates use `{{variable}}` syntax for dynamic content.
 
-### 3. Configure Email Routing
+### 3. Set Up Resend Email Service
 
-1. Go to Cloudflare Dashboard → Email Routing
-2. Add your domain (e.g., `tirak.app`)
-3. Set up email addresses:
-   - `noreply@tirak.app` for transactional emails
-   - `support@tirak.app` for support emails
+1. Create a free account at [resend.com](https://resend.com)
+2. Get your API key from the dashboard
+3. Set the API key as a secret:
+   ```bash
+   wrangler secret put RESEND_API_KEY --config=wrangler-email.toml
+   ```
+4. (Optional) Verify your domain for better deliverability
 
 ### 4. Update Main Worker Configuration
 

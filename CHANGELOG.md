@@ -31,6 +31,8 @@ All notable changes to the Tirak Backend will be documented in this file.
 - **Email System**: Added proper TypeScript interfaces for email request handling
 - **Email System**: Successfully deployed email worker and uploaded email templates to KV storage
 - **Email System**: Integrated email worker service binding with main application
+- **Email System**: Integrated Resend API for actual email delivery
+- **Email System**: Fixed TypeScript linter issues with Resend API response types
 - **API**: Resolved an issue where companion experiences were not being returned from the `GET /api/companions/:id/experiences` endpoint. The fix involved:
   - Removing a duplicate, conflicting route handler for the same path.
   - Correcting a JSON parsing error for the `keywords` field which could fail silently.

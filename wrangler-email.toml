@@ -12,6 +12,7 @@ id = "fd2e05e821ff4b1f8cac6270796d38a1"
 [vars]
 FROM_EMAIL = "noreply@tirak.app"
 FROM_NAME = "Tirak"
+# RESEND_API_KEY should be set as a secret using: wrangler secret put RESEND_API_KEY
 
 # Staging environment
 [env.staging]

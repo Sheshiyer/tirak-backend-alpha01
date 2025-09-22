@@ -4,6 +4,8 @@ export interface Env {
   // From email address
   FROM_EMAIL: string;
   FROM_NAME: string;
+  // Resend API key
+  RESEND_API_KEY: string;
 }
 
 interface EmailRequest {
@@ -11,6 +13,13 @@ interface EmailRequest {
   subject: string;
   template: string;
   data?: Record<string, any>;
+}
+
+interface ResendResponse {
+  id: string;
+  from: string;
+  to: string[];
+  created_at: string;
 }
 
 export default {
@@ -59,27 +68,61 @@ export default {
       // Process template with data
       const htmlContent = processTemplate(templateData, data || {});
       
-      // For now, we'll use a simple email service or log the email
-      // In production, you would integrate with a real email service
-      console.log('=== EMAIL TO SEND ===');
-      console.log('To:', to);
-      console.log('Subject:', subject);
-      console.log('Template:', template);
-      console.log('Data:', data);
-      console.log('HTML Content:', htmlContent);
-      console.log('====================');
-      
-      // Simulate email sending
-      // In production, replace this with actual email sending logic
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      return new Response(JSON.stringify({
-        success: true,
-        message: `Email sent successfully to ${to} with template ${template}`
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      // Send email using Resend API
+      try {
+        const emailResponse = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: `${env.FROM_NAME} <${env.FROM_EMAIL}>`,
+            to: [to],
+            subject: subject,
+            html: htmlContent,
+          }),
+        });
+
+        if (!emailResponse.ok) {
+          const errorText = await emailResponse.text();
+          console.error('Resend API error:', errorText);
+          throw new Error(`Resend API error: ${emailResponse.status} ${errorText}`);
+        }
+
+        const result = await emailResponse.json() as ResendResponse;
+        console.log('Email sent successfully via Resend:', result);
+        
+        return new Response(JSON.stringify({
+          success: true,
+          message: `Email sent successfully to ${to}`,
+          emailId: result.id
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (emailError) {
+        console.error('Failed to send email via Resend:', emailError);
+        
+        // Fallback to logging for development
+        console.log('=== EMAIL TO SEND (FALLBACK) ===');
+        console.log('To:', to);
+        console.log('Subject:', subject);
+        console.log('Template:', template);
+        console.log('Data:', data);
+        console.log('HTML Content:', htmlContent);
+        console.log('================================');
+        
+        return new Response(JSON.stringify({
+          success: false,
+          message: `Failed to send email to ${to}`,
+          error: emailError instanceof Error ? emailError.message : 'Unknown error',
+          warning: 'Email logged to console as fallback'
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
       
     } catch (error) {
       console.error('Email worker error:', error);
