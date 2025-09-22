@@ -26,14 +26,18 @@ export interface Env {
   STORAGE: R2Bucket;
   CACHE: KVNamespace;
   SESSIONS: KVNamespace;
+  EMAIL_TEMPLATES: KVNamespace;
   MODERATION_QUEUE: Queue;
   ANALYTICS_QUEUE: Queue;
   NOTIFICATION_QUEUE: Queue;
   CHAT_ROOM: DurableObjectNamespace;
   NOTIFICATION_SERVICE: DurableObjectNamespace;
+  EMAIL_WORKER: Service;
   JWT_SECRET: string;
   ENVIRONMENT: string;
   FRONTEND_URLS: string;
+  FROM_EMAIL: string;
+  FROM_NAME: string;
 }
 
 export interface Variables {

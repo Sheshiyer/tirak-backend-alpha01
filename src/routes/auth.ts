@@ -249,8 +249,86 @@ auth.post('/forgot-password', zValidator('json', passwordResetRequestSchema), as
       { expirationTtl: 3600 } // 1 hour
     );
 
-    // In production, send email/SMS with reset link
-    console.log(`Password reset token for ${user.email}: ${resetToken}`); // Development only
+    // Get user display name from profile
+    let displayName = user.email;
+    try {
+      if (user.userType === 'supplier') {
+        const profile = await c.env.DB.prepare('SELECT display_name FROM supplier_profiles WHERE user_id = ?').bind(user.id).first() as { display_name?: string } | null;
+        displayName = profile?.display_name || user.email;
+      } else if (user.userType === 'customer') {
+        const profile = await c.env.DB.prepare('SELECT display_name FROM customer_profiles WHERE user_id = ?').bind(user.id).first() as { display_name?: string } | null;
+        displayName = profile?.display_name || user.email;
+      } else if (user.userType === 'companion') {
+        const profile = await c.env.DB.prepare('SELECT display_name FROM companion_profiles WHERE user_id = ?').bind(user.id).first() as { display_name?: string } | null;
+        displayName = profile?.display_name || user.email;
+      }
+    } catch (profileError) {
+      console.warn('Could not fetch user display name:', profileError);
+    }
+
+    // Send password reset email
+    if (c.env.EMAIL_WORKER && c.env.ENVIRONMENT === 'production') {
+      try {
+        const response = await c.env.EMAIL_WORKER.fetch('https://tirak-email-worker.tirak-court.workers.dev', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: user.email,
+            subject: 'Password Reset Request - Tirak',
+            template: 'password_reset',
+            data: {
+              resetToken,
+              resetUrl: `https://tirak.app/reset-password?token=${resetToken}`,
+              userName: displayName,
+              expiresIn: '1 hour'
+            }
+          })
+        });
+        
+        if (response.ok) {
+          console.log(`Password reset email sent to ${user.email}`);
+        } else {
+          console.error('Failed to send password reset email:', await response.text());
+        }
+      } catch (emailError) {
+        console.error('Failed to send password reset email:', emailError);
+        // Still return success to user for security
+      }
+    } else if (c.env.EMAIL_WORKER) {
+      // Staging/development mode - try to send email
+      try {
+        const response = await c.env.EMAIL_WORKER.fetch('https://tirak-email-worker.tirak-court.workers.dev', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: user.email,
+            subject: 'Password Reset Request - Tirak (Test)',
+            template: 'password_reset',
+            data: {
+              resetToken,
+              resetUrl: `http://localhost:3000/reset-password?token=${resetToken}`,
+              userName: displayName,
+              expiresIn: '1 hour'
+            }
+          })
+        });
+        
+        if (response.ok) {
+          console.log(`Password reset email sent to ${user.email}`);
+        } else {
+          console.error('Failed to send password reset email:', await response.text());
+          // Fallback to console log
+          console.log(`Password reset token for ${user.email}: ${resetToken}`);
+        }
+      } catch (emailError) {
+        console.error('Failed to send password reset email:', emailError);
+        // Fallback to console log
+        console.log(`Password reset token for ${user.email}: ${resetToken}`);
+      }
+    } else {
+      // Development mode - log token to console
+      console.log(`Password reset token for ${user.email}: ${resetToken}`);
+    }
 
     if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
       await c.env.ANALYTICS_QUEUE.send({

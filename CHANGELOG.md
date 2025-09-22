@@ -16,10 +16,21 @@ All notable changes to the Tirak Backend will be documented in this file.
 - **Bookings**: Enhanced booking system with additional fields: `meetingPoint`, `template`, `preferredLanguages` (array), `dietaryRestrictions` (array), and `accessibilityNeeds` (array) to better accommodate customer requirements.
 - **Suppliers**: Added new `/suppliers/stats` endpoint for retrieving comprehensive supplier performance metrics and analytics.
 - **Services**: Added `PUT /api/suppliers/services/:serviceId` endpoint for updating existing services with partial updates support. Both suppliers and companions can now update their services.
+- **Email System**: Cloudflare Email Worker for password reset emails
+- **Email Templates**: Professional HTML email templates for password reset and welcome emails
+- **Email Management**: Email template management system with KV storage
+- **Email Setup**: Automated email setup scripts for Windows and Unix systems
+- **Email Configuration**: Email worker configuration and deployment scripts
 
 ### Fixed
 - **Auth**: Fixed an issue in the login route where the display name for 'companion' users was being looked up in the wrong table. It now correctly queries `companion_profiles`.
 - **Auth**: Fixed user registration to use the provided `name` for the profile's `displayName` instead of deriving it from the email.
+- **Email System**: Fixed TypeScript linter issues in email worker and auth routes
+- **Email System**: Fixed display name resolution for password reset emails by properly querying user profiles
+- **Email System**: Fixed email worker to use standard Cloudflare Workers API instead of non-existent email-workers package
+- **Email System**: Added proper TypeScript interfaces for email request handling
+- **Email System**: Successfully deployed email worker and uploaded email templates to KV storage
+- **Email System**: Integrated email worker service binding with main application
 - **API**: Resolved an issue where companion experiences were not being returned from the `GET /api/companions/:id/experiences` endpoint. The fix involved:
   - Removing a duplicate, conflicting route handler for the same path.
   - Correcting a JSON parsing error for the `keywords` field which could fail silently.

@@ -1,0 +1,30 @@
+name = "tirak-email-worker"
+main = "src/email-worker.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# KV Namespaces for email templates
+[[kv_namespaces]]
+binding = "EMAIL_TEMPLATES"
+id = "fd2e05e821ff4b1f8cac6270796d38a1"
+
+# Environment variables
+[vars]
+FROM_EMAIL = "noreply@tirak.app"
+FROM_NAME = "Tirak"
+
+# Staging environment
+[env.staging]
+name = "tirak-email-worker-staging"
+
+[env.staging.vars]
+FROM_EMAIL = "noreply@staging.tirak.app"
+FROM_NAME = "Tirak"
+
+# Production environment
+[env.production]
+name = "tirak-email-worker-production"
+
+[env.production.vars]
+FROM_EMAIL = "noreply@tirak.app"
+FROM_NAME = "Tirak"

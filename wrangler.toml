@@ -59,6 +59,10 @@ binding = "SESSIONS"
 id = "486126fb5afb41feb30458231bde3a96"
 preview_id = "9ed9fe2729284248ac99e3acc6b4f029"
 
+[[kv_namespaces]]
+binding = "EMAIL_TEMPLATES"
+id = "fd2e05e821ff4b1f8cac6270796d38a1"
+
 [[env.staging.kv_namespaces]]
 binding = "CACHE"
 id = "placeholder-cache-staging-id"
@@ -67,6 +71,10 @@ id = "placeholder-cache-staging-id"
 binding = "SESSIONS"
 id = "placeholder-sessions-staging-id"
 
+[[env.staging.kv_namespaces]]
+binding = "EMAIL_TEMPLATES"
+id = "placeholder-email-templates-staging-id"
+
 [[env.production.kv_namespaces]]
 binding = "CACHE"
 id = "placeholder-cache-production-id"
@@ -74,6 +82,10 @@ id = "placeholder-cache-production-id"
 [[env.production.kv_namespaces]]
 binding = "SESSIONS"
 id = "placeholder-sessions-production-id"
+
+[[env.production.kv_namespaces]]
+binding = "EMAIL_TEMPLATES"
+id = "placeholder-email-templates-production-id"
 
 # Queue bindings - Commented out since they need a paid plan
 # [[queues.producers]]
@@ -177,6 +189,12 @@ class_name = "ChatRoom"
 name = "NOTIFICATION_SERVICE"
 class_name = "NotificationService"
 
+# Service bindings
+[[services]]
+binding = "EMAIL_WORKER"
+service = "tirak-email-worker"
+environment = "production"
+
 # Durable Object migrations
 [[migrations]]
 tag = "v1"
@@ -187,13 +205,19 @@ new_sqlite_classes = ["ChatRoom", "NotificationService"]
 ENVIRONMENT = "development"
 FRONTEND_URLS = "http://localhost:3000,http://localhost:5173"
 JWT_SECRET = "dev-jwt-secret-change-in-production"
+FROM_EMAIL = "noreply@tirak.app"
+FROM_NAME = "Tirak"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
 FRONTEND_URLS = "https://staging.tirak.app"
 JWT_SECRET = "staging-jwt-secret"
+FROM_EMAIL = "noreply@staging.tirak.app"
+FROM_NAME = "Tirak"
 
 [env.production.vars]
 ENVIRONMENT = "production"
 FRONTEND_URLS = "https://tirak.app,https://www.tirak.app"
 JWT_SECRET = "production-jwt-secret"
+FROM_EMAIL = "noreply@tirak.app"
+FROM_NAME = "Tirak"
