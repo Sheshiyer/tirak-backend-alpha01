@@ -267,7 +267,7 @@ auth.post('/forgot-password', zValidator('json', passwordResetRequestSchema), as
     }
 
     // Send password reset email
-    if (c.env.EMAIL_WORKER && c.env.ENVIRONMENT === 'production') {
+    if (c.env.EMAIL_WORKER) {
       try {
         const response = await c.env.EMAIL_WORKER.fetch('https://tirak-email-worker.tirak-court.workers.dev', {
           method: 'POST',
@@ -278,7 +278,7 @@ auth.post('/forgot-password', zValidator('json', passwordResetRequestSchema), as
             template: 'password_reset',
             data: {
               resetToken,
-              resetUrl: `https://tirak.app/reset-password?token=${resetToken}`,
+              resetUrl: `https://tirak-backend.tirak-court.workers.dev/api/auth/reset-password?token=${resetToken}`,
               userName: displayName,
               expiresIn: '1 hour'
             }
@@ -293,37 +293,6 @@ auth.post('/forgot-password', zValidator('json', passwordResetRequestSchema), as
       } catch (emailError) {
         console.error('Failed to send password reset email:', emailError);
         // Still return success to user for security
-      }
-    } else if (c.env.EMAIL_WORKER) {
-      // Staging/development mode - try to send email
-      try {
-        const response = await c.env.EMAIL_WORKER.fetch('https://tirak-email-worker.tirak-court.workers.dev', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: user.email,
-            subject: 'Password Reset Request - Tirak (Test)',
-            template: 'password_reset',
-            data: {
-              resetToken,
-              resetUrl: `http://localhost:3000/reset-password?token=${resetToken}`,
-              userName: displayName,
-              expiresIn: '1 hour'
-            }
-          })
-        });
-        
-        if (response.ok) {
-          console.log(`Password reset email sent to ${user.email}`);
-        } else {
-          console.error('Failed to send password reset email:', await response.text());
-          // Fallback to console log
-          console.log(`Password reset token for ${user.email}: ${resetToken}`);
-        }
-      } catch (emailError) {
-        console.error('Failed to send password reset email:', emailError);
-        // Fallback to console log
-        console.log(`Password reset token for ${user.email}: ${resetToken}`);
       }
     } else {
       // Development mode - log token to console
