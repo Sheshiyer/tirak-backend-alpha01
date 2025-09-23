@@ -278,7 +278,7 @@ auth.post('/forgot-password', zValidator('json', passwordResetRequestSchema), as
             template: 'password_reset',
             data: {
               resetToken,
-              resetUrl: `https://tirak-backend.tirak-court.workers.dev/api/auth/reset-password?token=${resetToken}`,
+              resetUrl: `tirak://reset-password?token=${resetToken}`,
               userName: displayName,
               expiresIn: '1 hour'
             }
