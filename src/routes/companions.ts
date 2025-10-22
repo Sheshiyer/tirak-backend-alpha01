@@ -1451,6 +1451,127 @@ companions.post('/:id/availability', async (c) => {
   }
 );
 
+/**
+ * Delete companion profile
+ * 
+ * @swagger
+ * /companions/{id}:
+ *   delete:
+ *     summary: Delete companion profile
+ *     description: Delete a companion profile and all associated data
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         description: Companion ID
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Companion deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     deleted:
+ *                       type: boolean
+ *                       example: true
+ *                 message:
+ *                   type: string
+ *                   example: Companion profile deleted successfully
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: Companion not found
+ */
+companions.delete('/:id', validateUUID('id'), async (c) => {
+  const companionId = c.req.param('id');
+  const userId = c.get('userId');
+  const userType = c.get('userType');
+
+  // Only companions can delete their own profile
+  if (userType !== 'companion' || userId !== companionId) {
+    return jsonError(c, 'Access denied', 'You can only delete your own profile', 403);
+  }
+
+  try {
+    // Verify companion exists
+    const companion = await c.env.DB.prepare(`
+      SELECT user_id FROM companion_profiles cp
+      JOIN users u ON cp.user_id = u.id
+      WHERE cp.user_id = ? AND u.user_type = 'companion'
+    `).bind(companionId).first();
+
+    if (!companion) {
+      return jsonError(c, 'Companion not found', 'The requested companion does not exist', 404);
+    }
+
+    // Start transaction-like operations
+    const now = new Date().toISOString();
+
+    // 1. Soft delete companion profile
+    await c.env.DB.prepare(`
+      UPDATE companion_profiles 
+      SET updated_at = ?
+      WHERE user_id = ?
+    `).bind(now, companionId).run();
+
+    // 2. Soft delete all experiences
+    await c.env.DB.prepare(`
+      UPDATE companion_experiences 
+      SET is_active = FALSE, updated_at = ?
+      WHERE companion_id = ?
+    `).bind(now, companionId).run();
+
+    // 3. Delete all locations
+    await c.env.DB.prepare(`
+      DELETE FROM companion_locations 
+      WHERE companion_id = ?
+    `).bind(companionId).run();
+
+    // 4. Delete availability
+    await c.env.DB.prepare(`
+      DELETE FROM supplier_availability 
+      WHERE supplier_id = ?
+    `).bind(companionId).run();
+
+    // 5. Soft delete user account
+    await c.env.DB.prepare(`
+      UPDATE users 
+      SET status = 'deleted', updated_at = ?
+      WHERE id = ?
+    `).bind(now, companionId).run();
+
+    // Track companion deletion
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'companion_deleted',
+        userId: companionId,
+        properties: { 
+          companionId,
+          deletedAt: now
+        },
+        timestamp: now
+      });
+    }
+
+    return jsonSuccess(c, { 
+      deleted: true 
+    }, 'Companion profile deleted successfully');
+
+  } catch (error) {
+    console.error('Delete companion error:', error);
+    return jsonError(c, 'Failed to delete companion', 'An error occurred while deleting the companion profile', 500);
+  }
+});
+
 // Direct database query endpoint
 companions.get('/:id/raw-experiences', validateUUID('id'), async (c) => {
   const companionId = c.req.param('id');
