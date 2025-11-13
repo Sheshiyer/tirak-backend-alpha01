@@ -622,4 +622,93 @@ customers.post('/:id/reviews',
   }
 );
 
+customers.delete('/:id', validateUUID('id'), async (c) => {
+  const customerId = c.req.param('id');
+  const userId = c.get('userId');
+  const userType = c.get('userType');
+
+  // Only customers can delete their own account
+  if (userType !== 'customer' || userId !== customerId) {
+    return jsonError(c, 'Access denied', 'You can only delete your own account', 403);
+  }
+
+  try {
+    // Verify customer exists
+    const customer = await c.env.DB.prepare(`
+      SELECT user_id FROM customer_profiles cp
+      JOIN users u ON cp.user_id = u.id
+      WHERE cp.user_id = ? AND u.user_type = 'customer'
+    `).bind(customerId).first();
+
+    if (!customer) {
+      return jsonError(c, 'Customer not found', 'The requested customer does not exist', 404);
+    }
+
+    // Get user info for anonymization
+    const user = await getUserById(customerId, c.env.DB);
+    if (!user) {
+      return jsonError(c, 'User not found', 'User account does not exist', 404);
+    }
+
+    const now = new Date().toISOString();
+
+    // 1. Cancel any pending bookings
+    await c.env.DB.prepare(`
+      UPDATE bookings 
+      SET status = 'cancelled', updated_at = ?
+      WHERE customer_id = ? AND status IN ('pending', 'confirmed')
+    `).bind(now, customerId).run();
+
+    // 2. Soft delete customer profile (update timestamp)
+    await c.env.DB.prepare(`
+      UPDATE customer_profiles 
+      SET updated_at = ?
+      WHERE user_id = ?
+    `).bind(now, customerId).run();
+
+    // 3. Delete user sessions
+    await c.env.DB.prepare(`
+      DELETE FROM user_sessions 
+      WHERE user_id = ?
+    `).bind(customerId).run();
+
+    // 4. Soft delete user account (anonymize email/phone, set status to deleted)
+    await c.env.DB.prepare(`
+      UPDATE users 
+      SET status = 'deleted',
+          email = ?,
+          phone = ?,
+          updated_at = ?
+      WHERE id = ?
+    `).bind(
+      `deleted_${Date.now()}_${user.email}`,
+      `deleted_${Date.now()}_${user.phone}`,
+      now,
+      customerId
+    ).run();
+
+    // Track customer deletion
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'customer_deleted',
+        userId: customerId,
+        properties: { 
+          customerId,
+          deletedAt: now,
+          accountAge: new Date().getTime() - new Date(user.createdAt).getTime()
+        },
+        timestamp: now
+      });
+    }
+
+    return jsonSuccess(c, { 
+      deleted: true 
+    }, 'Customer account deleted successfully');
+
+  } catch (error) {
+    console.error('Delete customer error:', error);
+    return jsonError(c, 'Failed to delete customer', 'An error occurred while deleting the customer account', 500);
+  }
+});
+
 export { customers as customerRoutes };
