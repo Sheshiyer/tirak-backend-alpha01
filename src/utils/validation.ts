@@ -43,6 +43,11 @@ export const passwordResetSchema = z.object({
   newPassword: z.string().min(8, 'Password must be at least 8 characters')
 });
 
+// Refresh token schema
+export const refreshTokenSchema = z.object({
+  refreshToken: z.string().min(1, 'Refresh token is required')
+});
+
 // Profile update schema
 export const profileUpdateSchema = z.object({
   displayName: z.string().min(1, 'Display name is required').max(100, 'Display name too long').optional(),

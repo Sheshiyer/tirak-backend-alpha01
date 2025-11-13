@@ -1502,64 +1502,166 @@ companions.delete('/:id', validateUUID('id'), async (c) => {
   }
 
   try {
-    // Verify companion exists
-    const companion = await c.env.DB.prepare(`
-      SELECT user_id FROM companion_profiles cp
-      JOIN users u ON cp.user_id = u.id
-      WHERE cp.user_id = ? AND u.user_type = 'companion'
+    // Verify companion exists in users table (they might not have a profile yet)
+    const user = await c.env.DB.prepare(`
+      SELECT id, email, phone, created_at FROM users
+      WHERE id = ? AND user_type = 'companion'
     `).bind(companionId).first();
 
-    if (!companion) {
+    if (!user) {
       return jsonError(c, 'Companion not found', 'The requested companion does not exist', 404);
     }
 
     // Start transaction-like operations
     const now = new Date().toISOString();
 
-    // 1. Soft delete companion profile
-    await c.env.DB.prepare(`
-      UPDATE companion_profiles 
-      SET updated_at = ?
-      WHERE user_id = ?
-    `).bind(now, companionId).run();
+    try {
+      // 1. Soft delete companion profile (only if it exists)
+      const profileCheck = await c.env.DB.prepare(`
+        SELECT user_id FROM companion_profiles WHERE user_id = ?
+      `).bind(companionId).first();
+      
+      if (profileCheck) {
+        await c.env.DB.prepare(`
+          UPDATE companion_profiles 
+          SET updated_at = ?
+          WHERE user_id = ?
+        `).bind(now, companionId).run();
+      }
+    } catch (error) {
+      console.error('Error updating companion profile:', error);
+      // Continue even if profile update fails
+    }
 
-    // 2. Soft delete all experiences
-    await c.env.DB.prepare(`
-      UPDATE companion_experiences 
-      SET is_active = FALSE, updated_at = ?
-      WHERE companion_id = ?
-    `).bind(now, companionId).run();
+    try {
+      // 2. Soft delete all experiences
+      const experiencesCheck = await c.env.DB.prepare(`
+        SELECT name FROM sqlite_master WHERE type='table' AND name='companion_experiences'
+      `).first();
+      
+      if (experiencesCheck) {
+        await c.env.DB.prepare(`
+          UPDATE companion_experiences 
+          SET is_active = FALSE, updated_at = ?
+          WHERE companion_id = ?
+        `).bind(now, companionId).run();
+      }
+    } catch (error) {
+      console.error('Error soft deleting experiences:', error);
+      // Continue even if experiences update fails
+    }
 
-    // 3. Delete all locations
-    await c.env.DB.prepare(`
-      DELETE FROM companion_locations 
-      WHERE companion_id = ?
-    `).bind(companionId).run();
+    try {
+      // 3. Delete all locations
+      const locationsCheck = await c.env.DB.prepare(`
+        SELECT name FROM sqlite_master WHERE type='table' AND name='companion_locations'
+      `).first();
+      
+      if (locationsCheck) {
+        await c.env.DB.prepare(`
+          DELETE FROM companion_locations 
+          WHERE companion_id = ?
+        `).bind(companionId).run();
+      }
+    } catch (error) {
+      console.error('Error deleting locations:', error);
+      // Continue even if locations deletion fails
+    }
 
-    // 4. Delete availability
-    await c.env.DB.prepare(`
-      DELETE FROM supplier_availability 
-      WHERE supplier_id = ?
-    `).bind(companionId).run();
+    try {
+      // 4. Delete availability
+      const availabilityCheck = await c.env.DB.prepare(`
+        SELECT name FROM sqlite_master WHERE type='table' AND name='supplier_availability'
+      `).first();
+      
+      if (availabilityCheck) {
+        await c.env.DB.prepare(`
+          DELETE FROM supplier_availability 
+          WHERE supplier_id = ?
+        `).bind(companionId).run();
+      }
+    } catch (error) {
+      console.error('Error deleting availability:', error);
+      // Continue even if availability deletion fails
+    }
 
-    // 5. Soft delete user account
-    await c.env.DB.prepare(`
-      UPDATE users 
-      SET status = 'deleted', updated_at = ?
-      WHERE id = ?
-    `).bind(now, companionId).run();
+    try {
+      // 5. Cancel any pending bookings
+      const bookingsCheck = await c.env.DB.prepare(`
+        SELECT sql FROM sqlite_master WHERE type='table' AND name='bookings'
+      `).first();
+      
+      if (bookingsCheck?.sql) {
+        const hasCompanionId = (bookingsCheck.sql as string).includes('companion_id');
+        
+        if (hasCompanionId) {
+          await c.env.DB.prepare(`
+            UPDATE bookings 
+            SET status = 'cancelled', updated_at = ?
+            WHERE companion_id = ? AND status IN ('pending', 'confirmed')
+          `).bind(now, companionId).run();
+        }
+      }
+    } catch (error) {
+      console.error('Error cancelling bookings:', error);
+      // Continue even if booking cancellation fails
+    }
+
+    try {
+      // 6. Delete user sessions
+      const sessionsCheck = await c.env.DB.prepare(`
+        SELECT name FROM sqlite_master WHERE type='table' AND name='user_sessions'
+      `).first();
+      
+      if (sessionsCheck) {
+        await c.env.DB.prepare(`
+          DELETE FROM user_sessions 
+          WHERE user_id = ?
+        `).bind(companionId).run();
+      }
+    } catch (error) {
+      console.error('Error deleting user sessions:', error);
+      // Continue even if sessions deletion fails
+    }
+
+    try {
+      // 7. Soft delete user account (anonymize email/phone, set status to suspended)
+      // Note: Using 'suspended' instead of 'deleted' because the CHECK constraint only allows ('active', 'suspended', 'pending')
+      await c.env.DB.prepare(`
+        UPDATE users 
+        SET status = 'suspended',
+            email = ?,
+            phone = ?,
+            updated_at = ?
+        WHERE id = ?
+      `).bind(
+        `deleted_${Date.now()}_${user.email}`,
+        `deleted_${Date.now()}_${user.phone}`,
+        now,
+        companionId
+      ).run();
+    } catch (error) {
+      console.error('Error updating user account:', error);
+      throw error; // This is critical, rethrow
+    }
 
     // Track companion deletion
-    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
-      await c.env.ANALYTICS_QUEUE.send({
-        eventType: 'companion_deleted',
-        userId: companionId,
-        properties: { 
-          companionId,
-          deletedAt: now
-        },
-        timestamp: now
-      });
+    try {
+      if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+        await c.env.ANALYTICS_QUEUE.send({
+          eventType: 'companion_deleted',
+          userId: companionId,
+          properties: { 
+            companionId,
+            deletedAt: now,
+            accountAge: new Date().getTime() - new Date(user.created_at as string).getTime()
+          },
+          timestamp: now
+        });
+      }
+    } catch (error) {
+      console.error('Error tracking deletion analytics:', error);
+      // Don't fail deletion if analytics fails
     }
 
     return jsonSuccess(c, { 
@@ -1568,7 +1670,10 @@ companions.delete('/:id', validateUUID('id'), async (c) => {
 
   } catch (error) {
     console.error('Delete companion error:', error);
-    return jsonError(c, 'Failed to delete companion', 'An error occurred while deleting the companion profile', 500);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error('Error details:', { errorMessage, errorStack, companionId });
+    return jsonError(c, 'Failed to delete companion', `An error occurred while deleting the companion profile: ${errorMessage}`, 500);
   }
 });
 

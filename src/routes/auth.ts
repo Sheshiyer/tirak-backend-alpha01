@@ -5,12 +5,14 @@ import {
   loginSchema,
   phoneVerificationSchema,
   passwordResetRequestSchema,
-  passwordResetSchema
+  passwordResetSchema,
+  refreshTokenSchema
 } from '../utils/validation';
 import {
   hashPassword,
   verifyPassword,
   generateTokens,
+  verifyJWT,
   normalizePhone,
   isValidEmail,
   isValidPhone
@@ -365,6 +367,90 @@ auth.post('/reset-password', zValidator('json', passwordResetSchema), async (c) 
   } catch (error) {
     console.error('Password reset error:', error);
     return jsonError(c, 'Reset failed', 'An error occurred while resetting password', 500);
+  }
+});
+
+/**
+ * Refresh token endpoint
+ */
+auth.post('/refresh', zValidator('json', refreshTokenSchema), async (c) => {
+  const { refreshToken } = c.req.valid('json');
+  
+  try {
+    // Verify the refresh token
+    let decoded;
+    try {
+      decoded = await verifyJWT(refreshToken, c.env.JWT_SECRET);
+    } catch (error) {
+      return jsonError(c, 'Invalid refresh token', 'The refresh token is invalid or expired', 401);
+    }
+
+    // Extract user ID from token
+    const userId = decoded.sub;
+    if (!userId) {
+      return jsonError(c, 'Invalid token', 'Token does not contain user information', 401);
+    }
+
+    // Get user from database
+    const user = await getUserById(userId, c.env.DB);
+    if (!user) {
+      return jsonError(c, 'User not found', 'User associated with token does not exist', 404);
+    }
+
+    // Check account status
+    if (user.status === 'suspended') {
+      return jsonError(c, 'Account suspended', 'Your account has been suspended', 403);
+    }
+
+    // Generate new tokens
+    const tokens = await generateTokens(user, c.env.JWT_SECRET);
+
+    // Fetch display name from profile
+    let name = null;
+    try {
+      if (user.userType === 'supplier') {
+        const profile = await c.env.DB.prepare('SELECT display_name FROM supplier_profiles WHERE user_id = ?').bind(user.id).first();
+        name = profile?.display_name || null;
+      } else if (user.userType === 'customer') {
+        const profile = await c.env.DB.prepare('SELECT display_name FROM customer_profiles WHERE user_id = ?').bind(user.id).first();
+        name = profile?.display_name || null;
+      } else if (user.userType === 'companion') {
+        const profile = await c.env.DB.prepare('SELECT display_name FROM companion_profiles WHERE user_id = ?').bind(user.id).first();
+        name = profile?.display_name || null;
+      }
+    } catch (profileError) {
+      console.warn('Could not fetch user display name:', profileError);
+    }
+
+    // Track token refresh
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'token_refreshed',
+        userId: user.id,
+        properties: { 
+          userType: user.userType
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    return jsonSuccess(c, {
+      user: {
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        userType: user.userType,
+        status: user.status,
+        emailVerified: user.emailVerified,
+        phoneVerified: user.phoneVerified,
+        name
+      },
+      ...tokens
+    }, 'Token refreshed successfully');
+
+  } catch (error) {
+    console.error('Refresh token error:', error);
+    return jsonError(c, 'Token refresh failed', 'An error occurred while refreshing the token', 500);
   }
 });
 

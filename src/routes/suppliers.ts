@@ -956,69 +956,131 @@ suppliers.delete('/:id', validateUUID('id'), authMiddleware, async (c) => {
 
     const now = new Date().toISOString();
 
-    // 1. Cancel any pending bookings
-    await c.env.DB.prepare(`
-      UPDATE bookings 
-      SET status = 'cancelled', updated_at = ?
-      WHERE supplier_id = ? AND status IN ('pending', 'confirmed')
-    `).bind(now, supplierId).run();
+    try {
+      // 1. Cancel any pending bookings (check for both supplier_id and companion_id)
+      // First check if supplier_id column exists
+      const bookingsCheck = await c.env.DB.prepare(`
+        SELECT sql FROM sqlite_master WHERE type='table' AND name='bookings'
+      `).first();
+      
+      if (bookingsCheck?.sql) {
+        const hasSupplierId = (bookingsCheck.sql as string).includes('supplier_id');
+        const hasCompanionId = (bookingsCheck.sql as string).includes('companion_id');
+        
+        if (hasSupplierId) {
+          await c.env.DB.prepare(`
+            UPDATE bookings 
+            SET status = 'cancelled', updated_at = ?
+            WHERE supplier_id = ? AND status IN ('pending', 'confirmed')
+          `).bind(now, supplierId).run();
+        } else if (hasCompanionId) {
+          // If bookings only has companion_id, suppliers might not have bookings
+          // This is fine, just skip
+        }
+      }
+    } catch (error) {
+      console.error('Error cancelling bookings:', error);
+      // Continue with deletion even if booking cancellation fails
+    }
 
-    // 2. Soft delete supplier profile (update timestamp)
-    await c.env.DB.prepare(`
-      UPDATE supplier_profiles 
-      SET updated_at = ?
-      WHERE user_id = ?
-    `).bind(now, supplierId).run();
+    try {
+      // 2. Soft delete supplier profile (update timestamp)
+      await c.env.DB.prepare(`
+        UPDATE supplier_profiles 
+        SET updated_at = ?
+        WHERE user_id = ?
+      `).bind(now, supplierId).run();
+    } catch (error) {
+      console.error('Error updating supplier profile:', error);
+      throw error; // This is critical, rethrow
+    }
 
-    // 3. Soft delete all services
-    await c.env.DB.prepare(`
-      UPDATE supplier_services 
-      SET is_active = FALSE, updated_at = ?
-      WHERE supplier_id = ?
-    `).bind(now, supplierId).run();
+    try {
+      // 3. Soft delete all services
+      await c.env.DB.prepare(`
+        UPDATE supplier_services 
+        SET is_active = FALSE, updated_at = ?
+        WHERE supplier_id = ?
+      `).bind(now, supplierId).run();
+    } catch (error) {
+      console.error('Error soft deleting services:', error);
+      // Continue even if services update fails
+    }
 
-    // 4. Delete availability
-    await c.env.DB.prepare(`
-      DELETE FROM supplier_availability 
-      WHERE supplier_id = ?
-    `).bind(supplierId).run();
+    try {
+      // 4. Delete availability
+      await c.env.DB.prepare(`
+        DELETE FROM supplier_availability 
+        WHERE supplier_id = ?
+      `).bind(supplierId).run();
+    } catch (error) {
+      console.error('Error deleting availability:', error);
+      // Continue even if availability deletion fails
+    }
 
-    // 5. Delete user sessions
-    await c.env.DB.prepare(`
-      DELETE FROM user_sessions 
-      WHERE user_id = ?
-    `).bind(supplierId).run();
+    try {
+      // 5. Delete user sessions (check if table exists)
+      const sessionsCheck = await c.env.DB.prepare(`
+        SELECT name FROM sqlite_master WHERE type='table' AND name='user_sessions'
+      `).first();
+      
+      if (sessionsCheck) {
+        await c.env.DB.prepare(`
+          DELETE FROM user_sessions 
+          WHERE user_id = ?
+        `).bind(supplierId).run();
+      }
+    } catch (error) {
+      console.error('Error deleting user sessions:', error);
+      // Continue even if sessions deletion fails
+    }
 
-    // 6. Clear cache
-    await c.env.CACHE.delete(`supplier:${supplierId}`);
+    try {
+      // 6. Clear cache
+      await c.env.CACHE.delete(`supplier:${supplierId}`);
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+      // Continue even if cache clear fails
+    }
 
-    // 7. Soft delete user account (anonymize email/phone, set status to deleted)
-    await c.env.DB.prepare(`
-      UPDATE users 
-      SET status = 'deleted',
-          email = ?,
-          phone = ?,
-          updated_at = ?
-      WHERE id = ?
-    `).bind(
-      `deleted_${Date.now()}_${user.email}`,
-      `deleted_${Date.now()}_${user.phone}`,
-      now,
-      supplierId
-    ).run();
+    try {
+      // 7. Soft delete user account (anonymize email/phone, set status to suspended)
+      // Note: Using 'suspended' instead of 'deleted' because the CHECK constraint only allows ('active', 'suspended', 'pending')
+      await c.env.DB.prepare(`
+        UPDATE users 
+        SET status = 'suspended',
+            email = ?,
+            phone = ?,
+            updated_at = ?
+        WHERE id = ?
+      `).bind(
+        `deleted_${Date.now()}_${user.email}`,
+        `deleted_${Date.now()}_${user.phone}`,
+        now,
+        supplierId
+      ).run();
+    } catch (error) {
+      console.error('Error updating user account:', error);
+      throw error; // This is critical, rethrow
+    }
 
     // Track supplier deletion
-    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
-      await c.env.ANALYTICS_QUEUE.send({
-        eventType: 'supplier_deleted',
-        userId: supplierId,
-        properties: { 
-          supplierId,
-          deletedAt: now,
-          accountAge: new Date().getTime() - new Date(user.createdAt).getTime()
-        },
-        timestamp: now
-      });
+    try {
+      if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+        await c.env.ANALYTICS_QUEUE.send({
+          eventType: 'supplier_deleted',
+          userId: supplierId,
+          properties: { 
+            supplierId,
+            deletedAt: now,
+            accountAge: new Date().getTime() - new Date(user.createdAt).getTime()
+          },
+          timestamp: now
+        });
+      }
+    } catch (error) {
+      console.error('Error tracking deletion analytics:', error);
+      // Don't fail deletion if analytics fails
     }
 
     return jsonSuccess(c, { 
@@ -1027,7 +1089,10 @@ suppliers.delete('/:id', validateUUID('id'), authMiddleware, async (c) => {
 
   } catch (error) {
     console.error('Delete supplier error:', error);
-    return jsonError(c, 'Failed to delete supplier', 'An error occurred while deleting the supplier account', 500);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error('Error details:', { errorMessage, errorStack, supplierId });
+    return jsonError(c, 'Failed to delete supplier', `An error occurred while deleting the supplier account: ${errorMessage}`, 500);
   }
 });
 
