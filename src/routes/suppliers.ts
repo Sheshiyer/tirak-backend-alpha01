@@ -926,4 +926,109 @@ suppliers.put('/services/:serviceId',
   }
 );
 
+suppliers.delete('/:id', validateUUID('id'), authMiddleware, async (c) => {
+  const supplierId = c.req.param('id');
+  const userId = c.get('userId');
+  const userType = c.get('userType');
+
+  // Only suppliers can delete their own account
+  if (userType !== 'supplier' || userId !== supplierId) {
+    return jsonError(c, 'Access denied', 'You can only delete your own account', 403);
+  }
+
+  try {
+    // Verify supplier exists
+    const supplier = await c.env.DB.prepare(`
+      SELECT user_id FROM supplier_profiles sp
+      JOIN users u ON sp.user_id = u.id
+      WHERE sp.user_id = ? AND u.user_type = 'supplier'
+    `).bind(supplierId).first();
+
+    if (!supplier) {
+      return jsonError(c, 'Supplier not found', 'The requested supplier does not exist', 404);
+    }
+
+    // Get user info for anonymization
+    const user = await getUserById(supplierId, c.env.DB);
+    if (!user) {
+      return jsonError(c, 'User not found', 'User account does not exist', 404);
+    }
+
+    const now = new Date().toISOString();
+
+    // 1. Cancel any pending bookings
+    await c.env.DB.prepare(`
+      UPDATE bookings 
+      SET status = 'cancelled', updated_at = ?
+      WHERE supplier_id = ? AND status IN ('pending', 'confirmed')
+    `).bind(now, supplierId).run();
+
+    // 2. Soft delete supplier profile (update timestamp)
+    await c.env.DB.prepare(`
+      UPDATE supplier_profiles 
+      SET updated_at = ?
+      WHERE user_id = ?
+    `).bind(now, supplierId).run();
+
+    // 3. Soft delete all services
+    await c.env.DB.prepare(`
+      UPDATE supplier_services 
+      SET is_active = FALSE, updated_at = ?
+      WHERE supplier_id = ?
+    `).bind(now, supplierId).run();
+
+    // 4. Delete availability
+    await c.env.DB.prepare(`
+      DELETE FROM supplier_availability 
+      WHERE supplier_id = ?
+    `).bind(supplierId).run();
+
+    // 5. Delete user sessions
+    await c.env.DB.prepare(`
+      DELETE FROM user_sessions 
+      WHERE user_id = ?
+    `).bind(supplierId).run();
+
+    // 6. Clear cache
+    await c.env.CACHE.delete(`supplier:${supplierId}`);
+
+    // 7. Soft delete user account (anonymize email/phone, set status to deleted)
+    await c.env.DB.prepare(`
+      UPDATE users 
+      SET status = 'deleted',
+          email = ?,
+          phone = ?,
+          updated_at = ?
+      WHERE id = ?
+    `).bind(
+      `deleted_${Date.now()}_${user.email}`,
+      `deleted_${Date.now()}_${user.phone}`,
+      now,
+      supplierId
+    ).run();
+
+    // Track supplier deletion
+    if (c.env.ANALYTICS_QUEUE && typeof c.env.ANALYTICS_QUEUE.send === 'function') {
+      await c.env.ANALYTICS_QUEUE.send({
+        eventType: 'supplier_deleted',
+        userId: supplierId,
+        properties: { 
+          supplierId,
+          deletedAt: now,
+          accountAge: new Date().getTime() - new Date(user.createdAt).getTime()
+        },
+        timestamp: now
+      });
+    }
+
+    return jsonSuccess(c, { 
+      deleted: true 
+    }, 'Supplier account deleted successfully');
+
+  } catch (error) {
+    console.error('Delete supplier error:', error);
+    return jsonError(c, 'Failed to delete supplier', 'An error occurred while deleting the supplier account', 500);
+  }
+});
+
 export { suppliers as supplierRoutes };
