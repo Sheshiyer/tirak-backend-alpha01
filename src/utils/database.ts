@@ -216,6 +216,47 @@ export async function createCustomerProfile(profileData: {
 }
 
 /**
+ * Create companion profile
+ */
+export async function createCompanionProfile(profileData: {
+  userId: string;
+  displayName: string;
+  firstName?: string;
+  lastName?: string;
+  bio?: string;
+  profilePhoto?: string;
+  coverPhoto?: string;
+  location?: string;
+  languages?: string[];
+  specialization?: string[];
+  certifications?: string[];
+}, db: D1Database): Promise<void> {
+  const profileId = crypto.randomUUID();
+  await db.prepare(`
+    INSERT INTO companion_profiles (
+      id, user_id, first_name, last_name, display_name, bio,
+      profile_photo, cover_photo, location, languages,
+      specialization, certifications, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    profileId,
+    profileData.userId,
+    profileData.firstName || null,
+    profileData.lastName || null,
+    profileData.displayName,
+    profileData.bio || null,
+    profileData.profilePhoto || null,
+    profileData.coverPhoto || null,
+    profileData.location || null,
+    profileData.languages ? JSON.stringify(profileData.languages) : null,
+    profileData.specialization ? JSON.stringify(profileData.specialization) : null,
+    profileData.certifications ? JSON.stringify(profileData.certifications) : null,
+    new Date().toISOString(),
+    new Date().toISOString()
+  ).run();
+}
+
+/**
  * Get supplier profile
  */
 export async function getSupplierProfile(userId: string, db: D1Database): Promise<SupplierProfile | null> {

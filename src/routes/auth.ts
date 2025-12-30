@@ -32,7 +32,8 @@ import {
   getUserByPhone,
   getUserById,
   createSupplierProfile,
-  createCustomerProfile
+  createCustomerProfile,
+  createCompanionProfile
 } from '../utils/database';
 import { jsonSuccess, jsonError } from '../utils/response';
 import { createRateLimit } from '../middleware/rateLimit';
@@ -100,8 +101,8 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
         displayName,
       }, c.env.DB);
     } else if (userType === 'companion') {
-      // For companions, create a customer profile for now as a base
-      await createCustomerProfile({
+      // Create companion profile
+      await createCompanionProfile({
         userId,
         displayName: displayName || 'Companion',
       }, c.env.DB);
