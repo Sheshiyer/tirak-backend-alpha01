@@ -1350,11 +1350,13 @@ users.post('/companion/profile', async (c) => {
     } = body;
 
     // Insert new profile
+    const profileId = crypto.randomUUID();
     await c.env.DB.prepare(`
       INSERT INTO companion_profiles (
-        user_id, first_name, last_name, display_name, bio, social_links, date_of_birth, gender, cover_photo, profile_photo, location, languages, specialization, certifications, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, user_id, first_name, last_name, display_name, bio, social_links, date_of_birth, gender, cover_photo, profile_photo, location, languages, specialization, certifications, rating_average, rating_count, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
+      profileId,
       userId,
       firstName || null,
       lastName || null,
@@ -1369,6 +1371,8 @@ users.post('/companion/profile', async (c) => {
       Array.isArray(languages) ? JSON.stringify(languages) : null,
       Array.isArray(specialization) ? JSON.stringify(specialization) : null,
       Array.isArray(certifications) ? JSON.stringify(certifications) : null,
+      0.0, // rating_average - starts at 0
+      0,   // rating_count - starts at 0
       new Date().toISOString(),
       new Date().toISOString()
     ).run();

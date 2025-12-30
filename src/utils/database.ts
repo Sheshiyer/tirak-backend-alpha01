@@ -236,8 +236,9 @@ export async function createCompanionProfile(profileData: {
     INSERT INTO companion_profiles (
       id, user_id, first_name, last_name, display_name, bio,
       profile_photo, cover_photo, location, languages,
-      specialization, certifications, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      specialization, certifications, rating_average, rating_count,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     profileId,
     profileData.userId,
@@ -251,6 +252,8 @@ export async function createCompanionProfile(profileData: {
     profileData.languages ? JSON.stringify(profileData.languages) : null,
     profileData.specialization ? JSON.stringify(profileData.specialization) : null,
     profileData.certifications ? JSON.stringify(profileData.certifications) : null,
+    0.0, // rating_average - starts at 0
+    0,   // rating_count - starts at 0
     new Date().toISOString(),
     new Date().toISOString()
   ).run();
