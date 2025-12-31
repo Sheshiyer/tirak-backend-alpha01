@@ -1,11 +1,10 @@
 -- Migration 004: Mobile App Features
 -- Add tables and columns for mobile app functionality
 
--- Create bookings table
+-- Create bookings table (without companion_id - it will be added in migration 015)
 CREATE TABLE IF NOT EXISTS bookings (
     id TEXT PRIMARY KEY,
     customer_id TEXT NOT NULL,
-    companion_id TEXT NOT NULL,
     service_id TEXT,
     date TEXT NOT NULL,
     start_time TEXT NOT NULL,
@@ -21,7 +20,6 @@ CREATE TABLE IF NOT EXISTS bookings (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (customer_id) REFERENCES users(id),
-    FOREIGN KEY (companion_id) REFERENCES users(id),
     FOREIGN KEY (service_id) REFERENCES supplier_services(id),
     FOREIGN KEY (payment_method_id) REFERENCES payment_methods(id)
 );
@@ -36,20 +34,21 @@ CREATE TABLE IF NOT EXISTS booking_timeline (
     FOREIGN KEY (booking_id) REFERENCES bookings(id)
 );
 
--- Create reviews table
+-- Create reviews table (companion_id will be added later if needed)
 CREATE TABLE IF NOT EXISTS reviews (
     id TEXT PRIMARY KEY,
     booking_id TEXT NOT NULL,
-    companion_id TEXT NOT NULL,
     customer_id TEXT NOT NULL,
+    reviewee_id TEXT NOT NULL, -- Can be companion_id or supplier_id
     rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
     comment TEXT,
     categories TEXT, -- JSON object with category ratings
+    is_public BOOLEAN NOT NULL DEFAULT TRUE,
     verified BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (booking_id) REFERENCES bookings(id),
-    FOREIGN KEY (companion_id) REFERENCES users(id),
+    FOREIGN KEY (reviewee_id) REFERENCES users(id),
     FOREIGN KEY (customer_id) REFERENCES users(id),
     UNIQUE(booking_id, customer_id)
 );
@@ -86,11 +85,11 @@ ALTER TABLE users ADD COLUMN notification_preferences TEXT DEFAULT '{}';
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_bookings_customer_id ON bookings(customer_id);
-CREATE INDEX IF NOT EXISTS idx_bookings_companion_id ON bookings(companion_id);
+-- Note: idx_bookings_companion_id will be created in migration 015 after companion_id column is added
 CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date);
 CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status);
 CREATE INDEX IF NOT EXISTS idx_booking_timeline_booking_id ON booking_timeline(booking_id);
-CREATE INDEX IF NOT EXISTS idx_reviews_companion_id ON reviews(companion_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_reviewee_id ON reviews(reviewee_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_customer_id ON reviews(customer_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_rating ON reviews(rating);
 CREATE INDEX IF NOT EXISTS idx_payment_methods_user_id ON payment_methods(user_id);
