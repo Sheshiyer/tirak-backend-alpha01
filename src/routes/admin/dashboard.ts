@@ -234,7 +234,7 @@ dashboard.get('/metrics', validateDateRange(), async (c) => {
       ORDER BY date DESC
     `).bind(startDate, endDate).all();
 
-    // Booking metrics
+    // Booking metrics (aggregated)
     const bookingMetrics = await c.env.DB.prepare(`
       SELECT 
         DATE(created_at) as date,
@@ -245,6 +245,60 @@ dashboard.get('/metrics', validateDateRange(), async (c) => {
       WHERE DATE(created_at) BETWEEN ? AND ?
       GROUP BY DATE(created_at), status
       ORDER BY date DESC
+    `).bind(startDate, endDate).all();
+
+    // Booking details with customer and companion information
+    const bookingDetails = await c.env.DB.prepare(`
+      SELECT 
+        b.id,
+        b.customer_id,
+        b.companion_id,
+        b.supplier_id,
+        b.service_id,
+        b.experience_id,
+        b.date,
+        b.start_time,
+        b.end_time,
+        b.duration,
+        b.location,
+        b.status,
+        b.total_amount,
+        b.service_fee,
+        b.payment_status,
+        b.scheduled_at,
+        b.created_at,
+        b.updated_at,
+        -- Customer details
+        cu.email as customer_email,
+        cu.phone as customer_phone,
+        cu.user_type as customer_type,
+        cu.status as customer_status,
+        cp.display_name as customer_name,
+        cp.profile_image as customer_image,
+        -- Companion details
+        co.email as companion_email,
+        co.phone as companion_phone,
+        co.status as companion_status,
+        comp.display_name as companion_name,
+        comp.profile_photo as companion_image,
+        comp.rating_average as companion_rating,
+        comp.rating_count as companion_rating_count,
+        -- Supplier details (if exists)
+        su.email as supplier_email,
+        su.phone as supplier_phone,
+        su.status as supplier_status,
+        sp.display_name as supplier_name,
+        sp.profile_images as supplier_images
+      FROM bookings b
+      LEFT JOIN users cu ON b.customer_id = cu.id
+      LEFT JOIN customer_profiles cp ON b.customer_id = cp.user_id
+      LEFT JOIN users co ON b.companion_id = co.id
+      LEFT JOIN companion_profiles comp ON b.companion_id = comp.user_id
+      LEFT JOIN users su ON b.supplier_id = su.id
+      LEFT JOIN supplier_profiles sp ON b.supplier_id = sp.user_id
+      WHERE DATE(b.created_at) BETWEEN ? AND ?
+      ORDER BY b.created_at DESC
+      LIMIT 100
     `).bind(startDate, endDate).all();
 
     // Chat activity metrics
@@ -284,10 +338,65 @@ dashboard.get('/metrics', validateDateRange(), async (c) => {
       ];
     }
 
+    // Transform booking details to include parsed JSON fields
+    const transformedBookingDetails = bookingDetails.results?.map((booking: any) => ({
+      id: booking.id,
+      customer: {
+        id: booking.customer_id,
+        email: booking.customer_email,
+        phone: booking.customer_phone,
+        type: booking.customer_type,
+        status: booking.customer_status,
+        name: booking.customer_name,
+        image: booking.customer_image
+      },
+      companion: booking.companion_id ? {
+        id: booking.companion_id,
+        email: booking.companion_email,
+        phone: booking.companion_phone,
+        status: booking.companion_status,
+        name: booking.companion_name,
+        image: booking.companion_image,
+        rating: {
+          average: booking.companion_rating || 0,
+          count: booking.companion_rating_count || 0
+        }
+      } : null,
+      supplier: booking.supplier_id ? {
+        id: booking.supplier_id,
+        email: booking.supplier_email,
+        phone: booking.supplier_phone,
+        status: booking.supplier_status,
+        name: booking.supplier_name,
+        images: booking.supplier_images ? JSON.parse(booking.supplier_images || '[]') : []
+      } : null,
+      service: {
+        id: booking.service_id,
+        experienceId: booking.experience_id
+      },
+      date: booking.date,
+      startTime: booking.start_time,
+      endTime: booking.end_time,
+      duration: booking.duration,
+      location: booking.location,
+      status: booking.status,
+      payment: {
+        totalAmount: booking.total_amount,
+        serviceFee: booking.service_fee,
+        status: booking.payment_status
+      },
+      scheduledAt: booking.scheduled_at,
+      createdAt: booking.created_at,
+      updatedAt: booking.updated_at
+    })) || [];
+
     return jsonSuccess(c, {
       dateRange: { startDate, endDate },
       users: userMetrics.results || [],
-      bookings: bookingMetrics.results || [],
+      bookings: {
+        metrics: bookingMetrics.results || [],
+        details: transformedBookingDetails
+      },
       chat: chatMetrics.results || [],
       regional: regionalMetrics.results || []
     }, 'Platform metrics retrieved successfully');
