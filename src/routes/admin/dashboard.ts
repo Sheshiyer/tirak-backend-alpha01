@@ -248,58 +248,124 @@ dashboard.get('/metrics', validateDateRange(), async (c) => {
     `).bind(startDate, endDate).all();
 
     // Booking details with customer and companion information
-    const bookingDetails = await c.env.DB.prepare(`
-      SELECT 
-        b.id,
-        b.customer_id,
-        b.companion_id,
-        b.supplier_id,
-        b.service_id,
-        b.experience_id,
-        b.date,
-        b.start_time,
-        b.end_time,
-        b.duration,
-        b.location,
-        b.status,
-        b.total_amount,
-        b.service_fee,
-        b.payment_status,
-        b.scheduled_at,
-        b.created_at,
-        b.updated_at,
-        -- Customer details
-        cu.email as customer_email,
-        cu.phone as customer_phone,
-        cu.user_type as customer_type,
-        cu.status as customer_status,
-        cp.display_name as customer_name,
-        cp.profile_image as customer_image,
-        -- Companion details
-        co.email as companion_email,
-        co.phone as companion_phone,
-        co.status as companion_status,
-        comp.display_name as companion_name,
-        comp.profile_photo as companion_image,
-        comp.rating_average as companion_rating,
-        comp.rating_count as companion_rating_count,
-        -- Supplier details (if exists)
-        su.email as supplier_email,
-        su.phone as supplier_phone,
-        su.status as supplier_status,
-        sp.display_name as supplier_name,
-        sp.profile_images as supplier_images
-      FROM bookings b
-      LEFT JOIN users cu ON b.customer_id = cu.id
-      LEFT JOIN customer_profiles cp ON b.customer_id = cp.user_id
-      LEFT JOIN users co ON b.companion_id = co.id
-      LEFT JOIN companion_profiles comp ON b.companion_id = comp.user_id
-      LEFT JOIN users su ON b.supplier_id = su.id
-      LEFT JOIN supplier_profiles sp ON b.supplier_id = sp.user_id
-      WHERE DATE(b.created_at) BETWEEN ? AND ?
-      ORDER BY b.created_at DESC
-      LIMIT 100
-    `).bind(startDate, endDate).all();
+    // Try to get rating columns, fallback to 0 if they don't exist
+    let bookingDetails;
+    try {
+      bookingDetails = await c.env.DB.prepare(`
+        SELECT 
+          b.id,
+          b.customer_id,
+          b.companion_id,
+          b.supplier_id,
+          b.service_id,
+          b.experience_id,
+          b.date,
+          b.start_time,
+          b.end_time,
+          b.duration,
+          b.location,
+          b.status,
+          b.total_amount,
+          b.service_fee,
+          b.payment_status,
+          b.scheduled_at,
+          b.created_at,
+          b.updated_at,
+          -- Customer details
+          cu.email as customer_email,
+          cu.phone as customer_phone,
+          cu.user_type as customer_type,
+          cu.status as customer_status,
+          cp.display_name as customer_name,
+          cp.profile_image as customer_image,
+          -- Companion details
+          co.email as companion_email,
+          co.phone as companion_phone,
+          co.status as companion_status,
+          comp.display_name as companion_name,
+          comp.profile_photo as companion_image,
+          comp.rating_average as companion_rating,
+          comp.rating_count as companion_rating_count,
+          -- Supplier details (if exists)
+          su.email as supplier_email,
+          su.phone as supplier_phone,
+          su.status as supplier_status,
+          sp.display_name as supplier_name,
+          sp.profile_images as supplier_images
+        FROM bookings b
+        LEFT JOIN users cu ON b.customer_id = cu.id
+        LEFT JOIN customer_profiles cp ON b.customer_id = cp.user_id
+        LEFT JOIN users co ON b.companion_id = co.id
+        LEFT JOIN companion_profiles comp ON b.companion_id = comp.user_id
+        LEFT JOIN users su ON b.supplier_id = su.id
+        LEFT JOIN supplier_profiles sp ON b.supplier_id = sp.user_id
+        WHERE DATE(b.created_at) BETWEEN ? AND ?
+        ORDER BY b.created_at DESC
+        LIMIT 100
+      `).bind(startDate, endDate).all();
+    } catch (error) {
+      // Fallback query without rating columns if they don't exist
+      console.warn('Rating columns not found, using fallback query:', error);
+      bookingDetails = await c.env.DB.prepare(`
+        SELECT 
+          b.id,
+          b.customer_id,
+          b.companion_id,
+          b.supplier_id,
+          b.service_id,
+          b.experience_id,
+          b.date,
+          b.start_time,
+          b.end_time,
+          b.duration,
+          b.location,
+          b.status,
+          b.total_amount,
+          b.service_fee,
+          b.payment_status,
+          b.scheduled_at,
+          b.created_at,
+          b.updated_at,
+          -- Customer details
+          cu.email as customer_email,
+          cu.phone as customer_phone,
+          cu.user_type as customer_type,
+          cu.status as customer_status,
+          cp.display_name as customer_name,
+          cp.profile_image as customer_image,
+          -- Companion details
+          co.email as companion_email,
+          co.phone as companion_phone,
+          co.status as companion_status,
+          comp.display_name as companion_name,
+          comp.profile_photo as companion_image,
+          -- Supplier details (if exists)
+          su.email as supplier_email,
+          su.phone as supplier_phone,
+          su.status as supplier_status,
+          sp.display_name as supplier_name,
+          sp.profile_images as supplier_images
+        FROM bookings b
+        LEFT JOIN users cu ON b.customer_id = cu.id
+        LEFT JOIN customer_profiles cp ON b.customer_id = cp.user_id
+        LEFT JOIN users co ON b.companion_id = co.id
+        LEFT JOIN companion_profiles comp ON b.companion_id = comp.user_id
+        LEFT JOIN users su ON b.supplier_id = su.id
+        LEFT JOIN supplier_profiles sp ON b.supplier_id = sp.user_id
+        WHERE DATE(b.created_at) BETWEEN ? AND ?
+        ORDER BY b.created_at DESC
+        LIMIT 100
+      `).bind(startDate, endDate).all();
+      
+      // Add default rating values to results
+      if (bookingDetails.results) {
+        bookingDetails.results = bookingDetails.results.map((row: any) => ({
+          ...row,
+          companion_rating: 0,
+          companion_rating_count: 0
+        }));
+      }
+    }
 
     // Chat activity metrics
     const chatMetrics = await c.env.DB.prepare(`

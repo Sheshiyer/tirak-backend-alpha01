@@ -5,6 +5,13 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
+# Observability configuration
+[observability]
+[observability.logs]
+enabled = false
+head_sampling_rate = 1
+invocation_logs = true
+
 # Development environment (default)
 [env.development]
 name = "tirak-backend-dev"
@@ -62,6 +69,7 @@ preview_id = "9ed9fe2729284248ac99e3acc6b4f029"
 [[kv_namespaces]]
 binding = "EMAIL_TEMPLATES"
 id = "fd2e05e821ff4b1f8cac6270796d38a1"
+preview_id = "fd2e05e821ff4b1f8cac6270796d38a1"
 
 [[env.staging.kv_namespaces]]
 binding = "CACHE"

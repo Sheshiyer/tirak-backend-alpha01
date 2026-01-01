@@ -385,24 +385,22 @@ export async function checkRequiredTablesAndMigrate(env: any): Promise<boolean> 
       // Apply the missing migration
       try {
         // Read the migration from the KV store or embedded in the code
-        const migration = `
-        -- Create table for companion experiences
-        CREATE TABLE companion_experiences (
+        // Split into individual statements to avoid comment issues with D1 exec()
+        const migrationStatements = [
+          `CREATE TABLE IF NOT EXISTS companion_experiences (
             id TEXT PRIMARY KEY,
             companion_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             title TEXT NOT NULL,
             description TEXT,
             duration_minutes INTEGER NOT NULL,
-            keywords TEXT, -- JSON array of keywords
+            keywords TEXT,
             price REAL NOT NULL,
             currency TEXT DEFAULT 'THB',
             is_active BOOLEAN DEFAULT TRUE,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        -- Create table for companion locations
-        CREATE TABLE companion_locations (
+          )`,
+          `CREATE TABLE IF NOT EXISTS companion_locations (
             id TEXT PRIMARY KEY,
             companion_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             city TEXT NOT NULL,
@@ -411,28 +409,33 @@ export async function checkRequiredTablesAndMigrate(env: any): Promise<boolean> 
             description TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        -- Add new columns to bookings table for enhanced customer preferences
-        ALTER TABLE bookings ADD COLUMN customer_preferences TEXT;
-        ALTER TABLE bookings ADD COLUMN special_requests TEXT;
-        ALTER TABLE bookings ADD COLUMN preferred_language TEXT;
-        ALTER TABLE bookings ADD COLUMN group_composition TEXT;
-        ALTER TABLE bookings ADD COLUMN dietary_requirements TEXT;
-
-        -- Create indexes for better query performance
-        CREATE INDEX idx_companion_exp_companion_id ON companion_experiences(companion_id);
-        CREATE INDEX idx_companion_loc_companion_id ON companion_locations(companion_id);
-        CREATE INDEX idx_companion_loc_city ON companion_locations(city);
-        CREATE INDEX idx_companion_loc_region ON companion_locations(region);
-
-        -- Log the migration
-        INSERT INTO _migrations (name, applied_at) 
-        VALUES ('009_add_companion_features', CURRENT_TIMESTAMP);
-        `;
+          )`,
+          `ALTER TABLE bookings ADD COLUMN customer_preferences TEXT`,
+          `ALTER TABLE bookings ADD COLUMN special_requests TEXT`,
+          `ALTER TABLE bookings ADD COLUMN preferred_language TEXT`,
+          `ALTER TABLE bookings ADD COLUMN group_composition TEXT`,
+          `ALTER TABLE bookings ADD COLUMN dietary_requirements TEXT`,
+          `CREATE INDEX IF NOT EXISTS idx_companion_exp_companion_id ON companion_experiences(companion_id)`,
+          `CREATE INDEX IF NOT EXISTS idx_companion_loc_companion_id ON companion_locations(companion_id)`,
+          `CREATE INDEX IF NOT EXISTS idx_companion_loc_city ON companion_locations(city)`,
+          `CREATE INDEX IF NOT EXISTS idx_companion_loc_region ON companion_locations(region)`,
+          `INSERT OR IGNORE INTO _migrations (name, applied_at) VALUES ('009_add_companion_features', CURRENT_TIMESTAMP)`
+        ];
         
-        // Execute the migration
-        await env.DB.exec(migration);
+        // Execute each statement separately
+        for (const statement of migrationStatements) {
+          try {
+            await env.DB.exec(statement);
+          } catch (stmtError: any) {
+            // Ignore errors for columns/indexes that already exist
+            if (stmtError?.message?.includes('duplicate column') || 
+                stmtError?.message?.includes('already exists')) {
+              console.log(`Skipping statement (already exists): ${statement.substring(0, 50)}...`);
+              continue;
+            }
+            throw stmtError;
+          }
+        }
         console.log('Successfully applied migration 009_add_companion_features');
         return true;
       } catch (migrationError) {
