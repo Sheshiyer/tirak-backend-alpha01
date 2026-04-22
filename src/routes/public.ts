@@ -482,4 +482,63 @@ publicRoutes.get('/health', async (c) => {
   }
 });
 
+/**
+ * Submit vendor/supplier onboarding application
+ */
+publicRoutes.post('/vendor-application', async (c) => {
+  try {
+    const body = await c.req.json();
+
+    // Validate required fields
+    const required = ['brandName', 'description', 'primaryCategory', 'priceRange', 'contactName', 'contactRole', 'email', 'phone', 'chatId', 'address', 'mapsUrl'];
+    for (const field of required) {
+      if (!body[field] || (typeof body[field] === 'string' && body[field].trim() === '')) {
+        return jsonError(c, `Missing required field: ${field}`, `Please provide ${field}`, 400);
+      }
+    }
+
+    // Validate category
+    const validCategories = ['Culture', 'Adventure', 'Wellness', 'Nightlife', 'Lifestyle', 'Cinema', 'Events', 'Food & Drink'];
+    if (!validCategories.includes(body.primaryCategory)) {
+      return jsonError(c, 'Invalid category', 'Please select a valid category', 400);
+    }
+
+    // Generate ID
+    const id = crypto.randomUUID();
+
+    await c.env.DB.prepare(`
+      INSERT INTO vendor_applications (
+        id, brand_name, reg_name, description, website, social,
+        primary_category, price_range, contact_name, contact_role,
+        email, phone, chat_app, chat_id, address, maps_url, hours, tax_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id,
+      body.brandName?.trim(),
+      body.regName?.trim() || null,
+      body.description?.trim(),
+      body.website?.trim() || null,
+      body.social?.trim() || null,
+      body.primaryCategory,
+      body.priceRange,
+      body.contactName?.trim(),
+      body.contactRole?.trim(),
+      body.email?.trim(),
+      body.phone?.trim(),
+      body.chatApp || 'LINE',
+      body.chatId?.trim(),
+      body.address?.trim(),
+      body.mapsUrl?.trim(),
+      body.hours?.trim() || null,
+      body.taxId?.trim() || null
+    ).run();
+
+    return jsonSuccess(c, { id, status: 'pending' }, 'Vendor application submitted successfully', 201);
+
+  } catch (error) {
+    console.error('Vendor application submission error:', error);
+    return jsonError(c, 'Failed to submit application', 'An error occurred while processing your application', 500);
+  }
+});
+
 export { publicRoutes };

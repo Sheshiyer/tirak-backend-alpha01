@@ -33,6 +33,11 @@ All notable changes to the Tirak Backend will be documented in this file.
 - **API**: Fixed 500 Internal Server Error in companion details endpoint by adding null checks for database query results and safe JSON parsing with try-catch blocks
 - **API**: Fixed reviews query in companion details endpoint to use `companion_profiles` table for reviewer display names and profile images
 - **API**: Fixed companion details endpoint to use LEFT JOIN like "get all companions" endpoint, allowing companions without profiles to be retrieved
+- Created companion.json: Maps all companion and supplier journey endpoints to their request body types, formatted for model/frontend dynamic data use.
+- Added booking endpoints to companion.json: includes booking creation, view, status update (accept/reject/complete) for companion journey UI/data mapping.
+- Added review and chat endpoints to companion.json: includes review creation, fetch, chat room creation, messaging, and read receipts for companion/supplier journey UI/data mapping.
+- Added upload, notification, and analytics endpoints to companion.json: covers file/image/document uploads, notification management, and analytics/reporting for companion/supplier journey UI/data mapping.
+- Added set availability endpoint (POST /companions/:id/availability) to companion.json for companion journey flow.
 
 ## [1.0.0] - 2023-06-30
 

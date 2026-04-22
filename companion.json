@@ -1,0 +1,168 @@
+{
+  "/companions/all": null,
+  "/companions": null,
+  "/companions/:id": null,
+  "/companions/:id/availability": {
+    "POST": [
+      {
+        "startDate": "YYYY-MM-DD",
+        "endDate": "YYYY-MM-DD",
+        "startTime": "HH:MM",
+        "endTime": "HH:MM",
+        "isAvailable": "boolean (default: true)"
+      }
+    ]
+  },
+  "/companions/:id/experiences": {
+    "POST": {
+      "title": "string (min 3, max 255)",
+      "description": "string (min 10, max 2000, optional)",
+      "durationMinutes": "number (30-1440)",
+      "keywords": ["string (max 20, optional)"],
+      "price": "number (>=0)",
+      "currency": "THB | USD | EUR (default: THB)",
+      "is_active": "boolean (optional)"
+    },
+    "PUT": {
+      "title": "string (min 3, max 255)",
+      "description": "string (min 10, max 2000, optional)",
+      "durationMinutes": "number (30-1440)",
+      "keywords": ["string (max 20, optional)"],
+      "price": "number (>=0)",
+      "currency": "THB | USD | EUR (default: THB)",
+      "is_active": "boolean (optional)"
+    }
+  },
+  "/companions/:id/locations": {
+    "POST": {
+      "city": "string (min 3, max 100)",
+      "region": "string (min 3, max 100)",
+      "isPopular": "boolean (default: false)",
+      "description": "string (max 500, optional)"
+    },
+    "PUT": {
+      "city": "string (min 3, max 100)",
+      "region": "string (min 3, max 100)",
+      "isPopular": "boolean (default: false)",
+      "description": "string (max 500, optional)"
+    }
+  },
+  "/suppliers/search": null,
+  "/suppliers/stats": null,
+  "/suppliers/:id": {
+    "PUT": {
+      "displayName": "string (min 1, max 100)",
+      "bio": "string (max 1000, optional)",
+      "categories": ["string (min 1, max 10)"],
+      "regions": ["string (min 1, max 20)"],
+      "spokenLanguages": ["string (min 1, max 10)"],
+      "profileImages": ["string (url, max 10, optional)"],
+      "supplierType": "standard | companion (default: standard)"
+    }
+  },
+  "/suppliers/:id/services": {
+    "POST": {
+      "title": "string (min 1, max 200)",
+      "description": "string (max 2000, optional)",
+      "priceMin": "number (>=0)",
+      "priceMax": "number (>=0, >= priceMin)",
+      "currency": "string (3 chars, default: THB)",
+      "durationHours": "number (0.5-24)"
+    }
+  },
+  "/bookings": {
+    "POST": {
+      "companionId": "string (required)",
+      "serviceId": "string (optional)",
+      "date": "YYYY-MM-DD",
+      "startTime": "HH:MM",
+      "endTime": "HH:MM (optional, auto-calculated if not provided)",
+      "duration": "number (30-1440)",
+      "location": "string (optional, max 500)",
+      "specialRequests": "string (optional, max 1000)",
+      "meetingPoint": "string (optional, max 500)",
+      "template": "string (optional, max 500)",
+      "preferredLanguages": ["string (optional)"],
+      "dietaryRestrictions": ["string (optional)"],
+      "accessibilityNeeds": ["string (optional)"]
+    }
+  },
+  "/bookings/:id": null,
+  "/bookings/:id/summary": null,
+  "/bookings/:id/status": {
+    "PUT": {
+      "status": "confirmed | cancelled | completed",
+      "reason": "string (optional, max 500)"
+    }
+  },
+  "/reviews": {
+    "POST": {
+      "bookingId": "string (uuid, required)",
+      "companionId": "string (uuid, required)",
+      "rating": "number (1-5)",
+      "comment": "string (max 1000)",
+      "categories": {
+        "communication": "number (1-5)",
+        "punctuality": "number (1-5)",
+        "professionalism": "number (1-5)",
+        "knowledge": "number (1-5)"
+      }
+    }
+  },
+  "/reviews/companion/:id": null,
+  "/chat/rooms": {
+    "POST": {
+      "otherUserId": "string (uuid, required)"
+    }
+  },
+  "/chat/rooms": null,
+  "/chat/rooms/:roomId": null,
+  "/chat/rooms/:roomId/messages": {
+    "POST": {
+      "roomId": "string (uuid, required)",
+      "messageType": "text | image",
+      "content": "string (max 2000, required for text)",
+      "imageUrl": "string (url, required for image)"
+    }
+  },
+  "/chat/rooms/:roomId/read": {
+    "POST": {
+      "messageId": "string (uuid, optional)"
+    }
+  },
+  "/uploads/image": null,
+  "/uploads/multiple": null,
+  "/uploads/document": null,
+  "/uploads/presigned-url": {
+    "POST": {
+      "fileName": "string (required)",
+      "fileSize": "number (bytes, required, max 10MB)",
+      "contentType": "string (required)",
+      "category": "profile | service | chat | document (default: profile)"
+    }
+  },
+  "/uploads/:fileKey": null,
+  "/uploads/stats": null,
+  "/uploads/validate/:fileKey": null,
+  "/uploads/metadata/:fileKey": null,
+  "/uploads/:type/:userId/:filename": null,
+  "/notifications": null,
+  "/notifications/:id/read": null,
+  "/notifications/read-all": null,
+  "/notifications/types": null,
+  "/notifications/:id": null,
+  "/notifications/preferences": {
+    "PUT": {
+      "push": "boolean (optional)",
+      "email": "boolean (optional)",
+      "sms": "boolean (optional)",
+      "types": {
+        "booking_confirmed": "boolean (optional)",
+        "booking_cancelled": "boolean (optional)",
+        "new_message": "boolean (optional)",
+        "review_received": "boolean (optional)",
+        "payment_completed": "boolean (optional)"
+      }
+    }
+  }
+} 
