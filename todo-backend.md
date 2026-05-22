@@ -728,4 +728,18 @@ This document provides a comprehensive, phase-based breakdown of all backend imp
 - Deployed to `https://tirak-backend.tirak-court.workers.dev` as Worker version `158ce37d-3c9f-4c38-80aa-0297271b0bda`.
 - Live smoke passed with fresh throwaway customer/local-guide accounts and immediate deletion: registration, companion alias mapping, first/last/display-name persistence, companion list visibility, `/api/customers/all`, `/api/companions/:id/services`, availability save, chat room creation in both directions, `/api/suppliers/:id` delete, and `/api/customers/:id` delete.
 - Live rate-limit smoke passed: 15 authenticated `/api/bookings?page=1&limit=10` refetches returned 200 and did not hit 429.
-- `npm run typecheck` still reports pre-existing strictness failures in background jobs, Durable Objects, admin, payments, public/search, and uploads; the touched mobile-contract routes no longer add type errors.
+- `npm run typecheck` and `npm run test:run` pass after the release backend contract cleanup pushed in commit `b8add0a`.
+
+## Cloudflare Deploy + D1 Migration Apply - 2026-05-22
+- [x] Verify Wrangler auth, version, and target Cloudflare account.
+- [x] Inspect pending D1 migrations for the default Tirak database before applying.
+- [x] Apply pending D1 migrations without replaying already-applied history.
+- [x] Deploy the default Cloudflare Worker with EMAIL binding and current backend routes.
+- [x] Run a post-deploy health/API smoke check and record results.
+
+### Cloudflare Deploy Review
+- Wrangler `4.93.0` is authenticated as `tirak.court@gmail.com` on account `2c0c96c68f0ee73b6d980054557bca5b`.
+- Remote D1 database `tirak-development` already had migrations `001` through `007` recorded in `d1_migrations`; `npx wrangler d1 migrations apply tirak-development --remote` returned `No migrations to apply`.
+- The live database contains the referral tables plus the registration/profile persistence columns added by migrations `006` and `007`.
+- Deployed top-level Worker `tirak-backend` with `--env="" --keep-vars`; current Worker version is `29a50157-bded-46ad-87e0-02a7062d0680`.
+- Smoke checks passed: `/health` returned 200, `/api/public/health` returned healthy database/cache/storage/queues, and `/api/public/stats` returned live D1 data.
