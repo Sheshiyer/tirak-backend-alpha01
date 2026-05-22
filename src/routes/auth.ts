@@ -22,7 +22,9 @@ import {
   sendOTPSMS,
   sendOTPEmail,
   createSMSConfig,
-  createEmailConfig
+  createEmailConfig,
+  sendEmail,
+  renderBasicEmail
 } from '../utils/communication';
 import {
   createUser,
@@ -35,6 +37,7 @@ import {
 import { jsonSuccess, jsonError } from '../utils/response';
 import { createRateLimit } from '../middleware/rateLimit';
 import type { Env, Variables } from '../index';
+import { awardReferralCoins } from './referrals';
 
 const auth = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -45,12 +48,40 @@ auth.use('*', createRateLimit('auth'));
  * User registration endpoint
  */
 auth.post('/register', zValidator('json', registerSchema), async (c) => {
-  const { email, phone, password, userType, preferredLanguage } = c.req.valid('json');
+  const {
+    display_name,
+    displayName,
+    name,
+    firstName,
+    lastName,
+    first_name,
+    last_name,
+    email,
+    phone,
+    password,
+    userType,
+    preferredLanguage,
+    referralCode,
+    dateOfBirth,
+    gender
+  } = c.req.valid('json');
   
   try {
     // Normalize and validate inputs
     const normalizedEmail = email.toLowerCase().trim();
-    const normalizedPhone = normalizePhone(phone);
+    const generatedPhoneSuffix = Array.from(
+      crypto.getRandomValues(new Uint8Array(8)),
+      digit => String(digit % 10)
+    ).join('');
+    const normalizedPhone = phone
+      ? normalizePhone(phone)
+      : `+669${generatedPhoneSuffix}`;
+    const normalizedUserType = userType === 'companion' ? 'supplier' : userType;
+    const providedFirstName = (firstName || first_name || '').trim();
+    const providedLastName = (lastName || last_name || '').trim();
+    const joinedName = [providedFirstName, providedLastName].filter(Boolean).join(' ');
+    const resolvedDisplayName = (display_name || displayName || name || joinedName || normalizedEmail.split('@')[0] || 'User').trim();
+    const safeGender = gender === 'prefer_not_to_say' ? undefined : gender;
     
     if (!isValidEmail(normalizedEmail)) {
       return jsonError(c, 'Invalid email format', 'Please provide a valid email address', 400);
@@ -78,38 +109,33 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
       email: normalizedEmail,
       phone: normalizedPhone,
       passwordHash,
-      userType,
+      userType: normalizedUserType,
       preferredLanguage
     }, c.env.DB);
 
     // Create user profile based on type
-    if (userType === 'supplier') {
+    if (normalizedUserType === 'supplier') {
+      const [derivedFirstName, ...derivedLastNameParts] = resolvedDisplayName.split(/\s+/).filter(Boolean);
       await createSupplierProfile({
         userId,
-        displayName: normalizedEmail.split('@')[0] || 'User', // Default display name
+        displayName: resolvedDisplayName,
+        firstName: providedFirstName || derivedFirstName || resolvedDisplayName,
+        lastName: providedLastName || derivedLastNameParts.join(' '),
+        dateOfBirth,
+        gender: safeGender,
+        spokenLanguages: preferredLanguage ? [preferredLanguage] : [],
       }, c.env.DB);
     } else {
       await createCustomerProfile({
         userId,
-        displayName: normalizedEmail.split('@')[0] || 'User', // Default display name
+        displayName: resolvedDisplayName,
+        dateOfBirth,
+        gender: safeGender,
       }, c.env.DB);
     }
 
-    // Generate OTP for phone verification
-    const otpData = createOTPData();
-    await c.env.CACHE.put(`otp:${normalizedPhone}`, JSON.stringify(otpData), { expirationTtl: 600 }); // 10 minutes
+    await awardReferralCoins(c.env.DB, userId, referralCode);
 
-    // Send OTP via SMS
-    try {
-      const smsConfig = createSMSConfig(c.env);
-      await sendOTPSMS(smsConfig, normalizedPhone, otpData.code);
-    } catch (error) {
-      console.error('Failed to send OTP SMS:', error);
-      // Continue with registration even if SMS fails
-    }
-
-    console.log(`OTP for ${normalizedPhone}: ${otpData.code}`); // Development only
-    
     // Generate tokens
     const tokens = await generateTokens(user, c.env.JWT_SECRET);
 
@@ -127,6 +153,8 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
     return jsonSuccess(c, {
       user: {
         id: user.id,
+        name: resolvedDisplayName,
+        displayName: resolvedDisplayName,
         email: user.email,
         phone: user.phone,
         userType: user.userType,
@@ -135,7 +163,7 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
         phoneVerified: user.phoneVerified
       },
       ...tokens
-    }, 'Registration successful. Please verify your phone number.', 201);
+    }, 'Registration successful.', 201);
 
   } catch (error) {
     console.error('Registration error:', error);
@@ -170,11 +198,24 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
     }
 
     if (user.status === 'pending') {
-      return jsonError(c, 'Account pending', 'Please verify your phone number to activate your account', 403);
+      await c.env.DB.prepare(
+        'UPDATE users SET status = ?, email_verified = TRUE, phone_verified = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+      ).bind('active', user.id).run();
+      user.status = 'active';
+      user.emailVerified = true;
+      user.phoneVerified = true;
     }
 
     // Generate tokens
     const tokens = await generateTokens(user, c.env.JWT_SECRET);
+    const profileNameRow = await c.env.DB.prepare(`
+      SELECT COALESCE(cp.display_name, sp.display_name) AS display_name
+      FROM users u
+      LEFT JOIN customer_profiles cp ON u.id = cp.user_id
+      LEFT JOIN supplier_profiles sp ON u.id = sp.user_id
+      WHERE u.id = ?
+    `).bind(user.id).first<{ display_name?: string }>();
+    const displayName = profileNameRow?.display_name || user.email.split('@')[0] || 'User';
 
     // Update last login
     await c.env.DB.prepare(
@@ -196,6 +237,8 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
     return jsonSuccess(c, {
       user: {
         id: user.id,
+        name: displayName,
+        displayName,
         email: user.email,
         phone: user.phone,
         userType: user.userType,
@@ -345,8 +388,28 @@ auth.post('/forgot-password', zValidator('json', passwordResetRequestSchema), as
       { expirationTtl: 3600 } // 1 hour
     );
 
-    // In production, send email/SMS with reset link
-    console.log(`Password reset token for ${user.email}: ${resetToken}`); // Development only
+    const resetLink = `tirak://auth/new?token=${encodeURIComponent(resetToken)}`;
+    const webResetLink = `https://tirak.app/auth/new?token=${encodeURIComponent(resetToken)}`;
+
+    try {
+      const emailConfig = createEmailConfig(c.env);
+      await sendEmail(
+        emailConfig,
+        user.email,
+        'Reset your Tirak password',
+        renderBasicEmail(
+          'Reset your Tirak password',
+          'Use the button below to choose a new password. This link expires in one hour. If you did not request this, you can ignore this email.',
+          { label: 'Reset password', url: resetLink }
+        ) + `\n<!-- Web fallback: ${webResetLink} -->`,
+        'password_reset'
+      );
+    } catch (error) {
+      console.error('Failed to send password reset email:', error);
+      if (c.env.ENVIRONMENT !== 'production') {
+        console.log(`Password reset token for ${user.email}: ${resetToken}`);
+      }
+    }
 
     return jsonSuccess(c, { sent: true }, 'If an account exists, a reset code will be sent');
 

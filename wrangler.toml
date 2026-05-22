@@ -19,7 +19,7 @@ name = "tirak-backend-production"
 [[d1_databases]]
 binding = "DB"
 database_name = "tirak-development"
-database_id = "placeholder-dev-db-id"
+database_id = "60443346-c480-4975-962e-bd4daf4a37a8"
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -47,11 +47,11 @@ bucket_name = "tirak-storage-production"
 # KV Namespaces
 [[kv_namespaces]]
 binding = "CACHE"
-id = "placeholder-cache-dev-id"
+id = "29c134656fca4bada93e1c3b5313b3fa"
 
 [[kv_namespaces]]
 binding = "SESSIONS"
-id = "placeholder-sessions-dev-id"
+id = "486126fb5afb41feb30458231bde3a96"
 
 [[env.staging.kv_namespaces]]
 binding = "CACHE"
@@ -184,18 +184,42 @@ class_name = "NotificationService"
 tag = "v1"
 new_classes = ["ChatRoom", "NotificationService"]
 
+# Transactional email. Configure the Tirak sending domain in Cloudflare Email
+# Service, then restrict senders once noreply/support addresses are verified.
+[[send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["noreply@tirak.app"]
+
+[[env.staging.send_email]]
+name = "EMAIL"
+
+[[env.production.send_email]]
+name = "EMAIL"
+
 # Environment variables (secrets will be set via wrangler secret)
 [vars]
 ENVIRONMENT = "development"
 FRONTEND_URLS = "http://localhost:3000,http://localhost:5173"
 JWT_SECRET = "dev-jwt-secret-change-in-production"
+EMAIL_PROVIDER = "cloudflare"
+EMAIL_FROM = "noreply@tirak.app"
+EMAIL_FROM_NAME = "Tirak"
+EMAIL_REPLY_TO = "support@tirak.app"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
 FRONTEND_URLS = "https://staging.tirak.app"
 JWT_SECRET = "staging-jwt-secret"
+EMAIL_PROVIDER = "cloudflare"
+EMAIL_FROM = "noreply@tirak.app"
+EMAIL_FROM_NAME = "Tirak"
+EMAIL_REPLY_TO = "support@tirak.app"
 
 [env.production.vars]
 ENVIRONMENT = "production"
 FRONTEND_URLS = "https://tirak.app,https://www.tirak.app"
 JWT_SECRET = "production-jwt-secret"
+EMAIL_PROVIDER = "cloudflare"
+EMAIL_FROM = "noreply@tirak.app"
+EMAIL_FROM_NAME = "Tirak"
+EMAIL_REPLY_TO = "support@tirak.app"

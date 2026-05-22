@@ -23,11 +23,80 @@ users.use('*', authMiddleware);
 // Apply rate limiting
 users.use('*', createRateLimit('general'));
 
+const parseJsonObject = (value: unknown, fallback: Record<string, any> = {}) => {
+  if (!value) return fallback;
+  if (typeof value === 'object') return value as Record<string, any>;
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    return fallback;
+  }
+};
+
+const getProfileImage = (userType: string, profile: any): string | null => {
+  if (!profile) return null;
+  if (userType === 'supplier') {
+    return Array.isArray(profile.profileImages) ? profile.profileImages[0] || null : null;
+  }
+  return profile.profileImage || null;
+};
+
+const companionProfileUpdateSchema = z.object({
+  first_name: z.string().max(100).optional(),
+  last_name: z.string().max(100).optional(),
+  display_name: z.string().min(1).max(100).optional(),
+  bio: z.string().max(1000).optional(),
+  social_links: z.record(z.any()).optional(),
+  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  gender: z.enum(['male', 'female', 'other']).optional(),
+  cover_photo: z.string().optional(),
+  profile_photo: z.string().optional(),
+  location: z.string().max(200).optional(),
+  languages: z.array(z.string()).optional(),
+  specialization: z.array(z.string()).optional(),
+  certifications: z.array(z.string()).optional(),
+});
+
+const formatCompanionProfile = (userId: string, profile: any) => {
+  const profileImages = Array.isArray(profile?.profileImages) ? profile.profileImages : [];
+  return {
+    id: userId,
+    userId,
+    firstName: profile?.firstName || '',
+    first_name: profile?.firstName || '',
+    lastName: profile?.lastName || '',
+    last_name: profile?.lastName || '',
+    displayName: profile?.displayName || '',
+    display_name: profile?.displayName || '',
+    coverPhoto: profile?.coverPhoto || '',
+    cover_photo: profile?.coverPhoto || '',
+    profilePhoto: profileImages[0] || '',
+    profile_photo: profileImages[0] || '',
+    bio: profile?.bio || '',
+    socialLinks: profile?.socialLinks || {},
+    social_links: profile?.socialLinks || {},
+    dateOfBirth: profile?.dateOfBirth || '',
+    gender: profile?.gender || '',
+    location: profile?.location || '',
+    languages: profile?.spokenLanguages || [],
+    specialization: profile?.categories || [],
+    certifications: profile?.certifications || [],
+    experienceStats: profile?.experienceStats || {
+      yearsOfExperience: 0,
+      totalGuests: 0,
+      averageRating: profile?.ratingAverage || 0,
+      responseTime: 'Not set',
+    },
+    createdAt: profile?.createdAt,
+    updatedAt: profile?.updatedAt,
+  };
+};
+
 /**
  * Get user profile (mobile app format)
  */
 users.get('/profile', async (c) => {
-  const userId = c.get('userId');
+  const userId = c.get('userId') as string;
 
   try {
     const user = await getUserById(userId, c.env.DB);
@@ -60,9 +129,10 @@ users.get('/profile', async (c) => {
       id: user.id,
       name: profile?.displayName || user.email.split('@')[0],
       email: user.email,
+      bio: profile?.bio || null,
       role: user.userType === 'supplier' ? 'companion' : 'customer',
       verified: user.emailVerified && user.phoneVerified,
-      profileImage: profile ? JSON.parse(profile.profileImages || '[]')[0] : null,
+      profileImage: getProfileImage(user.userType, profile),
       phone: user.phone,
       dateOfBirth: profile?.dateOfBirth || null,
       gender: profile?.gender || null,
@@ -80,10 +150,157 @@ users.get('/profile', async (c) => {
 });
 
 /**
+ * Get the authenticated local-guide profile in the mobile companion format.
+ */
+users.get('/companion/profile', async (c) => {
+  const userId = c.get('userId') as string;
+
+  try {
+    const user = await getUserById(userId, c.env.DB);
+    if (!user) {
+      return jsonError(c, 'User not found', 'The requested user does not exist', 404);
+    }
+    if (user.userType !== 'supplier') {
+      return jsonError(c, 'Access denied', 'Only local guides can access this profile', 403);
+    }
+
+    const profile = await getSupplierProfile(userId, c.env.DB);
+    if (!profile) {
+      return jsonError(c, 'Profile not found', 'Local guide profile does not exist', 404);
+    }
+
+    return jsonSuccess(c, formatCompanionProfile(userId, profile), 'Companion profile retrieved successfully');
+  } catch (error) {
+    console.error('Get companion profile error:', error);
+    return jsonError(c, 'Failed to retrieve profile', 'An error occurred while fetching the companion profile', 500);
+  }
+});
+
+/**
+ * Update the authenticated local-guide profile in the mobile companion format.
+ */
+users.put('/companion/profile', async (c) => {
+  const userId = c.get('userId') as string;
+
+  try {
+    const user = await getUserById(userId, c.env.DB);
+    if (!user) {
+      return jsonError(c, 'User not found', 'The requested user does not exist', 404);
+    }
+    if (user.userType !== 'supplier') {
+      return jsonError(c, 'Access denied', 'Only local guides can update this profile', 403);
+    }
+
+    let rawPayload: any = {};
+    let uploadedProfilePhoto: string | undefined;
+    let uploadedCoverPhoto: string | undefined;
+    const contentType = c.req.header('Content-Type') || '';
+
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await c.req.formData();
+      const data = formData.get('data');
+      rawPayload = typeof data === 'string' ? JSON.parse(data) : {};
+
+      const profileFile = formData.get('profilePhoto');
+      if (profileFile && typeof profileFile === 'object' && 'name' in profileFile) {
+        const file = profileFile as File;
+        const validation = validateImageFile(file);
+        if (!validation.isValid) {
+          return jsonError(c, 'Invalid profile photo', validation.errors.join(', '), 400);
+        }
+        const upload = await uploadFile(
+          c.env.STORAGE,
+          file,
+          generateFileKey(userId, file.name || 'profile.jpg', 'avatars'),
+          file.type || 'image/jpeg',
+          { userId, purpose: 'companion-profile-photo' }
+        );
+        uploadedProfilePhoto = upload.url;
+      }
+
+      const coverFile = formData.get('coverPhoto');
+      if (coverFile && typeof coverFile === 'object' && 'name' in coverFile) {
+        const file = coverFile as File;
+        const validation = validateImageFile(file);
+        if (!validation.isValid) {
+          return jsonError(c, 'Invalid cover photo', validation.errors.join(', '), 400);
+        }
+        const upload = await uploadFile(
+          c.env.STORAGE,
+          file,
+          generateFileKey(userId, file.name || 'cover.jpg', 'covers'),
+          file.type || 'image/jpeg',
+          { userId, purpose: 'companion-cover-photo' }
+        );
+        uploadedCoverPhoto = upload.url;
+      }
+    } else {
+      rawPayload = await c.req.json();
+    }
+
+    const payload = companionProfileUpdateSchema.parse(rawPayload);
+    const existing = await getSupplierProfile(userId, c.env.DB);
+    if (!existing) {
+      return jsonError(c, 'Profile not found', 'Local guide profile does not exist', 404);
+    }
+
+    const profilePhoto = uploadedProfilePhoto || payload.profile_photo;
+    const profileImages = profilePhoto
+      ? [profilePhoto, ...(existing.profileImages || []).filter(image => image !== profilePhoto).slice(0, 9)]
+      : existing.profileImages || [];
+
+    const coverPhoto = uploadedCoverPhoto || payload.cover_photo || existing.coverPhoto || null;
+    const displayName = payload.display_name || existing.displayName;
+
+    await c.env.DB.prepare(`
+      UPDATE supplier_profiles
+      SET first_name = ?, last_name = ?, display_name = ?, bio = ?, location = ?,
+          social_links = ?, date_of_birth = ?, gender = ?, cover_photo = ?,
+          profile_images = ?, categories = ?, regions = ?, spoken_languages = ?,
+          certifications = ?, updated_at = ?
+      WHERE user_id = ?
+    `).bind(
+      payload.first_name ?? existing.firstName ?? null,
+      payload.last_name ?? existing.lastName ?? null,
+      displayName,
+      payload.bio ?? existing.bio ?? null,
+      payload.location ?? existing.location ?? null,
+      JSON.stringify(payload.social_links ?? existing.socialLinks ?? {}),
+      payload.dateOfBirth ?? existing.dateOfBirth ?? null,
+      payload.gender ?? existing.gender ?? null,
+      coverPhoto,
+      JSON.stringify(profileImages),
+      JSON.stringify(payload.specialization ?? existing.categories ?? []),
+      JSON.stringify(existing.regions ?? []),
+      JSON.stringify(payload.languages ?? existing.spokenLanguages ?? []),
+      JSON.stringify(payload.certifications ?? existing.certifications ?? []),
+      new Date().toISOString(),
+      userId
+    ).run();
+
+    await c.env.ANALYTICS_QUEUE.send({
+      eventType: 'companion_profile_update',
+      userId,
+      properties: { updatedFields: Object.keys(rawPayload) },
+      timestamp: new Date().toISOString()
+    });
+
+    const updatedProfile = await getSupplierProfile(userId, c.env.DB);
+    return jsonSuccess(c, formatCompanionProfile(userId, updatedProfile), 'Companion profile updated successfully');
+  } catch (error) {
+    console.error('Update companion profile error:', error);
+    if (error instanceof z.ZodError) {
+      return jsonError(c, 'Invalid profile data', error.errors[0]?.message || 'Invalid companion profile payload', 400);
+    }
+    return jsonError(c, 'Failed to update profile', 'An error occurred while updating the companion profile', 500);
+  }
+});
+
+/**
  * Get user profile by ID (legacy endpoint)
  */
 users.get('/:id', validateUUID('id'), requireOwnership('id'), async (c) => {
-  const userId = c.req.param('id');
+  const userId = c.req.param('id') as string;
 
   try {
     const user = await getUserById(userId, c.env.DB);
@@ -116,9 +333,10 @@ users.get('/:id', validateUUID('id'), requireOwnership('id'), async (c) => {
 // Mobile app profile update schema
 const updateMobileProfileSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name too long').optional(),
+  bio: z.string().max(500, 'Bio too long').optional(),
   dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional(),
   gender: z.enum(['male', 'female', 'other']).optional(),
-  profileImage: z.string().url('Invalid image URL').optional(),
+  profileImage: z.string().min(1, 'Invalid image reference').optional(),
   preferences: z.object({
     language: z.enum(['en', 'th']).optional(),
     currency: z.enum(['THB', 'USD']).optional(),
@@ -134,7 +352,7 @@ const updateMobileProfileSchema = z.object({
  * Update user profile (mobile app format)
  */
 users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) => {
-  const userId = c.get('userId');
+  const userId = c.get('userId') as string;
   const updates = c.req.valid('json');
 
   try {
@@ -173,6 +391,10 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
         profileUpdates.push('date_of_birth = ?');
         values.push(updates.dateOfBirth);
       }
+      if (updates.bio) {
+        profileUpdates.push('bio = ?');
+        values.push(updates.bio);
+      }
       if (updates.gender) {
         profileUpdates.push('gender = ?');
         values.push(updates.gender);
@@ -180,7 +402,7 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
       if (updates.profileImage) {
         // Add to profile_images array
         const profile = await getSupplierProfile(userId, c.env.DB);
-        const currentImages = JSON.parse(profile?.profileImages || '[]');
+        const currentImages = profile?.profileImages || [];
         const updatedImages = [updates.profileImage, ...currentImages.filter(img => img !== updates.profileImage).slice(0, 9)];
         profileUpdates.push('profile_images = ?');
         values.push(JSON.stringify(updatedImages));
@@ -209,21 +431,23 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
         profileUpdates.push('date_of_birth = ?');
         values.push(updates.dateOfBirth);
       }
+      if (updates.bio) {
+        profileUpdates.push('bio = ?');
+        values.push(updates.bio);
+      }
       if (updates.gender) {
         profileUpdates.push('gender = ?');
         values.push(updates.gender);
       }
       if (updates.profileImage) {
-        const currentImages = JSON.parse(user.profileImages || '[]');
-        const updatedImages = [updates.profileImage, ...currentImages.filter(img => img !== updates.profileImage).slice(0, 4)];
-        profileUpdates.push('profile_images = ?');
-        values.push(JSON.stringify(updatedImages));
+        profileUpdates.push('profile_image = ?');
+        values.push(updates.profileImage);
       }
 
       // Update preferences
       if (updates.preferences) {
         const currentProfile = await getCustomerProfile(userId, c.env.DB);
-        const currentPrefs = JSON.parse(currentProfile?.preferences || '{}');
+        const currentPrefs = parseJsonObject(currentProfile?.preferences);
         const updatedPrefs = { ...currentPrefs, ...updates.preferences };
         profileUpdates.push('preferences = ?');
         values.push(JSON.stringify(updatedPrefs));
@@ -262,6 +486,9 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
     }
 
     const updatedUser = await getUserById(userId, c.env.DB);
+    if (!updatedUser) {
+      return jsonError(c, 'User not found', 'The requested user does not exist', 404);
+    }
     const preferences = JSON.parse(updatedUser.notificationPreferences || '{}');
     const defaultPreferences = {
       language: updatedUser.preferredLanguage || 'en',
@@ -277,9 +504,10 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
       id: updatedUser.id,
       name: profile?.displayName || updatedUser.email.split('@')[0],
       email: updatedUser.email,
+      bio: profile?.bio || null,
       role: updatedUser.userType === 'supplier' ? 'companion' : 'customer',
       verified: updatedUser.emailVerified && updatedUser.phoneVerified,
-      profileImage: profile ? JSON.parse(profile.profileImages || '[]')[0] : null,
+      profileImage: getProfileImage(updatedUser.userType, profile),
       phone: updatedUser.phone,
       dateOfBirth: profile?.dateOfBirth || null,
       gender: profile?.gender || null,
@@ -300,7 +528,7 @@ users.put('/profile', zValidator('json', updateMobileProfileSchema), async (c) =
  * Update user profile (legacy endpoint)
  */
 users.put('/:id', validateUUID('id'), requireOwnership('id'), zValidator('json', profileUpdateSchema), async (c) => {
-  const userId = c.req.param('id');
+  const userId = c.req.param('id') as string;
   const updates = c.req.valid('json');
   
   try {
@@ -402,14 +630,14 @@ users.post('/:id/avatar',
     maxFiles: 1
   }),
   async (c) => {
-    const userId = c.req.param('id');
+    const userId = c.req.param('id') as string;
     const files = c.get('uploadedFiles') as File[];
     
     if (!files || files.length === 0) {
       return jsonError(c, 'No file provided', 'Please select an image to upload', 400);
     }
 
-    const file = files[0];
+    const file = files[0]!;
     
     try {
       // Validate image file
@@ -488,7 +716,7 @@ users.post('/:id/avatar',
  * Get user settings
  */
 users.get('/:id/settings', validateUUID('id'), requireOwnership('id'), async (c) => {
-  const userId = c.req.param('id');
+  const userId = c.req.param('id') as string;
   
   try {
     const user = await getUserById(userId, c.env.DB);
@@ -530,7 +758,7 @@ users.get('/:id/settings', validateUUID('id'), requireOwnership('id'), async (c)
  * Update user settings
  */
 users.put('/:id/settings', validateUUID('id'), requireOwnership('id'), async (c) => {
-  const userId = c.req.param('id');
+  const userId = c.req.param('id') as string;
   
   try {
     const body = await c.req.json();
@@ -586,7 +814,7 @@ users.put('/:id/settings', validateUUID('id'), requireOwnership('id'), async (c)
  * Delete user account
  */
 users.delete('/:id', validateUUID('id'), requireOwnership('id'), async (c) => {
-  const userId = c.req.param('id');
+  const userId = c.req.param('id') as string;
   
   try {
     const user = await getUserById(userId, c.env.DB);

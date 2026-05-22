@@ -19,8 +19,8 @@ chat.use('*', createRateLimit('chat'));
  * Get user's chat rooms
  */
 chat.get('/rooms', validatePagination(), async (c) => {
-  const userId = c.get('userId');
-  const { page, limit } = c.req.valid('query');
+  const userId = c.get('userId') as string;
+  const { page, limit } = c.get('validatedQuery');
   
   try {
     // Get total count
@@ -57,7 +57,7 @@ chat.get('/rooms', validatePagination(), async (c) => {
       const otherParty = isCustomer ? {
         id: room.supplier_id,
         name: room.supplier_name,
-        image: JSON.parse(room.supplier_images || '[]')[0] || null,
+        image: JSON.parse(String(room.supplier_images || '[]'))[0] || null,
         type: 'supplier'
       } : {
         id: room.customer_id,
@@ -93,12 +93,12 @@ chat.get('/rooms', validatePagination(), async (c) => {
  * Create or get existing chat room
  */
 chat.post('/rooms', async (c) => {
-  const userId = c.get('userId');
+  const userId = c.get('userId') as string;
   const userType = c.get('userType');
   
   try {
     const body = await c.req.json();
-    const { otherUserId } = body;
+    const otherUserId = typeof body?.otherUserId === 'string' ? body.otherUserId : '';
 
     if (!otherUserId) {
       return jsonError(c, 'Missing participant', 'Other user ID is required', 400);
@@ -117,17 +117,24 @@ chat.post('/rooms', async (c) => {
       return jsonError(c, 'User not found', 'The specified user does not exist', 404);
     }
 
-    // Determine customer and supplier IDs
+    // Determine customer and supplier IDs. Older mobile builds and some
+    // historical tokens use "companion" for local guides, while the DB stores
+    // the canonical role as "supplier".
     let customerId: string, supplierId: string;
-    
-    if (userType === 'customer' && otherUser.user_type === 'supplier') {
+    const currentIsCustomer = userType === 'customer';
+    const currentIsSupplier = userType === 'supplier' || userType === 'companion';
+    const otherUserType = String(otherUser.user_type);
+    const otherIsCustomer = otherUserType === 'customer';
+    const otherIsSupplier = otherUserType === 'supplier' || otherUserType === 'companion';
+
+    if (currentIsCustomer && otherIsSupplier) {
       customerId = userId;
       supplierId = otherUserId;
-    } else if (userType === 'supplier' && otherUser.user_type === 'customer') {
+    } else if (currentIsSupplier && otherIsCustomer) {
       customerId = otherUserId;
       supplierId = userId;
     } else {
-      return jsonError(c, 'Invalid chat participants', 'Chat rooms can only be created between customers and suppliers', 400);
+      return jsonError(c, 'Invalid chat participants', 'Chat rooms can only be created between customers and local guides', 400);
     }
 
     // Check if room already exists
@@ -185,9 +192,9 @@ chat.post('/rooms', async (c) => {
  * Get chat room details and recent messages
  */
 chat.get('/rooms/:roomId', validateUUID('roomId'), validatePagination(), async (c) => {
-  const roomId = c.req.param('roomId');
-  const userId = c.get('userId');
-  const { page, limit } = c.req.valid('query');
+  const roomId = c.req.param('roomId') as string;
+  const userId = c.get('userId') as string;
+  const { page, limit } = c.get('validatedQuery');
   
   try {
     // Verify user has access to this chat room
@@ -248,7 +255,7 @@ chat.get('/rooms/:roomId', validateUUID('roomId'), validatePagination(), async (
     const otherParty = isCustomer ? {
       id: room.supplier_id,
       name: room.supplier_name,
-      image: JSON.parse(room.supplier_images || '[]')[0] || null,
+      image: JSON.parse(String(room.supplier_images || '[]'))[0] || null,
       type: 'supplier'
     } : {
       id: room.customer_id,
@@ -278,8 +285,8 @@ chat.get('/rooms/:roomId', validateUUID('roomId'), validatePagination(), async (
  * WebSocket endpoint for real-time chat
  */
 chat.get('/rooms/:roomId/ws', validateUUID('roomId'), async (c) => {
-  const roomId = c.req.param('roomId');
-  const userId = c.get('userId');
+  const roomId = c.req.param('roomId') as string;
+  const userId = c.get('userId') as string;
   
   try {
     // Verify user has access to this chat room
@@ -319,14 +326,14 @@ chat.post('/rooms/:roomId/messages',
   validateUUID('roomId'), 
   zValidator('json', chatMessageSchema),
   async (c) => {
-    const roomId = c.req.param('roomId');
-    const userId = c.get('userId');
+    const roomId = c.req.param('roomId') as string;
+    const userId = c.get('userId') as string;
     const messageData = c.req.valid('json');
     
     try {
       // Verify user has access to this chat room
       const room = await c.env.DB.prepare(`
-        SELECT id FROM chat_rooms 
+        SELECT id, customer_id, supplier_id FROM chat_rooms
         WHERE id = ? AND (customer_id = ? OR supplier_id = ?)
       `).bind(roomId, userId, userId).first();
 
@@ -343,20 +350,41 @@ chat.post('/rooms/:roomId/messages',
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          roomId,
           senderId: userId,
+          recipientId: room.customer_id === userId ? room.supplier_id : room.customer_id,
           messageType: messageData.messageType,
           content: messageData.content,
-          imageUrl: messageData.imageUrl
+          mediaUrl: messageData.imageUrl
         })
       });
 
-      const result = await response.json();
+      const result = await response.json() as {
+        message: {
+          id: string;
+          senderId: string;
+          messageType: 'text' | 'image';
+          content?: string;
+          mediaUrl?: string;
+          timestamp: string;
+        };
+      };
       
       if (!response.ok) {
         return jsonError(c, 'Message failed', 'Failed to send message', response.status);
       }
 
-      return jsonSuccess(c, result, 'Message sent successfully', 201);
+      return jsonSuccess(c, {
+        id: result.message.id,
+        senderId: result.message.senderId,
+        senderName: null,
+        type: result.message.messageType,
+        content: result.message.content || null,
+        imageUrl: result.message.mediaUrl || null,
+        metadata: null,
+        timestamp: result.message.timestamp,
+        isOwn: true
+      }, 'Message sent successfully', 201);
 
     } catch (error) {
       console.error('Send message error:', error);
@@ -369,8 +397,8 @@ chat.post('/rooms/:roomId/messages',
  * Mark messages as read
  */
 chat.post('/rooms/:roomId/read', validateUUID('roomId'), async (c) => {
-  const roomId = c.req.param('roomId');
-  const userId = c.get('userId');
+  const roomId = c.req.param('roomId') as string;
+  const userId = c.get('userId') as string;
   
   try {
     const body = await c.req.json();
@@ -410,8 +438,8 @@ chat.post('/rooms/:roomId/read', validateUUID('roomId'), async (c) => {
  * Search messages in chat room
  */
 chat.get('/rooms/:roomId/search', validateUUID('roomId'), async (c) => {
-  const roomId = c.req.param('roomId');
-  const userId = c.get('userId');
+  const roomId = c.req.param('roomId') as string;
+  const userId = c.get('userId') as string;
   const query = c.req.query('q');
   const limit = parseInt(c.req.query('limit') || '20');
   

@@ -5,6 +5,7 @@ import { validateUUID, validatePagination } from '../middleware/validation';
 import { authMiddleware } from '../middleware/auth';
 import { createRateLimit } from '../middleware/rateLimit';
 import { jsonSuccess, jsonError, jsonPaginated, createPagination } from '../utils/response';
+import { firstProfileImage } from '../utils/profileImages';
 import type { Env, Variables } from '../index';
 
 const conversations = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -54,7 +55,7 @@ conversations.get('/', async (c) => {
         END as participant_name,
         CASE 
           WHEN cr.customer_id = ? THEN sp.profile_images
-          ELSE cp.profile_images
+          ELSE cp.profile_image
         END as participant_images,
         CASE 
           WHEN cr.customer_id = ? THEN u2.status
@@ -90,14 +91,12 @@ conversations.get('/', async (c) => {
     `).bind(userId, userId, userId, userId, userId, userId, userId, userId).all();
 
     const conversationsList = conversationsResult.results.map((conv: any) => {
-      const participantImages = JSON.parse(conv.participant_images || '[]');
-      
       return {
         id: conv.id,
         participant: {
           id: conv.participant_id,
           name: conv.participant_name,
-          profileImage: participantImages[0] || null,
+          profileImage: firstProfileImage(conv.participant_images),
           online: conv.participant_online === 'active',
           lastSeen: conv.participant_last_seen
         },
@@ -126,10 +125,10 @@ conversations.get('/', async (c) => {
 /**
  * Get conversation messages
  */
-conversations.get('/:id/messages', validateUUID('id'), validatePagination, async (c) => {
+conversations.get('/:id/messages', validateUUID('id'), validatePagination(), async (c) => {
   const conversationId = c.req.param('id');
   const userId = c.get('userId');
-  const { page, limit } = c.get('pagination');
+  const { page, limit } = c.get('validatedQuery');
   const before = c.req.query('before'); // message ID for pagination
   
   try {
@@ -172,7 +171,7 @@ conversations.get('/:id/messages', validateUUID('id'), validatePagination, async
       
       if (beforeMessage) {
         query += ` AND cm.created_at < ?`;
-        queryParams.push(beforeMessage.created_at);
+        queryParams.push(String((beforeMessage as any).created_at));
       }
     }
 
@@ -424,7 +423,7 @@ conversations.post('/', zValidator('json', createConversationSchema), async (c) 
         END as name,
         CASE 
           WHEN ? = 'customer' THEN sp.profile_images
-          ELSE cp.profile_images
+          ELSE cp.profile_image
         END as images
       FROM users u
       LEFT JOIN supplier_profiles sp ON u.id = sp.user_id
@@ -432,15 +431,13 @@ conversations.post('/', zValidator('json', createConversationSchema), async (c) 
       WHERE u.id = ?
     `).bind(userType, userType, participantId).first();
 
-    const participantImages = JSON.parse(participant?.images || '[]');
-
     return jsonSuccess(c, {
       conversation: {
         id: conversationId,
         participant: {
           id: participantId,
           name: participant?.name || 'Unknown',
-          profileImage: participantImages[0] || null
+          profileImage: firstProfileImage(participant?.images)
         },
         createdAt: now
       }

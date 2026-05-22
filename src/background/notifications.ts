@@ -1,4 +1,9 @@
 import type { Env } from '../index';
+import {
+  createEmailConfig,
+  renderBasicEmail,
+  sendEmail as sendTransactionalEmail,
+} from '../utils/communication';
 
 export interface NotificationJob {
   id: string;
@@ -25,6 +30,9 @@ export interface NotificationResult {
   externalId?: string; // ID from external service (FCM, SendGrid, etc.)
 }
 
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 /**
  * Main queue consumer for notification jobs
  */
@@ -38,7 +46,9 @@ export async function handleNotificationQueue(batch: MessageBatch<NotificationJo
       // Check if notification is scheduled for future
       if (job.scheduledFor && new Date(job.scheduledFor) > new Date()) {
         // Re-queue for later processing
-        await env.ANALYTICS_QUEUE.send(job, { delaySeconds: Math.floor((new Date(job.scheduledFor).getTime() - Date.now()) / 1000) });
+        await env.NOTIFICATION_QUEUE.send(job, {
+          delaySeconds: Math.floor((new Date(job.scheduledFor).getTime() - Date.now()) / 1000),
+        });
         message.ack();
         continue;
       }
@@ -52,6 +62,18 @@ export async function handleNotificationQueue(batch: MessageBatch<NotificationJo
       const enabledChannels = job.channels.filter(channel => 
         userPreferences[channel] !== false
       );
+
+      if (userPreferences.types?.[job.data?.type || job.type] === false) {
+        console.log(`Notification type disabled for user ${job.userId}`);
+        await storeNotificationResult({
+          notificationId: job.id,
+          channel: 'all',
+          status: 'skipped',
+          error: 'Notification type disabled by user preferences'
+        }, env);
+        message.ack();
+        continue;
+      }
 
       if (enabledChannels.length === 0) {
         console.log(`All notification channels disabled for user ${job.userId}`);
@@ -74,6 +96,7 @@ export async function handleNotificationQueue(batch: MessageBatch<NotificationJo
       for (let i = 0; i < results.length; i++) {
         const result = results[i];
         const channel = enabledChannels[i];
+        if (!result || !channel) continue;
         
         if (result.status === 'fulfilled') {
           await storeNotificationResult(result.value, env);
@@ -82,7 +105,7 @@ export async function handleNotificationQueue(batch: MessageBatch<NotificationJo
             notificationId: job.id,
             channel,
             status: 'failed',
-            error: result.reason?.message || 'Unknown error'
+            error: getErrorMessage(result.reason)
           }, env);
         }
       }
@@ -93,7 +116,7 @@ export async function handleNotificationQueue(batch: MessageBatch<NotificationJo
         // Retry with exponential backoff
         const retryDelay = Math.pow(2, job.retryCount || 0) * 60; // Start with 1 minute
         const retryJob = { ...job, retryCount: (job.retryCount || 0) + 1 };
-        await env.ANALYTICS_QUEUE.send(retryJob, { delaySeconds: retryDelay });
+        await env.NOTIFICATION_QUEUE.send(retryJob, { delaySeconds: retryDelay });
       }
 
       message.ack();
@@ -141,8 +164,7 @@ async function sendPushNotification(job: NotificationJob, env: Env): Promise<Not
       };
     }
 
-    // Send to FCM/APNS (placeholder for actual implementation)
-    const fcmResponse = await sendToFCM({
+    const pushResponse = await sendExpoPushNotification({
       tokens: pushTokens,
       title: job.title,
       body: job.message,
@@ -154,7 +176,7 @@ async function sendPushNotification(job: NotificationJob, env: Env): Promise<Not
       channel: 'push',
       status: 'sent',
       deliveredAt: new Date().toISOString(),
-      externalId: fcmResponse.messageId
+      externalId: pushResponse.messageId
     };
 
   } catch (error) {
@@ -162,7 +184,7 @@ async function sendPushNotification(job: NotificationJob, env: Env): Promise<Not
       notificationId: job.id,
       channel: 'push',
       status: 'failed',
-      error: error.message
+      error: getErrorMessage(error)
     };
   }
 }
@@ -196,7 +218,6 @@ async function sendEmailNotification(job: NotificationJob, env: Env): Promise<No
       emailContent = await renderEmailTemplate(job.template, job.templateData || {}, env);
     }
 
-    // Send via email service (placeholder for actual implementation)
     const emailResponse = await sendEmail({
       to: userEmail,
       subject: emailContent.subject,
@@ -217,7 +238,7 @@ async function sendEmailNotification(job: NotificationJob, env: Env): Promise<No
       notificationId: job.id,
       channel: 'email',
       status: 'failed',
-      error: error.message
+      error: getErrorMessage(error)
     };
   }
 }
@@ -258,7 +279,7 @@ async function sendSMSNotification(job: NotificationJob, env: Env): Promise<Noti
       notificationId: job.id,
       channel: 'sms',
       status: 'failed',
-      error: error.message
+      error: getErrorMessage(error)
     };
   }
 }
@@ -314,7 +335,7 @@ async function sendInAppNotification(job: NotificationJob, env: Env): Promise<No
       notificationId: job.id,
       channel: 'in_app',
       status: 'failed',
-      error: error.message
+      error: getErrorMessage(error)
     };
   }
 }
@@ -342,13 +363,13 @@ async function storeNotificationResult(result: NotificationResult, env: Env): Pr
 
 // Helper functions (placeholders for actual service integrations)
 
-async function getUserNotificationPreferences(userId: string, env: Env): Promise<Record<string, boolean>> {
+async function getUserNotificationPreferences(userId: string, env: Env): Promise<Record<string, any>> {
   const result = await env.DB.prepare(`
     SELECT notification_preferences FROM users WHERE id = ?
   `).bind(userId).first();
   
   if (result?.notification_preferences) {
-    return JSON.parse(result.notification_preferences);
+    return JSON.parse(String(result.notification_preferences));
   }
   
   // Default preferences
@@ -368,7 +389,7 @@ async function getUserPushTokens(userId: string, env: Env): Promise<string[]> {
   const tokens: string[] = [];
   for (const row of result.results || []) {
     if (row.push_tokens) {
-      tokens.push(...JSON.parse(row.push_tokens));
+      tokens.push(...JSON.parse(String(row.push_tokens)));
     }
   }
   
@@ -380,7 +401,7 @@ async function getUserEmail(userId: string, env: Env): Promise<string | null> {
     SELECT email FROM users WHERE id = ? AND email_verified = TRUE
   `).bind(userId).first();
   
-  return result?.email || null;
+  return typeof result?.email === 'string' ? result.email : null;
 }
 
 async function getUserPhone(userId: string, env: Env): Promise<string | null> {
@@ -388,22 +409,59 @@ async function getUserPhone(userId: string, env: Env): Promise<string | null> {
     SELECT phone FROM users WHERE id = ? AND phone_verified = TRUE
   `).bind(userId).first();
   
-  return result?.phone || null;
+  return typeof result?.phone === 'string' ? result.phone : null;
 }
 
-// External service integration placeholders
+// External service integrations
 
-async function sendToFCM(payload: any, env: Env): Promise<{ messageId: string }> {
-  // Placeholder for FCM integration
-  // In production, integrate with Firebase Cloud Messaging
-  console.log('Sending FCM notification:', payload);
-  return { messageId: `fcm_${crypto.randomUUID()}` };
+async function sendExpoPushNotification(payload: any, env: Env): Promise<{ messageId: string }> {
+  const messages = payload.tokens.map((to: string) => ({
+    to,
+    sound: 'default',
+    title: payload.title,
+    body: payload.body,
+    data: payload.data || {},
+  }));
+
+  const response = await fetch('https://exp.host/--/api/v2/push/send', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Accept-Encoding': 'gzip, deflate',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(messages.length === 1 ? messages[0] : messages),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Expo push failed with ${response.status}`);
+  }
+
+  const result = await response.json() as any;
+  const firstTicket = Array.isArray(result?.data) ? result.data[0] : result?.data;
+
+  if (firstTicket?.status === 'error') {
+    throw new Error(firstTicket?.message || 'Expo push ticket returned an error');
+  }
+
+  return { messageId: firstTicket?.id || `expo_${crypto.randomUUID()}` };
 }
 
 async function sendEmail(payload: any, env: Env): Promise<{ messageId: string }> {
-  // Placeholder for email service integration (SendGrid, AWS SES, etc.)
-  console.log('Sending email:', payload);
-  return { messageId: `email_${crypto.randomUUID()}` };
+  const config = createEmailConfig(env);
+  const delivery = await sendTransactionalEmail(
+    config,
+    payload.to,
+    payload.subject,
+    payload.html || renderBasicEmail(payload.subject, payload.text || payload.subject),
+    'notification'
+  );
+
+  if (delivery.status === 'failed') {
+    throw new Error(delivery.error || 'Email delivery failed');
+  }
+
+  return { messageId: delivery.id };
 }
 
 async function sendSMS(payload: any, env: Env): Promise<{ messageId: string }> {
@@ -432,7 +490,7 @@ export async function queueNotification(notification: Omit<NotificationJob, 'id'
     ...notification
   };
 
-  await env.ANALYTICS_QUEUE.send(job);
+  await env.NOTIFICATION_QUEUE.send(job);
   return notificationId;
 }
 
@@ -445,6 +503,6 @@ export async function queueBulkNotifications(notifications: Omit<NotificationJob
     ...notification
   }));
 
-  await Promise.all(jobs.map(job => env.ANALYTICS_QUEUE.send(job)));
+  await Promise.all(jobs.map(job => env.NOTIFICATION_QUEUE.send(job)));
   return jobs.map(job => job.id);
 }

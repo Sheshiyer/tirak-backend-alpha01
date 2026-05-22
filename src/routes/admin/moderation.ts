@@ -44,7 +44,7 @@ const reportSchema = z.object({
  * Get pending moderation queue
  */
 moderation.get('/queue', validatePagination(), async (c) => {
-  const { page, limit } = c.req.valid('query');
+  const { page, limit } = c.get('validatedQuery');
   
   try {
     // For now, we'll check supplier profiles pending verification
@@ -296,7 +296,7 @@ moderation.post('/report', zValidator('json', reportSchema), async (c) => {
  * Get content reports
  */
 moderation.get('/reports', validatePagination(), async (c) => {
-  const { page, limit } = c.req.valid('query');
+  const { page, limit } = c.get('validatedQuery');
   
   try {
     // In a real system, you'd query content_reports table

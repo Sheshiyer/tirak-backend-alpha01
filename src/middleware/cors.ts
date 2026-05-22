@@ -59,7 +59,7 @@ export function cors(options: CorsOptions = {}) {
 
     // Handle actual requests
     await handleActualRequest(c, config, origin);
-    await next();
+    return await next();
   };
 }
 

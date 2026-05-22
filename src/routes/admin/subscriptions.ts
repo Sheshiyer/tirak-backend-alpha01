@@ -96,7 +96,7 @@ subscriptions.get('/overview', async (c) => {
  * Get all subscriptions with filtering
  */
 subscriptions.get('/', validatePagination(), async (c) => {
-  const { page, limit } = c.req.valid('query');
+  const { page, limit } = c.get('validatedQuery');
   const status = c.req.query('status');
   const tier = c.req.query('tier');
   const search = c.req.query('search');
@@ -301,7 +301,9 @@ subscriptions.post('/:userId/billing', validateUUID('userId'), zValidator('json'
   
   try {
     // Check if subscription exists
-    const subscription = await c.env.DB.prepare('SELECT * FROM supplier_profiles WHERE user_id = ?').bind(userId).first();
+    const subscription = await c.env.DB.prepare('SELECT * FROM supplier_profiles WHERE user_id = ?')
+      .bind(userId)
+      .first<{ subscription_expires_at?: string | null }>();
     if (!subscription) {
       return jsonError(c, 'Subscription not found', 'The specified subscription does not exist', 404);
     }
@@ -315,7 +317,7 @@ subscriptions.post('/:userId/billing', validateUUID('userId'), zValidator('json'
           return jsonError(c, 'Days required', 'Number of days is required for extend action', 400);
         }
         
-        const currentExpiry = new Date(subscription.subscription_expires_at || Date.now());
+        const currentExpiry = new Date(subscription.subscription_expires_at ?? Date.now());
         const newExpiry = new Date(currentExpiry.getTime() + days * 24 * 60 * 60 * 1000);
         
         await c.env.DB.prepare(`

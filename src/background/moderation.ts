@@ -470,5 +470,5 @@ async function getUserViolationCount(userId: string, env: Env): Promise<number> 
     AND created_at > datetime('now', '-30 days')
   `).bind(userId).first();
   
-  return result?.count || 0;
+  return Number(result?.count ?? 0);
 }

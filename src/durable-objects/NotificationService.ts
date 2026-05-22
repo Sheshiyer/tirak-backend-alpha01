@@ -90,7 +90,7 @@ export class NotificationService {
     const channel: NotificationChannel = {
       userId,
       type: channelType as any,
-      deviceToken,
+      deviceToken: deviceToken ?? undefined,
       preferences: existingChannel?.preferences || {
         push: true,
         email: true,

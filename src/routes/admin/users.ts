@@ -43,7 +43,7 @@ const bulkActionSchema = z.object({
  * Get all users with filtering and pagination
  */
 users.get('/', validatePagination(), zValidator('query', userSearchSchema), async (c) => {
-  const { page, limit } = c.req.valid('query');
+  const { page, limit } = c.get('validatedQuery');
   const { search, userType, status, verified, sortBy, sortOrder } = c.req.valid('query');
   
   try {

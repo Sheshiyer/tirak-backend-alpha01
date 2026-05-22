@@ -116,7 +116,7 @@ async function updateRealTimeMetrics(events: AnalyticsEvent[], env: Env): Promis
  */
 async function updateAggregatedMetrics(events: AnalyticsEvent[], env: Env): Promise<void> {
   const now = new Date();
-  const today = now.toISOString().split('T')[0];
+  const today = now.toISOString().split('T')[0] ?? now.toISOString().slice(0, 10);
 
   // Daily aggregations
   const dailyMetrics = calculateDailyMetrics(events, today);

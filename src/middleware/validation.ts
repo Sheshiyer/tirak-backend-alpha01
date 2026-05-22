@@ -21,7 +21,6 @@ export function validateRequest(schema: {
         const body = await c.req.json().catch(() => ({}));
         const result = schema.json.safeParse(body);
         if (!result.success) {
-          const errors = formatValidationErrors(result.error.errors);
           return jsonError(c, 'Validation failed', 'Invalid request body', 400);
         }
         c.set('validatedJson', result.data);
@@ -32,7 +31,6 @@ export function validateRequest(schema: {
         const query = c.req.query();
         const result = schema.query.safeParse(query);
         if (!result.success) {
-          const errors = formatValidationErrors(result.error.errors);
           return jsonError(c, 'Validation failed', 'Invalid query parameters', 400);
         }
         c.set('validatedQuery', result.data);
@@ -43,7 +41,6 @@ export function validateRequest(schema: {
         const params = c.req.param();
         const result = schema.param.safeParse(params);
         if (!result.success) {
-          const errors = formatValidationErrors(result.error.errors);
           return jsonError(c, 'Validation failed', 'Invalid path parameters', 400);
         }
         c.set('validatedParam', result.data);
@@ -56,13 +53,12 @@ export function validateRequest(schema: {
         );
         const result = schema.header.safeParse(headers);
         if (!result.success) {
-          const errors = formatValidationErrors(result.error.errors);
           return jsonError(c, 'Validation failed', 'Invalid headers', 400);
         }
         c.set('validatedHeaders', result.data);
       }
 
-      await next();
+      return await next();
     } catch (error) {
       console.error('Validation middleware error:', error);
       return jsonError(c, 'Validation error', 'Request validation failed', 400);
@@ -87,8 +83,7 @@ export function validateFileUpload(options: {
         if (options.required) {
           return jsonError(c, 'File upload required', 'No file provided', 400);
         }
-        await next();
-        return;
+        return await next();
       }
 
       // Parse form data
@@ -96,8 +91,8 @@ export function validateFileUpload(options: {
       const files: File[] = [];
       
       for (const [key, value] of formData.entries()) {
-        if (value instanceof File) {
-          files.push(value);
+        if (typeof value === 'object' && value !== null && 'size' in value && 'type' in value) {
+          files.push(value as File);
         }
       }
 
@@ -123,7 +118,7 @@ export function validateFileUpload(options: {
       }
 
       c.set('uploadedFiles', files);
-      await next();
+      return await next();
     } catch (error) {
       console.error('File validation error:', error);
       return jsonError(c, 'File validation failed', 'Invalid file upload', 400);
@@ -193,14 +188,21 @@ export function validateSearch() {
  */
 export function validateDateRange() {
   const schema = z.object({
-    startDate: z.string().datetime('Invalid start date format'),
-    endDate: z.string().datetime('Invalid end date format')
+    startDate: z.string().optional(),
+    endDate: z.string().optional()
+  }).transform(data => {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    return {
+      startDate: data.startDate || thirtyDaysAgo.toISOString(),
+      endDate: data.endDate || now.toISOString()
+    };
   }).refine(data => {
     const start = new Date(data.startDate);
     const end = new Date(data.endDate);
-    return end > start;
+    return !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end > start;
   }, {
-    message: 'End date must be after start date',
+    message: 'Date range is invalid',
     path: ['endDate']
   });
 
@@ -239,7 +241,7 @@ export function validateHtmlContent() {
       }
       
       c.set('sanitizedBody', body);
-      await next();
+      return await next();
     } catch (error) {
       console.error('HTML validation error:', error);
       return jsonError(c, 'Content validation failed', 'Invalid content format', 400);
@@ -281,13 +283,13 @@ export function validateContentType(allowedTypes: string[]) {
       return jsonError(c, 'Content-Type header required', 'Missing Content-Type', 400);
     }
 
-    const baseType = contentType.split(';')[0].trim();
+    const baseType = contentType.split(';')[0]?.trim() || '';
     
     if (!allowedTypes.includes(baseType)) {
       return jsonError(c, 'Invalid Content-Type', `Allowed types: ${allowedTypes.join(', ')}`, 400);
     }
 
-    await next();
+    return await next();
   };
 }
 
@@ -302,7 +304,7 @@ export function validateRequestSize(maxSize: number) {
       return jsonError(c, 'Request too large', `Maximum size: ${maxSize} bytes`, 413);
     }
 
-    await next();
+    return await next();
   };
 }
 
@@ -325,7 +327,7 @@ export function validateUserAgent() {
       return jsonError(c, 'Access denied', 'Automated requests not allowed', 403);
     }
 
-    await next();
+    return await next();
   };
 }
 
@@ -357,7 +359,7 @@ export function validateWebhookSignature(secret: string) {
       return jsonError(c, 'Invalid webhook', 'Invalid signature', 401);
     }
 
-    await next();
+    return await next();
   };
 }
 

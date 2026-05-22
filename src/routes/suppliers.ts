@@ -11,6 +11,7 @@ import { createRateLimit } from '../middleware/rateLimit';
 import { 
   getUserById, 
   getSupplierProfile, 
+  updateUser,
   buildWhereClause, 
   paginateQuery 
 } from '../utils/database';
@@ -48,8 +49,8 @@ suppliers.get('/search', zValidator('query', supplierSearchSchema), optionalAuth
         MAX(ss.price_max) as max_price
       FROM supplier_profiles sp
       LEFT JOIN supplier_services ss ON sp.user_id = ss.supplier_id AND ss.is_active = TRUE
-      WHERE sp.subscription_status = 'active' 
-        AND sp.verification_status = 'verified'
+      WHERE COALESCE(sp.subscription_status, 'active') = 'active'
+        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
     `;
 
     const queryParams: any[] = [];
@@ -161,7 +162,7 @@ suppliers.get('/search', zValidator('query', supplierSearchSchema), optionalAuth
  * Get individual supplier profile
  */
 suppliers.get('/:id', validateUUID('id'), optionalAuthMiddleware, async (c) => {
-  const supplierId = c.req.param('id');
+  const supplierId = c.req.param('id') as string;
   
   try {
     // Check cache first
@@ -193,7 +194,7 @@ suppliers.get('/:id', validateUUID('id'), optionalAuthMiddleware, async (c) => {
 
     // Get user info
     const user = await getUserById(supplierId, c.env.DB);
-    if (!user || user.userType !== 'supplier') {
+    if (!user || !['supplier', 'companion'].includes(String(user.userType))) {
       return jsonError(c, 'Supplier not found', 'The requested supplier does not exist', 404);
     }
 
@@ -297,7 +298,7 @@ suppliers.put('/:id',
   supplierOnly,
   zValidator('json', supplierProfileSchema),
   async (c) => {
-    const supplierId = c.req.param('id');
+    const supplierId = c.req.param('id') as string;
     const userId = c.get('userId');
     const updates = c.req.valid('json');
     
@@ -354,11 +355,61 @@ suppliers.put('/:id',
 );
 
 /**
+ * Delete supplier account.
+ *
+ * The mobile app calls /api/suppliers/:id when a local guide deletes their
+ * account. Keep this as a resource alias for /api/users/:id so mobile does not
+ * hit a 404 while still preserving the same soft-delete behavior.
+ */
+suppliers.delete('/:id', validateUUID('id'), authMiddleware, async (c) => {
+  const supplierId = c.req.param('id') as string;
+  const userId = c.get('userId');
+  const userType = c.get('userType');
+
+  if (userType !== 'admin' && userId !== supplierId) {
+    return jsonError(c, 'Access denied', 'You can only delete your own supplier account', 403);
+  }
+
+  try {
+    const user = await getUserById(supplierId, c.env.DB);
+    if (!user || !['supplier', 'companion'].includes(String(user.userType))) {
+      return jsonError(c, 'Supplier not found', 'The requested supplier does not exist', 404);
+    }
+
+    const deletedAt = Date.now();
+    await updateUser(supplierId, {
+      status: 'suspended',
+      email: `deleted_${deletedAt}_${user.email}`,
+      phone: `deleted_${deletedAt}_${user.phone}`
+    }, c.env.DB);
+
+    await c.env.CACHE.delete(`supplier:${supplierId}`);
+
+    await c.env.ANALYTICS_QUEUE.send({
+      eventType: 'account_deletion',
+      userId: supplierId,
+      properties: {
+        userType: user.userType,
+        accountAge: new Date().getTime() - new Date(user.createdAt).getTime(),
+        source: 'suppliers_route'
+      },
+      timestamp: new Date().toISOString()
+    });
+
+    return jsonSuccess(c, { deleted: true }, 'Supplier account deleted successfully');
+
+  } catch (error) {
+    console.error('Delete supplier account error:', error);
+    return jsonError(c, 'Failed to delete account', 'An error occurred while deleting the supplier account', 500);
+  }
+});
+
+/**
  * Get supplier services
  */
 suppliers.get('/:id/services', validateUUID('id'), validatePagination(), async (c) => {
-  const supplierId = c.req.param('id');
-  const { page, limit } = c.req.valid('query');
+  const supplierId = c.req.param('id') as string;
+  const { page, limit } = c.get('validatedQuery');
   
   try {
     // Get total count
@@ -412,7 +463,7 @@ suppliers.post('/:id/services',
   supplierOnly,
   zValidator('json', serviceSchema),
   async (c) => {
-    const supplierId = c.req.param('id');
+    const supplierId = c.req.param('id') as string;
     const userId = c.get('userId');
     const serviceData = c.req.valid('json');
     

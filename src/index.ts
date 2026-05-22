@@ -16,7 +16,11 @@ import { notificationRoutes } from './routes/notifications';
 import { companionRoutes } from './routes/companions';
 import { conversationRoutes } from './routes/conversations';
 import { searchRoutes } from './routes/search';
+import { referralRoutes } from './routes/referrals';
 import { WebSocketService } from './services/websocket';
+import { handleModerationQueue } from './background/moderation';
+import { handleAnalyticsQueue } from './background/analytics';
+import { handleNotificationQueue } from './background/notifications';
 
 export interface Env {
   DB: D1Database;
@@ -31,6 +35,38 @@ export interface Env {
   JWT_SECRET: string;
   ENVIRONMENT: string;
   FRONTEND_URLS: string;
+  EMAIL?: {
+    send(message: {
+      to: string | string[];
+      from: string | { email: string; name?: string };
+      replyTo?: string | { email: string; name?: string };
+      subject: string;
+      html?: string;
+      text?: string;
+    }): Promise<{ messageId?: string }>;
+  };
+  EMAIL_PROVIDER?: string;
+  EMAIL_FROM?: string;
+  EMAIL_FROM_NAME?: string;
+  EMAIL_REPLY_TO?: string;
+  MAILCHANNELS_API_KEY?: string;
+  MAILCHANNELS_FROM_EMAIL?: string;
+  MAILCHANNELS_FROM_NAME?: string;
+  SENDGRID_API_KEY?: string;
+  SENDGRID_FROM_EMAIL?: string;
+  SENDGRID_FROM_NAME?: string;
+  CF_ANALYTICS_API_TOKEN?: string;
+  CF_ZONE_TAG?: string;
+  GA_PROPERTY_ID?: string;
+  GA_DATA_API_ACCESS_TOKEN?: string;
+  UPTIMEROBOT_API_KEY?: string;
+  SENTRY_AUTH_TOKEN?: string;
+  SENTRY_ORG_SLUG?: string;
+  SENTRY_PROJECT_ID?: string;
+  SENTRY_API_BASE_URL?: string;
+  POSTHOG_PERSONAL_API_KEY?: string;
+  POSTHOG_PROJECT_ID?: string;
+  POSTHOG_HOST?: string;
 }
 
 export interface Variables {
@@ -124,6 +160,7 @@ app.route('/api/notifications', notificationRoutes);
 app.route('/api/companions', companionRoutes);
 app.route('/api/conversations', conversationRoutes);
 app.route('/api/search', searchRoutes);
+app.route('/api/referrals', referralRoutes);
 
 // Admin routes (admin authentication required)
 app.route('/api/admin', adminRoutes);
@@ -131,13 +168,23 @@ app.route('/api/admin', adminRoutes);
 // 404 handler
 app.notFound((c) => c.json({ error: 'Not Found' }, 404));
 
-export default app;
+export default {
+  fetch: app.fetch,
+  async queue(batch: MessageBatch<any>, env: Env): Promise<void> {
+    const queueName = batch.queue;
+    if (queueName.includes('moderation')) {
+      return handleModerationQueue(batch, env);
+    }
+    if (queueName.includes('analytics')) {
+      return handleAnalyticsQueue(batch, env);
+    }
+    if (queueName.includes('notification')) {
+      return handleNotificationQueue(batch, env);
+    }
+    throw new Error(`Unhandled queue: ${queueName}`);
+  },
+};
 
 // Export Durable Objects
 export { ChatRoom } from './durable-objects/ChatRoom';
 export { NotificationService } from './durable-objects/NotificationService';
-
-// Export queue consumers
-export { handleModerationQueue } from './background/moderation';
-export { handleAnalyticsQueue } from './background/analytics';
-export { handleNotificationQueue } from './background/notifications';

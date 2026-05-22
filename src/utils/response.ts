@@ -317,7 +317,7 @@ export function addSecurityHeaders(response: Response): Response {
 export function tracedResponse(c: Context, data: any, status = 200): Response {
   const requestId = c.get('requestId') || crypto.randomUUID();
   
-  return c.json(data, status, {
+  return c.json(data, status as any, {
     'Content-Type': 'application/json',
     'X-Request-ID': requestId,
     'X-Response-Time': Date.now().toString()

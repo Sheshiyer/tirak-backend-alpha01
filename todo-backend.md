@@ -711,3 +711,21 @@ This document provides a comprehensive, phase-based breakdown of all backend imp
 4. **Performance**: API responses under 200ms for mobile optimization
 5. **Error Handling**: Consistent error responses for mobile app error handling
 6. **Testing**: Comprehensive test coverage for mobile app scenarios
+
+## Mobile Contract Regression Fixes - 2026-05-22
+- [x] Reproduce/trace registration 400 Zod validation and align mobile payload aliases.
+- [x] Fix companion/local-guide registration name mapping so first/last/display names persist from form fields, not email fallback.
+- [x] Fix supplier delete-account route mismatch that currently returns 404.
+- [x] Reduce authenticated booking fetch 429s after booking success without disabling abuse protection.
+- [x] Make actual live companions such as designerali visible in companion/customer discovery lists.
+- [x] Fix customer-to-companion chat room creation by mapping companion users to supplier profile records.
+- [x] Restore customer list and companion services/availability endpoints used by the mobile flows.
+- [x] Run focused backend tests/type checks and live-safe endpoint smoke checks where credentials are available.
+
+### Notes
+- Preserve existing dirty backend worktree changes; do not reset previous release fixes.
+- `npx wrangler deploy --dry-run --outdir /tmp/tirak-backend-contract-fix` passes against the top-level development Worker bindings.
+- Deployed to `https://tirak-backend.tirak-court.workers.dev` as Worker version `158ce37d-3c9f-4c38-80aa-0297271b0bda`.
+- Live smoke passed with fresh throwaway customer/local-guide accounts and immediate deletion: registration, companion alias mapping, first/last/display-name persistence, companion list visibility, `/api/customers/all`, `/api/companions/:id/services`, availability save, chat room creation in both directions, `/api/suppliers/:id` delete, and `/api/customers/:id` delete.
+- Live rate-limit smoke passed: 15 authenticated `/api/bookings?page=1&limit=10` refetches returned 200 and did not hit 429.
+- `npm run typecheck` still reports pre-existing strictness failures in background jobs, Durable Objects, admin, payments, public/search, and uploads; the touched mobile-contract routes no longer add type errors.

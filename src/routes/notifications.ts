@@ -13,12 +13,18 @@ const notifications = new Hono<{ Bindings: Env; Variables: Variables }>();
 notifications.use('*', authMiddleware);
 notifications.use('*', createRateLimit('notification'));
 
+const registerPushTokenSchema = z.object({
+  token: z.string().min(1),
+  deviceType: z.enum(['ios', 'android', 'web']),
+  deviceInfo: z.record(z.unknown()).optional()
+});
+
 /**
  * Get user notifications
  */
-notifications.get('/', validatePagination, async (c) => {
+notifications.get('/', validatePagination(), async (c) => {
   const userId = c.get('userId');
-  const { page, limit } = c.get('pagination');
+  const { page, limit } = c.get('validatedQuery');
   const read = c.req.query('read');
   
   try {
@@ -29,7 +35,7 @@ notifications.get('/', validatePagination, async (c) => {
       WHERE user_id = ?
     `;
 
-    const queryParams = [userId];
+    const queryParams: Array<string | number | undefined> = [userId];
 
     if (read !== undefined) {
       query += ` AND read = ?`;
@@ -76,6 +82,60 @@ notifications.get('/', validatePagination, async (c) => {
   } catch (error) {
     console.error('Get notifications error:', error);
     return jsonError(c, 'Failed to retrieve notifications', 'An error occurred while fetching notifications', 500);
+  }
+});
+
+/**
+ * Register or refresh a device push token.
+ */
+notifications.post('/push-token', zValidator('json', registerPushTokenSchema), async (c) => {
+  const userId = c.get('userId') as string;
+  const { token, deviceType, deviceInfo } = c.req.valid('json');
+  const now = new Date().toISOString();
+
+  try {
+    const existing = await c.env.DB.prepare(`
+      SELECT id, push_tokens FROM user_devices
+      WHERE user_id = ? AND device_type = ? AND is_active = TRUE
+      ORDER BY last_seen DESC
+      LIMIT 1
+    `).bind(userId, deviceType).first();
+
+    if (existing?.id) {
+      const tokens = new Set<string>(JSON.parse(String(existing.push_tokens || '[]')));
+      tokens.add(token);
+
+      await c.env.DB.prepare(`
+        UPDATE user_devices
+        SET push_tokens = ?, device_info = ?, last_seen = ?
+        WHERE id = ?
+      `).bind(
+        JSON.stringify([...tokens]),
+        JSON.stringify(deviceInfo || {}),
+        now,
+        existing.id
+      ).run();
+    } else {
+      await c.env.DB.prepare(`
+        INSERT INTO user_devices (
+          id, user_id, device_type, push_tokens, device_info, is_active, last_seen, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        crypto.randomUUID(),
+        userId,
+        deviceType,
+        JSON.stringify([token]),
+        JSON.stringify(deviceInfo || {}),
+        true,
+        now,
+        now
+      ).run();
+    }
+
+    return jsonSuccess(c, {}, 'Push token registered successfully');
+  } catch (error) {
+    console.error('Register push token error:', error);
+    return jsonError(c, 'Failed to register push token', 'An error occurred while saving the device token', 500);
   }
 });
 
@@ -183,7 +243,12 @@ export async function createNotification(
   type: string,
   title: string,
   message: string,
-  data: any = {}
+  data: any = {},
+  options: {
+    channels?: ('push' | 'email' | 'sms' | 'in_app')[];
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
+    scheduledFor?: string;
+  } = {}
 ) {
   try {
     const notificationId = crypto.randomUUID();
@@ -207,13 +272,17 @@ export async function createNotification(
 
     // Send to notification queue for push notification processing
     await queue.send({
-      type: 'push_notification',
+      id: notificationId,
+      type: 'push',
       userId,
-      notificationId,
       title,
       message,
       data,
-      timestamp: now
+      priority: options.priority || 'medium',
+      channels: options.channels || ['push'],
+      scheduledFor: options.scheduledFor,
+      retryCount: 0,
+      maxRetries: 3,
     });
 
     return notificationId;
@@ -305,17 +374,65 @@ const updatePreferencesSchema = z.object({
   push: z.boolean().optional(),
   email: z.boolean().optional(),
   sms: z.boolean().optional(),
+  in_app: z.boolean().optional(),
   types: z.object({
+    booking_created: z.boolean().optional(),
+    booking_request: z.boolean().optional(),
     booking_confirmed: z.boolean().optional(),
     booking_cancelled: z.boolean().optional(),
+    booking_reminder: z.boolean().optional(),
+    booking_status_update: z.boolean().optional(),
     new_message: z.boolean().optional(),
     review_received: z.boolean().optional(),
     payment_completed: z.boolean().optional()
   }).optional()
 });
 
+const defaultPreferences = {
+  push: true,
+  email: true,
+  sms: false,
+  in_app: true,
+  types: {
+    booking_created: true,
+    booking_request: true,
+    booking_confirmed: true,
+    booking_cancelled: true,
+    booking_reminder: true,
+    booking_status_update: true,
+    new_message: true,
+    review_received: true,
+    payment_completed: true,
+  },
+};
+
+notifications.get('/preferences', async (c) => {
+  const userId = c.get('userId') as string;
+
+  try {
+    const currentPrefs = await c.env.DB.prepare(`
+      SELECT notification_preferences FROM users WHERE id = ?
+    `).bind(userId).first();
+
+    const current = JSON.parse(String(currentPrefs?.notification_preferences || '{}'));
+    return jsonSuccess(c, {
+      preferences: {
+        ...defaultPreferences,
+        ...current,
+        types: {
+          ...defaultPreferences.types,
+          ...(current.types || {}),
+        },
+      },
+    }, 'Notification preferences retrieved successfully');
+  } catch (error) {
+    console.error('Get notification preferences error:', error);
+    return jsonError(c, 'Failed to retrieve preferences', 'An error occurred while fetching notification preferences', 500);
+  }
+});
+
 notifications.put('/preferences', zValidator('json', updatePreferencesSchema), async (c) => {
-  const userId = c.get('userId');
+  const userId = c.get('userId') as string;
   const preferences = c.req.valid('json');
   
   try {
@@ -324,8 +441,17 @@ notifications.put('/preferences', zValidator('json', updatePreferencesSchema), a
       SELECT notification_preferences FROM users WHERE id = ?
     `).bind(userId).first();
 
-    const current = JSON.parse(currentPrefs?.notification_preferences || '{}');
-    const updated = { ...current, ...preferences };
+    const current = JSON.parse(String(currentPrefs?.notification_preferences || '{}'));
+    const updated = {
+      ...defaultPreferences,
+      ...current,
+      ...preferences,
+      types: {
+        ...defaultPreferences.types,
+        ...(current.types || {}),
+        ...(preferences.types || {}),
+      },
+    };
 
     // Update preferences
     await c.env.DB.prepare(`

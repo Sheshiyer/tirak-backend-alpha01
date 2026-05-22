@@ -6,23 +6,75 @@ import type { Env, Variables } from '../index';
 /**
  * Common validation schemas
  */
+const emptyStringToUndefined = (value: unknown) => (
+  typeof value === 'string' && value.trim() === '' ? undefined : value
+);
+
+const optionalText = (max: number) => z.preprocess(
+  emptyStringToUndefined,
+  z.string().min(1).max(max).optional()
+);
 
 // User registration schema
 export const registerSchema = z.object({
+  display_name: optionalText(100),
+  displayName: optionalText(100),
+  name: optionalText(100),
+  firstName: optionalText(100),
+  lastName: optionalText(100),
+  first_name: optionalText(100),
+  last_name: optionalText(100),
   email: z.string().email('Invalid email format'),
-  phone: z.string().min(10, 'Phone number must be at least 10 digits'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-  userType: z.enum(['customer', 'supplier'], {
-    errorMap: () => ({ message: 'User type must be either customer or supplier' })
+  phone: z.preprocess(
+    emptyStringToUndefined,
+    z.string().regex(/^[0-9+\-\s()]{8,20}$/, 'Invalid phone number').optional()
+  ),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  userType: z.enum(['customer', 'supplier', 'companion'], {
+    errorMap: () => ({ message: 'User type must be customer, supplier, or companion' })
   }),
-  preferredLanguage: z.enum(['en', 'th']).default('en')
+  dateOfBirth: z.preprocess(
+    emptyStringToUndefined,
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional()
+  ),
+  gender: z.preprocess(
+    emptyStringToUndefined,
+    z.enum(['male', 'female', 'other', 'prefer_not_to_say']).optional()
+  ),
+  preferredLanguage: z.enum(['en', 'th']).default('en'),
+  referralCode: z.preprocess(
+    emptyStringToUndefined,
+    z.string().min(4).max(32).optional()
+  )
+});
+
+export const userRegistrationSchema = registerSchema.extend({
+  firstName: z.string().optional(),
+  lastName: z.string().optional()
 });
 
 // User login schema
 export const loginSchema = z.object({
-  identifier: z.string().min(1, 'Email or phone is required'),
+  identifier: z.string().optional(),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
   password: z.string().min(1, 'Password is required'),
   deviceId: z.string().optional()
+}).transform(data => ({
+  ...data,
+  identifier: data.identifier || data.email || data.phone || ''
+})).refine(data => data.identifier.length > 0, {
+  message: 'Email or phone is required',
+  path: ['identifier']
+});
+
+export const userLoginSchema = z.object({
+  email: z.string().email().optional(),
+  phone: z.string().regex(/^\+[1-9]\d{7,13}$/).optional(),
+  password: z.string().min(1, 'Password is required')
+}).refine(data => Boolean(data.email || data.phone), {
+  message: 'Email or phone is required',
+  path: ['email']
 });
 
 // Phone verification schema
@@ -77,11 +129,11 @@ export const serviceSchema = z.object({
 export const supplierSearchSchema = z.object({
   region: z.string().optional(),
   category: z.string().optional(),
-  priceMin: z.number().min(0).optional(),
-  priceMax: z.number().min(0).optional(),
+  priceMin: z.coerce.number().min(0).optional(),
+  priceMax: z.coerce.number().min(0).optional(),
   language: z.string().optional(),
-  page: z.number().min(1).default(1),
-  limit: z.number().min(1).max(100).default(20),
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(100).default(20),
   sortBy: z.enum(['rating', 'price', 'distance', 'created']).default('rating'),
   sortOrder: z.enum(['asc', 'desc']).default('desc')
 });
@@ -114,12 +166,35 @@ export const bookingSchema = z.object({
   notes: z.string().max(500, 'Notes too long').optional()
 });
 
+export const bookingCreateSchema = z.object({
+  companionId: z.string().uuid('Invalid companion ID'),
+  serviceId: z.string().uuid('Invalid service ID').optional(),
+  startTime: z.string().datetime('Invalid start time'),
+  endTime: z.string().datetime('Invalid end time'),
+  location: z.string().optional(),
+  notes: z.string().max(500, 'Notes too long').optional(),
+  paymentMethodId: z.string().optional()
+}).refine(data => new Date(data.startTime).getTime() > Date.now(), {
+  message: 'Start time must be in the future',
+  path: ['startTime']
+}).refine(data => new Date(data.endTime).getTime() > new Date(data.startTime).getTime(), {
+  message: 'End time must be after start time',
+  path: ['endTime']
+});
+
 // Review schema
 export const reviewSchema = z.object({
   bookingId: z.string().uuid('Invalid booking ID'),
   rating: z.number().min(1, 'Rating must be at least 1').max(5, 'Rating cannot exceed 5'),
   comment: z.string().max(1000, 'Comment too long').optional(),
   isPublic: z.boolean().default(true)
+});
+
+export const reviewCreateSchema = z.object({
+  bookingId: z.string().uuid('Invalid booking ID'),
+  rating: z.number().min(1, 'Rating must be at least 1').max(5, 'Rating cannot exceed 5'),
+  comment: z.string().max(1000, 'Comment too long').optional(),
+  categories: z.record(z.number()).optional()
 });
 
 // File upload schema
@@ -151,7 +226,25 @@ export function validateFileUpload(options: {
   allowedTypes?: string[];
   required?: boolean;
   maxFiles?: number;
-}) {
+}): (c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) => Promise<Response | void>;
+export function validateFileUpload(file: { type?: string; size?: number }, options: {
+  maxSize?: number;
+  allowedTypes?: string[];
+}): { valid: boolean; error?: string };
+export function validateFileUpload(fileOrOptions: any, maybeOptions?: any): any {
+  if (maybeOptions) {
+    const file = fileOrOptions || {};
+    const options = maybeOptions;
+    if (options.allowedTypes && !options.allowedTypes.includes(file.type)) {
+      return { valid: false, error: 'Invalid file type' };
+    }
+    if (options.maxSize && file.size > options.maxSize) {
+      return { valid: false, error: 'File size exceeds limit' };
+    }
+    return { valid: true };
+  }
+
+  const options = fileOrOptions;
   return async (c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) => {
     try {
       const contentType = c.req.header('Content-Type');
@@ -160,8 +253,7 @@ export function validateFileUpload(options: {
         if (options.required) {
           return jsonError(c, 'File upload required', 'No file provided', 400);
         }
-        await next();
-        return;
+        return await next();
       }
 
       // Parse form data
@@ -169,8 +261,8 @@ export function validateFileUpload(options: {
       const files: File[] = [];
 
       for (const [key, value] of formData.entries()) {
-        if (value instanceof File) {
-          files.push(value);
+        if (typeof value === 'object' && value !== null && 'size' in value && 'type' in value) {
+          files.push(value as File);
         }
       }
 
@@ -196,7 +288,7 @@ export function validateFileUpload(options: {
       }
 
       c.set('uploadedFiles', files);
-      await next();
+      return await next();
     } catch (error) {
       console.error('File validation error:', error);
       return jsonError(c, 'File validation failed', 'Invalid file upload', 400);
@@ -221,6 +313,24 @@ export const analyticsEventSchema = z.object({
 export function validateThaiPhone(phone: string): boolean {
   const thaiPhoneRegex = /^(\+66|0)[0-9]{8,9}$/;
   return thaiPhoneRegex.test(phone);
+}
+
+export function validateEmail(email: string): boolean {
+  return z.string().email().safeParse(email).success && !email.includes('..');
+}
+
+export function validatePhone(phone: string): boolean {
+  return /^\+[1-9]\d{7,13}$/.test(phone);
+}
+
+export function validatePassword(password: string): boolean {
+  const strength = validatePasswordStrength(password);
+  return password.length >= 8
+    && /[a-z]/.test(password)
+    && /[A-Z]/.test(password)
+    && /[0-9]/.test(password)
+    && /[^a-zA-Z0-9]/.test(password)
+    && strength.isValid;
 }
 
 /**
@@ -263,14 +373,13 @@ export function validatePasswordStrength(password: string): { isValid: boolean; 
 /**
  * Sanitize HTML content
  */
-export function sanitizeHtml(input: string): string {
-  return input
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;')
-    .replace(/\//g, '&#x2F;');
+export function sanitizeHtml(input: unknown): string {
+  if (input === null || input === undefined) return '';
+  return String(input)
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+\s*=/gi, '');
 }
 
 /**

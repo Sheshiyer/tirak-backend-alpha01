@@ -102,7 +102,7 @@ export function handleError(error: Error, c: Context): Response {
       }
     };
 
-    return c.json(response, error.statusCode);
+    return c.json(response, error.statusCode as any);
   }
 
   // Handle Zod validation errors
@@ -117,7 +117,7 @@ export function handleError(error: Error, c: Context): Response {
       }
     };
 
-    return c.json(response, 400);
+    return c.json(response, 400 as any);
   }
 
   // Handle JWT errors
@@ -130,7 +130,7 @@ export function handleError(error: Error, c: Context): Response {
       }
     };
 
-    return c.json(response, 401);
+    return c.json(response, 401 as any);
   }
 
   // Handle unknown errors

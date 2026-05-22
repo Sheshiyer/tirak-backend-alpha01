@@ -26,14 +26,14 @@ uploads.use('*', createRateLimit('upload'));
  * Upload image file
  */
 uploads.post('/image', async (c) => {
-  const userId = c.get('userId');
+  const userId = c.get('userId') as string;
   
   try {
     const formData = await c.req.formData();
-    const file = formData.get('file') as File;
+    const file = formData.get('file') as unknown;
     const category = formData.get('category') as string || 'general';
     
-    if (!file) {
+    if (!(file instanceof File)) {
       return jsonError(c, 'No file provided', 'Please select a file to upload', 400);
     }
 
@@ -97,14 +97,14 @@ uploads.post('/image', async (c) => {
  * Upload document file
  */
 uploads.post('/document', async (c) => {
-  const userId = c.get('userId');
+  const userId = c.get('userId') as string;
   
   try {
     const formData = await c.req.formData();
-    const file = formData.get('file') as File;
+    const file = formData.get('file') as unknown;
     const category = formData.get('category') as string || 'general';
     
-    if (!file) {
+    if (!(file instanceof File)) {
       return jsonError(c, 'No file provided', 'Please select a file to upload', 400);
     }
 
@@ -175,7 +175,7 @@ uploads.post('/document', async (c) => {
  * Generate presigned upload URL for direct client uploads
  */
 uploads.post('/presigned-url', zValidator('json', fileUploadSchema), async (c) => {
-  const userId = c.get('userId');
+  const userId = c.get('userId') as string;
   const { fileName, fileSize, contentType, category } = c.req.valid('json');
   
   try {
@@ -237,7 +237,7 @@ uploads.post('/presigned-url', zValidator('json', fileUploadSchema), async (c) =
  */
 uploads.delete('/:fileKey', async (c) => {
   const fileKey = c.req.param('fileKey');
-  const userId = c.get('userId');
+  const userId = c.get('userId') as string;
   
   try {
     // Verify user owns the file (file key should contain user ID)
@@ -268,7 +268,7 @@ uploads.delete('/:fileKey', async (c) => {
  * Get upload statistics for user
  */
 uploads.get('/stats', async (c) => {
-  const userId = c.get('userId');
+  const userId = c.get('userId') as string;
   
   try {
     // This would typically query a database of file metadata
@@ -296,7 +296,7 @@ uploads.get('/stats', async (c) => {
  */
 uploads.post('/validate/:fileKey', async (c) => {
   const fileKey = c.req.param('fileKey');
-  const userId = c.get('userId');
+  const userId = c.get('userId') as string;
   
   try {
     // Verify user owns the file
@@ -346,7 +346,7 @@ uploads.post('/validate/:fileKey', async (c) => {
  */
 uploads.get('/metadata/:fileKey', async (c) => {
   const fileKey = c.req.param('fileKey');
-  const userId = c.get('userId');
+  const userId = c.get('userId') as string;
   
   try {
     // Verify user owns the file

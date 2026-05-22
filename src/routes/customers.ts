@@ -1,15 +1,17 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
+import { z } from 'zod';
 import {
   bookingSchema,
   reviewSchema
 } from '../utils/validation';
 import { validateUUID, validatePagination } from '../middleware/validation';
-import { authMiddleware, customerOnly } from '../middleware/auth';
+import { authMiddleware } from '../middleware/auth';
 import { createRateLimit } from '../middleware/rateLimit';
 import { 
   getUserById, 
-  getCustomerProfile 
+  getCustomerProfile,
+  updateUser
 } from '../utils/database';
 import { jsonSuccess, jsonError, jsonPaginated, createPagination } from '../utils/response';
 import type { Env, Variables } from '../index';
@@ -18,16 +20,122 @@ const customers = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // Apply authentication middleware to all routes
 customers.use('*', authMiddleware);
-customers.use('*', customerOnly);
 
 // Apply rate limiting
 customers.use('*', createRateLimit('general'));
+
+const customerListQuerySchema = z.object({
+  search: z.string().optional(),
+  status: z.string().optional(),
+  sortBy: z.string().optional(),
+  sortOrder: z.enum(['asc', 'desc']).default('desc'),
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(100).default(20)
+});
+
+/**
+ * List customers for local-guide workflows.
+ */
+customers.get('/all', zValidator('query', customerListQuerySchema), async (c) => {
+  const userType = c.get('userType');
+  const { search, status, sortBy, sortOrder, page, limit } = c.req.valid('query');
+
+  if (!['supplier', 'companion', 'admin'].includes(String(userType))) {
+    return jsonError(c, 'Access denied', 'Only local guides can browse customers', 403);
+  }
+
+  try {
+    const filters: string[] = [`u.user_type = 'customer'`];
+    const params: any[] = [];
+
+    if (status) {
+      filters.push('u.status = ?');
+      params.push(status);
+    } else {
+      filters.push(`u.status != 'suspended'`);
+    }
+
+    if (search) {
+      filters.push('(cp.display_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)');
+      const searchTerm = `%${search}%`;
+      params.push(searchTerm, searchTerm, searchTerm);
+    }
+
+    const where = `WHERE ${filters.join(' AND ')}`;
+    const countResult = await c.env.DB.prepare(`
+      SELECT COUNT(*) as total
+      FROM users u
+      LEFT JOIN customer_profiles cp ON u.id = cp.user_id
+      ${where}
+    `).bind(...params).first();
+    const total = Number(countResult?.total || 0);
+
+    const sortColumns: Record<string, string> = {
+      displayName: 'cp.display_name',
+      name: 'cp.display_name',
+      createdAt: 'u.created_at',
+      lastLoginAt: 'u.last_login_at',
+      loyaltyPoints: 'cp.loyalty_points'
+    };
+    const sortColumn = sortColumns[sortBy || 'createdAt'] || 'u.created_at';
+    const offset = (page - 1) * limit;
+
+    const customersResult = await c.env.DB.prepare(`
+      SELECT
+        u.id,
+        u.email,
+        u.phone,
+        u.status,
+        u.email_verified,
+        u.phone_verified,
+        u.preferred_language,
+        u.created_at,
+        u.last_login_at,
+        cp.display_name,
+        cp.profile_image,
+        cp.preferences,
+        cp.loyalty_points
+      FROM users u
+      LEFT JOIN customer_profiles cp ON u.id = cp.user_id
+      ${where}
+      ORDER BY ${sortColumn} ${sortOrder.toUpperCase()}
+      LIMIT ? OFFSET ?
+    `).bind(...params, limit, offset).all();
+
+    const items = customersResult.results?.map((customer: any) => ({
+      id: customer.id,
+      email: customer.email,
+      phone: customer.phone,
+      displayName: customer.display_name || customer.email?.split('@')[0] || 'Customer',
+      profileImage: customer.profile_image || null,
+      status: customer.status,
+      loyaltyPoints: Number(customer.loyalty_points || 0),
+      emailVerified: Boolean(customer.email_verified),
+      phoneVerified: Boolean(customer.phone_verified),
+      preferredLanguage: customer.preferred_language || 'en',
+      createdAt: customer.created_at,
+      lastLoginAt: customer.last_login_at,
+      preferences: JSON.parse(customer.preferences || '{}')
+    })) || [];
+
+    return c.json({
+      success: true,
+      data: items,
+      pagination: createPagination(page, limit, total),
+      message: 'Customers retrieved successfully'
+    });
+
+  } catch (error) {
+    console.error('Get customers error:', error);
+    return jsonError(c, 'Failed to retrieve customers', 'An error occurred while fetching customers', 500);
+  }
+});
 
 /**
  * Get customer profile
  */
 customers.get('/:id', validateUUID('id'), async (c) => {
-  const customerId = c.req.param('id');
+  const customerId = c.req.param('id') as string;
   const userId = c.get('userId');
   
   // Ensure customer can only access their own profile
@@ -92,12 +200,56 @@ customers.get('/:id', validateUUID('id'), async (c) => {
 });
 
 /**
+ * Delete customer account.
+ */
+customers.delete('/:id', validateUUID('id'), async (c) => {
+  const customerId = c.req.param('id') as string;
+  const userId = c.get('userId');
+  const userType = c.get('userType');
+
+  if (userType !== 'admin' && userId !== customerId) {
+    return jsonError(c, 'Access denied', 'You can only delete your own customer account', 403);
+  }
+
+  try {
+    const user = await getUserById(customerId, c.env.DB);
+    if (!user || user.userType !== 'customer') {
+      return jsonError(c, 'Customer not found', 'The requested customer does not exist', 404);
+    }
+
+    const deletedAt = Date.now();
+    await updateUser(customerId, {
+      status: 'suspended',
+      email: `deleted_${deletedAt}_${user.email}`,
+      phone: `deleted_${deletedAt}_${user.phone}`
+    }, c.env.DB);
+
+    await c.env.ANALYTICS_QUEUE.send({
+      eventType: 'account_deletion',
+      userId: customerId,
+      properties: {
+        userType: user.userType,
+        accountAge: new Date().getTime() - new Date(user.createdAt).getTime(),
+        source: 'customers_route'
+      },
+      timestamp: new Date().toISOString()
+    });
+
+    return jsonSuccess(c, { deleted: true }, 'Customer account deleted successfully');
+
+  } catch (error) {
+    console.error('Delete customer account error:', error);
+    return jsonError(c, 'Failed to delete account', 'An error occurred while deleting the customer account', 500);
+  }
+});
+
+/**
  * Get customer booking history
  */
 customers.get('/:id/bookings', validateUUID('id'), validatePagination(), async (c) => {
-  const customerId = c.req.param('id');
+  const customerId = c.req.param('id') as string;
   const userId = c.get('userId');
-  const { page, limit } = c.req.valid('query');
+  const { page, limit } = c.get('validatedQuery');
   
   // Ensure customer can only access their own bookings
   if (userId !== customerId) {
@@ -166,7 +318,7 @@ customers.post('/:id/bookings',
   validateUUID('id'), 
   zValidator('json', bookingSchema),
   async (c) => {
-    const customerId = c.req.param('id');
+    const customerId = c.req.param('id') as string;
     const userId = c.get('userId');
     const bookingData = c.req.valid('json');
     
@@ -181,7 +333,8 @@ customers.post('/:id/bookings',
         SELECT ss.*, sp.user_id as supplier_id
         FROM supplier_services ss
         JOIN supplier_profiles sp ON ss.supplier_id = sp.user_id
-        WHERE ss.id = ? AND ss.is_active = TRUE AND sp.subscription_status = 'active'
+        WHERE ss.id = ? AND ss.is_active = TRUE
+          AND COALESCE(sp.subscription_status, 'active') = 'active'
       `).bind(bookingData.serviceId).first();
 
       if (!service) {
@@ -272,9 +425,9 @@ customers.post('/:id/bookings',
  * Get favorite suppliers
  */
 customers.get('/:id/favorites', validateUUID('id'), validatePagination(), async (c) => {
-  const customerId = c.req.param('id');
+  const customerId = c.req.param('id') as string;
   const userId = c.get('userId');
-  const { page, limit } = c.req.valid('query');
+  const { page, limit } = c.get('validatedQuery');
   
   // Ensure customer can only access their own favorites
   if (userId !== customerId) {
@@ -303,7 +456,7 @@ customers.get('/:id/favorites', validateUUID('id'), validatePagination(), async 
         sp.categories, sp.rating_average, sp.rating_count, sp.verification_status
       FROM supplier_profiles sp
       WHERE sp.user_id IN (${placeholders})
-        AND sp.subscription_status = 'active'
+        AND COALESCE(sp.subscription_status, 'active') = 'active'
       ORDER BY sp.rating_average DESC
       LIMIT ? OFFSET ?
     `).bind(...favoriteSupplierIds, limit, offset).all();
@@ -337,8 +490,8 @@ customers.post('/:id/favorites/:supplierId',
   validateUUID('id'), 
   validateUUID('supplierId'),
   async (c) => {
-    const customerId = c.req.param('id');
-    const supplierId = c.req.param('supplierId');
+    const customerId = c.req.param('id') as string;
+    const supplierId = c.req.param('supplierId') as string;
     const userId = c.get('userId');
     
     // Ensure customer can only modify their own favorites
@@ -411,7 +564,7 @@ customers.post('/:id/reviews',
   validateUUID('id'), 
   zValidator('json', reviewSchema),
   async (c) => {
-    const customerId = c.req.param('id');
+    const customerId = c.req.param('id') as string;
     const userId = c.get('userId');
     const reviewData = c.req.valid('json');
     

@@ -22,10 +22,11 @@ const createPaymentMethodSchema = z.object({
     cardNumber: z.string().optional(),
     expiryMonth: z.number().min(1).max(12).optional(),
     expiryYear: z.number().min(2024).optional(),
-    cvv: z.string().optional(),
-    holderName: z.string().optional(),
-    phoneNumber: z.string().optional(),
-    accountNumber: z.string().optional()
+	    cvv: z.string().optional(),
+	    holderName: z.string().optional(),
+	    phoneNumber: z.string().optional(),
+	    accountNumber: z.string().optional(),
+	    bankName: z.string().optional()
   }),
   isDefault: z.boolean().optional().default(false)
 });
@@ -252,9 +253,9 @@ payments.delete('/payment-methods/:id', validateUUID('id'), async (c) => {
 /**
  * Get payment history
  */
-payments.get('/payments/history', validatePagination, async (c) => {
+payments.get('/payments/history', validatePagination(), async (c) => {
   const userId = c.get('userId');
-  const { page, limit } = c.get('pagination');
+  const { page, limit } = c.get('validatedQuery');
   const status = c.req.query('status');
   
   try {
@@ -315,9 +316,10 @@ payments.get('/payments/history', validatePagination, async (c) => {
       completedAt: payment.payment_status === 'completed' ? payment.updated_at : null
     }));
 
-    return jsonPaginated(c, {
-      payments: paymentsList
-    }, createPagination(page, limit, total));
+    return jsonSuccess(c, {
+      payments: paymentsList,
+      pagination: createPagination(page, limit, total)
+    });
 
   } catch (error) {
     console.error('Get payment history error:', error);

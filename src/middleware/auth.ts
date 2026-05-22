@@ -39,7 +39,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env; Variables: Vari
     c.set('userId', user.id);
     c.set('userType', user.userType);
     
-    await next();
+    return await next();
   } catch (error) {
     if (error instanceof AuthenticationError) {
       return jsonError(c, error.message, 'Authentication failed', 401);
@@ -71,10 +71,10 @@ export async function optionalAuthMiddleware(c: Context<{ Bindings: Env; Variabl
       }
     }
     
-    await next();
+    return await next();
   } catch (error) {
     // Silently continue without authentication
-    await next();
+    return await next();
   }
 }
 
@@ -93,7 +93,7 @@ export function requireRole(...allowedRoles: string[]) {
       return jsonError(c, 'Insufficient permissions', 'Access denied', 403);
     }
     
-    await next();
+    return await next();
   };
 }
 
@@ -112,7 +112,7 @@ export function requirePermission(resource: string, action: string) {
       return jsonError(c, 'Insufficient permissions', `Cannot ${action} ${resource}`, 403);
     }
     
-    await next();
+    return await next();
   };
 }
 
@@ -126,7 +126,7 @@ export async function adminOnly(c: Context<{ Bindings: Env; Variables: Variables
     return jsonError(c, 'Admin access required', 'Access denied', 403);
   }
   
-  await next();
+  return await next();
 }
 
 /**
@@ -139,7 +139,7 @@ export async function supplierOnly(c: Context<{ Bindings: Env; Variables: Variab
     return jsonError(c, 'Supplier access required', 'Access denied', 403);
   }
 
-  await next();
+  return await next();
 }
 
 /**
@@ -152,7 +152,7 @@ export async function customerOnly(c: Context<{ Bindings: Env; Variables: Variab
     return jsonError(c, 'Customer access required', 'Access denied', 403);
   }
 
-  await next();
+  return await next();
 }
 
 /**
@@ -166,7 +166,7 @@ export function requireOwnership(resourceIdParam = 'id') {
     
     // Admin can access any resource
     if (userType === 'admin') {
-      await next();
+      return await next();
       return;
     }
     
@@ -175,12 +175,15 @@ export function requireOwnership(resourceIdParam = 'id') {
       return jsonError(c, 'Access denied', 'You can only access your own resources', 403);
     }
     
-    await next();
+    return await next();
   };
 }
 
 /**
- * Verified user middleware - requires phone/email verification
+ * Verified user middleware.
+ *
+ * Phone OTP verification is disabled for the current mobile review flow, so an
+ * authenticated active account is sufficient.
  */
 export async function requireVerification(c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) {
   const user = c.get('user');
@@ -188,12 +191,8 @@ export async function requireVerification(c: Context<{ Bindings: Env; Variables:
   if (!user) {
     return jsonError(c, 'Authentication required', 'Please log in', 401);
   }
-  
-  if (!user.phoneVerified) {
-    return jsonError(c, 'Phone verification required', 'Please verify your phone number', 403);
-  }
-  
-  await next();
+
+  return await next();
 }
 
 /**
@@ -204,7 +203,7 @@ export async function requireActiveSubscription(c: Context<{ Bindings: Env; Vari
   const userType = c.get('userType');
   
   if (userType !== 'supplier') {
-    await next();
+    return await next();
     return;
   }
   
@@ -224,11 +223,11 @@ export async function requireActiveSubscription(c: Context<{ Bindings: Env; Vari
   }
   
   // Check if subscription has expired
-  if (supplier.subscription_expires_at && new Date(supplier.subscription_expires_at) < new Date()) {
+  if (supplier.subscription_expires_at && new Date(String(supplier.subscription_expires_at)) < new Date()) {
     return jsonError(c, 'Subscription expired', 'Please renew your subscription', 403);
   }
   
-  await next();
+  return await next();
 }
 
 /**
@@ -238,7 +237,7 @@ export async function validateSession(c: Context<{ Bindings: Env; Variables: Var
   const userId = c.get('userId');
   
   if (!userId) {
-    await next();
+    return await next();
     return;
   }
   
@@ -263,7 +262,7 @@ export async function validateSession(c: Context<{ Bindings: Env; Variables: Var
     );
   }
   
-  await next();
+  return await next();
 }
 
 /**
@@ -283,7 +282,7 @@ export async function apiKeyAuth(c: Context<{ Bindings: Env; Variables: Variable
     return jsonError(c, 'Invalid API key', 'The provided API key is not valid', 401);
   }
   
-  await next();
+  return await next();
 }
 
 /**
@@ -301,7 +300,7 @@ async function validateApiKey(apiKey: string, db: D1Database): Promise<boolean> 
 export async function requestIdMiddleware(c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) {
   const requestId = c.req.header('X-Request-ID') || crypto.randomUUID();
   c.set('requestId', requestId);
-  await next();
+  return await next();
 }
 
 /**
@@ -331,7 +330,5 @@ export async function enrichUserContext(c: Context<{ Bindings: Env; Variables: V
     }
   }
   
-  await next();
+  return await next();
 }
-
-

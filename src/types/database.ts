@@ -13,16 +13,26 @@ export interface User {
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;
+  notificationPreferences?: string;
 }
 
 export interface SupplierProfile {
   userId: string;
+  firstName?: string;
+  lastName?: string;
   displayName: string;
   bio?: string;
+  coverPhoto?: string;
+  location?: string;
+  socialLinks?: Record<string, any>;
+  dateOfBirth?: string;
+  gender?: string;
   profileImages: string[];
   categories: string[];
   regions: string[];
   spokenLanguages: string[];
+  certifications?: string[];
+  experienceStats?: Record<string, any>;
   ratingAverage: number;
   ratingCount: number;
   verificationStatus: 'pending' | 'verified' | 'rejected';
@@ -35,7 +45,10 @@ export interface SupplierProfile {
 export interface CustomerProfile {
   userId: string;
   displayName: string;
+  bio?: string;
   profileImage?: string;
+  dateOfBirth?: string;
+  gender?: string;
   preferences: Record<string, any>;
   loyaltyPoints: number;
   createdAt: string;

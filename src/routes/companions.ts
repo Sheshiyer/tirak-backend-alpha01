@@ -1,10 +1,12 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { validateUUID, validatePagination } from '../middleware/validation';
-import { optionalAuthMiddleware } from '../middleware/auth';
+import { validateUUID } from '../middleware/validation';
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
 import { createRateLimit } from '../middleware/rateLimit';
 import { jsonSuccess, jsonError, jsonPaginated, createPagination } from '../utils/response';
+import { firstProfileImage } from '../utils/profileImages';
+import { getUserById, updateUser } from '../utils/database';
 import type { Env, Variables } from '../index';
 
 const companions = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -13,22 +15,36 @@ const companions = new Hono<{ Bindings: Env; Variables: Variables }>();
 companions.use('*', optionalAuthMiddleware);
 companions.use('*', createRateLimit('search'));
 
+const booleanQuery = z.preprocess((value) => {
+  if (value === undefined) return undefined;
+  if (typeof value === 'string') return value.toLowerCase() === 'true';
+  return value;
+}, z.boolean().optional());
+
 // Companion search schema
 const companionSearchSchema = z.object({
   search: z.string().optional(),
   category: z.string().optional(),
   location: z.string().optional(),
-  minPrice: z.number().min(0).optional(),
-  maxPrice: z.number().min(0).optional(),
-  rating: z.number().min(1).max(5).optional(),
+  minPrice: z.coerce.number().min(0).optional(),
+  maxPrice: z.coerce.number().min(0).optional(),
+  rating: z.coerce.number().min(1).max(5).optional(),
   languages: z.string().optional(), // comma-separated
-  available: z.boolean().optional(),
-  verified: z.boolean().optional(),
-  page: z.number().min(1).default(1),
-  limit: z.number().min(1).max(50).default(20),
+  available: booleanQuery,
+  verified: booleanQuery,
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(50).default(20),
   sortBy: z.enum(['rating', 'price', 'distance', 'reviews']).default('rating'),
   sortOrder: z.enum(['asc', 'desc']).default('desc')
 });
+
+const availabilitySaveSchema = z.array(z.object({
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/),
+  isAvailable: z.boolean()
+})).min(1);
 
 /**
  * Get companions list (mobile-optimized)
@@ -62,8 +78,8 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
       FROM supplier_profiles sp
       JOIN users u ON sp.user_id = u.id
       LEFT JOIN supplier_services ss ON sp.user_id = ss.supplier_id AND ss.is_active = TRUE
-      WHERE sp.subscription_status = 'active' 
-        AND sp.verification_status = 'verified'
+      WHERE COALESCE(sp.subscription_status, 'active') = 'active'
+        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
         AND u.status = 'active'
     `;
 
@@ -98,27 +114,30 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
       queryParams.push(searchParams.rating);
     }
 
-    if (searchParams.verified !== undefined) {
+    if (searchParams.verified === true) {
       query += ` AND sp.verification_status = ?`;
-      queryParams.push(searchParams.verified ? 'verified' : 'pending');
+      queryParams.push('verified');
     }
 
     // Group by supplier
     query += ` GROUP BY sp.user_id`;
 
-    // Add price filter after grouping
+    // Add price filter after grouping. New local guides may not have services
+    // yet, so a zero/minimum price filter should not hide otherwise valid
+    // active profiles before they finish service setup.
+    const havingClauses: string[] = [];
     if (searchParams.minPrice !== undefined) {
-      query += ` HAVING MIN(ss.price_min) >= ?`;
+      havingClauses.push(`(MIN(ss.price_min) IS NULL OR MIN(ss.price_min) >= ?)`);
       queryParams.push(searchParams.minPrice);
     }
 
     if (searchParams.maxPrice !== undefined) {
-      if (searchParams.minPrice !== undefined) {
-        query += ` AND MIN(ss.price_min) <= ?`;
-      } else {
-        query += ` HAVING MIN(ss.price_min) <= ?`;
-      }
+      havingClauses.push(`(MIN(ss.price_min) IS NULL OR MIN(ss.price_min) <= ?)`);
       queryParams.push(searchParams.maxPrice);
+    }
+
+    if (havingClauses.length > 0) {
+      query += ` HAVING ${havingClauses.join(' AND ')}`;
     }
 
     // Add sorting
@@ -149,8 +168,8 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
       FROM supplier_profiles sp
       JOIN users u ON sp.user_id = u.id
       LEFT JOIN supplier_services ss ON sp.user_id = ss.supplier_id AND ss.is_active = TRUE
-      WHERE sp.subscription_status = 'active' 
-        AND sp.verification_status = 'verified'
+      WHERE COALESCE(sp.subscription_status, 'active') = 'active'
+        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
         AND u.status = 'active'
     `;
 
@@ -172,6 +191,11 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
     if (searchParams.location) {
       countQueryWithFilters += ` AND JSON_EXTRACT(sp.regions, '$') LIKE ?`;
       countParams.push(`%"${searchParams.location}"%`);
+    }
+
+    if (searchParams.verified === true) {
+      countQueryWithFilters += ` AND sp.verification_status = ?`;
+      countParams.push('verified');
     }
 
     const countResult = await c.env.DB.prepare(countQueryWithFilters).bind(...countParams).first();
@@ -221,8 +245,8 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
         COUNT(DISTINCT sp.user_id) as category_count
       FROM categories c
       LEFT JOIN supplier_profiles sp ON JSON_EXTRACT(sp.categories, '$') LIKE '%"' || c.id || '"%'
-        AND sp.subscription_status = 'active' 
-        AND sp.verification_status = 'verified'
+        AND COALESCE(sp.subscription_status, 'active') = 'active'
+        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
       WHERE c.is_active = TRUE
       GROUP BY c.id, c.name_en
       ORDER BY category_count DESC
@@ -235,8 +259,8 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
         COUNT(DISTINCT sp.user_id) as location_count
       FROM regions r
       LEFT JOIN supplier_profiles sp ON JSON_EXTRACT(sp.regions, '$') LIKE '%"' || r.id || '"%'
-        AND sp.subscription_status = 'active' 
-        AND sp.verification_status = 'verified'
+        AND COALESCE(sp.subscription_status, 'active') = 'active'
+        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
       WHERE r.is_active = TRUE
       GROUP BY r.id, r.name_en
       ORDER BY location_count DESC
@@ -249,8 +273,8 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
       FROM supplier_services ss
       JOIN supplier_profiles sp ON ss.supplier_id = sp.user_id
       WHERE ss.is_active = TRUE 
-        AND sp.subscription_status = 'active'
-        AND sp.verification_status = 'verified'
+        AND COALESCE(sp.subscription_status, 'active') = 'active'
+        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
     `).first();
 
     const filters = {
@@ -287,10 +311,53 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
 });
 
 /**
+ * Get companion services in the mobile booking-flow shape.
+ */
+companions.get('/:id/services', validateUUID('id'), async (c) => {
+  const companionId = c.req.param('id') as string;
+
+  try {
+    const companion = await c.env.DB.prepare(`
+      SELECT user_id FROM supplier_profiles
+      WHERE user_id = ?
+        AND COALESCE(subscription_status, 'active') = 'active'
+        AND COALESCE(verification_status, 'pending') != 'rejected'
+    `).bind(companionId).first();
+
+    if (!companion) {
+      return jsonError(c, 'Companion not found', 'The requested companion does not exist', 404);
+    }
+
+    const servicesResult = await c.env.DB.prepare(`
+      SELECT id, title, description, price_min, currency, duration_hours
+      FROM supplier_services
+      WHERE supplier_id = ? AND is_active = TRUE
+      ORDER BY price_min ASC, created_at DESC
+    `).bind(companionId).all();
+
+    const services = servicesResult.results?.map((service: any) => ({
+      id: service.id,
+      name: service.title,
+      description: service.description || '',
+      price: Number(service.price_min || 0),
+      currency: service.currency || 'THB',
+      duration: Math.max(30, Math.round(Number(service.duration_hours || 1) * 60)),
+      category: 'Local experience'
+    })) || [];
+
+    return jsonSuccess(c, { services }, 'Companion services retrieved successfully');
+
+  } catch (error) {
+    console.error('Get companion services error:', error);
+    return jsonError(c, 'Failed to retrieve services', 'An error occurred while fetching companion services', 500);
+  }
+});
+
+/**
  * Get companion details
  */
 companions.get('/:id', validateUUID('id'), async (c) => {
-  const companionId = c.req.param('id');
+  const companionId = c.req.param('id') as string;
 
   try {
     // Get companion profile
@@ -303,8 +370,8 @@ companions.get('/:id', validateUUID('id'), async (c) => {
       FROM supplier_profiles sp
       JOIN users u ON sp.user_id = u.id
       WHERE sp.user_id = ?
-        AND sp.subscription_status = 'active'
-        AND sp.verification_status = 'verified'
+        AND COALESCE(sp.subscription_status, 'active') = 'active'
+        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
         AND u.status = 'active'
     `).bind(companionId).first();
 
@@ -316,9 +383,8 @@ companions.get('/:id', validateUUID('id'), async (c) => {
     const services = await c.env.DB.prepare(`
       SELECT
         ss.*,
-        c.name_en as category_name
+        NULL as category_name
       FROM supplier_services ss
-      LEFT JOIN categories c ON ss.category_id = c.id
       WHERE ss.supplier_id = ? AND ss.is_active = TRUE
       ORDER BY ss.price_min ASC
     `).bind(companionId).all();
@@ -336,21 +402,22 @@ companions.get('/:id', validateUUID('id'), async (c) => {
       SELECT
         r.*,
         cp.display_name as customer_name,
-        cp.profile_images as customer_images
+        cp.profile_image as customer_image
       FROM reviews r
-      JOIN customer_profiles cp ON r.customer_id = cp.user_id
-      WHERE r.companion_id = ?
+      JOIN customer_profiles cp ON r.reviewer_id = cp.user_id
+      WHERE r.reviewee_id = ? AND r.is_public = TRUE
       ORDER BY r.created_at DESC
       LIMIT 10
     `).bind(companionId).all();
 
     // Format data
-    const profileImages = JSON.parse(companion.profile_images || '[]');
-    const categories = JSON.parse(companion.categories || '[]');
-    const regions = JSON.parse(companion.regions || '[]');
-    const languages = JSON.parse(companion.spoken_languages || '[]');
+    const companionRow = companion as any;
+    const profileImages = JSON.parse(String(companionRow.profile_images || '[]'));
+    const categories = JSON.parse(String(companionRow.categories || '[]'));
+    const regions = JSON.parse(String(companionRow.regions || '[]'));
+    const languages = JSON.parse(String(companionRow.spoken_languages || '[]'));
 
-    const weeklySchedule = {
+    const weeklySchedule: Record<string, Array<{ start: string; end: string }>> = {
       monday: [],
       tuesday: [],
       wednesday: [],
@@ -363,9 +430,10 @@ companions.get('/:id', validateUUID('id'), async (c) => {
     const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
     availability.results.forEach((avail: any) => {
-      const dayName = dayNames[avail.day_of_week];
-      if (avail.is_available) {
-        weeklySchedule[dayName].push({
+      const dayName = dayNames[Number(avail.day_of_week)];
+      const slots = dayName ? weeklySchedule[dayName] : undefined;
+      if (slots && avail.is_available) {
+        slots.push({
           start: avail.start_time,
           end: avail.end_time
         });
@@ -373,14 +441,14 @@ companions.get('/:id', validateUUID('id'), async (c) => {
     });
 
     const companionData = {
-      id: companion.user_id,
-      name: companion.display_name,
-      displayName: companion.display_name,
+      id: companionRow.user_id,
+      name: companionRow.display_name,
+      displayName: companionRow.display_name,
       profileImage: profileImages[0] || null,
       gallery: profileImages,
       location: regions[0] || null,
-      rating: Math.round((companion.rating_average || 0) * 10) / 10,
-      reviewCount: companion.rating_count || 0,
+      rating: Math.round(Number(companionRow.rating_average || 0) * 10) / 10,
+      reviewCount: companionRow.rating_count || 0,
       price: 0, // Will be set from services
       services: services.results.map((service: any) => ({
         id: service.id,
@@ -391,15 +459,15 @@ companions.get('/:id', validateUUID('id'), async (c) => {
         category: service.category_name || 'General'
       })),
       languages: languages,
-      verified: companion.verification_status === 'verified',
-      online: companion.user_status === 'active',
-      lastSeen: companion.last_login_at,
+      verified: companionRow.verification_status === 'verified',
+      online: companionRow.user_status === 'active',
+      lastSeen: companionRow.last_login_at,
       categories: categories,
-      bio: companion.bio,
+      bio: companionRow.bio,
       age: null, // Calculate from date_of_birth if available
       responseTime: '< 1 hour',
       completionRate: 95,
-      joinedDate: companion.joined_date,
+      joinedDate: companionRow.joined_date,
       availability: {
         weeklySchedule,
         exceptions: [] // Would come from a separate table
@@ -407,14 +475,14 @@ companions.get('/:id', validateUUID('id'), async (c) => {
       reviews: reviews.results.map((review: any) => ({
         id: review.id,
         user: {
-          id: review.customer_id,
+          id: review.reviewer_id,
           name: review.customer_name,
-          profileImage: JSON.parse(review.customer_images || '[]')[0] || null
+          profileImage: firstProfileImage(review.customer_image)
         },
         rating: review.rating,
         comment: review.comment,
         date: review.created_at,
-        verified: review.verified
+        verified: true
       }))
     };
 
@@ -435,7 +503,7 @@ companions.get('/:id', validateUUID('id'), async (c) => {
  * Get companion availability
  */
 companions.get('/:id/availability', validateUUID('id'), async (c) => {
-  const companionId = c.req.param('id');
+  const companionId = c.req.param('id') as string;
   const startDate = c.req.query('startDate');
   const endDate = c.req.query('endDate');
 
@@ -447,7 +515,9 @@ companions.get('/:id/availability', validateUUID('id'), async (c) => {
     // Verify companion exists
     const companion = await c.env.DB.prepare(`
       SELECT user_id FROM supplier_profiles
-      WHERE user_id = ? AND subscription_status = 'active' AND verification_status = 'verified'
+      WHERE user_id = ?
+        AND COALESCE(subscription_status, 'active') = 'active'
+        AND COALESCE(verification_status, 'pending') != 'rejected'
     `).bind(companionId).first();
 
     if (!companion) {
@@ -463,10 +533,13 @@ companions.get('/:id/availability', validateUUID('id'), async (c) => {
 
     // Get existing bookings in the date range
     const bookings = await c.env.DB.prepare(`
-      SELECT date, start_time, end_time
+      SELECT
+        date(scheduled_at) as booking_date,
+        time(scheduled_at) as start_time,
+        time(datetime(scheduled_at, '+' || duration || ' minutes')) as end_time
       FROM bookings
-      WHERE companion_id = ?
-        AND date BETWEEN ? AND ?
+      WHERE supplier_id = ?
+        AND date(scheduled_at) BETWEEN ? AND ?
         AND status IN ('confirmed', 'in_progress')
     `).bind(companionId, startDate, endDate).all();
 
@@ -486,11 +559,11 @@ companions.get('/:id/availability', validateUUID('id'), async (c) => {
 
       // Get bookings for this date
       const dayBookings = bookings.results.filter((booking: any) =>
-        booking.date === dateStr
+        booking.booking_date === dateStr
       );
 
       // Generate time slots
-      const timeSlots = [];
+      const timeSlots: Array<{ start: string; end: string; available: boolean; price: number }> = [];
 
       if (daySchedule.length > 0) {
         daySchedule.forEach((schedule: any) => {
@@ -532,6 +605,95 @@ companions.get('/:id/availability', validateUUID('id'), async (c) => {
   } catch (error) {
     console.error('Get companion availability error:', error);
     return jsonError(c, 'Failed to retrieve availability', 'An error occurred while fetching availability', 500);
+  }
+});
+
+/**
+ * Save companion availability from the mobile local-guide flow.
+ */
+companions.post('/:id/availability', validateUUID('id'), authMiddleware, zValidator('json', availabilitySaveSchema), async (c) => {
+  const companionId = c.req.param('id') as string;
+  const userId = c.get('userId');
+  const userType = c.get('userType');
+  const slots = c.req.valid('json');
+
+  if (userType !== 'admin' && userId !== companionId) {
+    return jsonError(c, 'Access denied', 'You can only update your own availability', 403);
+  }
+
+  try {
+    const companion = await c.env.DB.prepare(`
+      SELECT user_id FROM supplier_profiles
+      WHERE user_id = ?
+        AND COALESCE(subscription_status, 'active') = 'active'
+        AND COALESCE(verification_status, 'pending') != 'rejected'
+    `).bind(companionId).first();
+
+    if (!companion) {
+      return jsonError(c, 'Companion not found', 'The requested companion does not exist', 404);
+    }
+
+    const savedAvailability: Array<{
+      date: string;
+      available: boolean;
+      slots: Array<{ start: string; end: string; available: boolean }>;
+    }> = [];
+
+    for (const slot of slots) {
+      const start = new Date(`${slot.startDate}T00:00:00Z`);
+      const end = new Date(`${slot.endDate}T00:00:00Z`);
+
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+        return jsonError(c, 'Invalid availability range', 'End date must be on or after start date', 400);
+      }
+
+      for (let cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+        const date = cursor.toISOString().slice(0, 10);
+        const dayOfWeek = cursor.getUTCDay();
+
+        await c.env.DB.prepare(`
+          INSERT INTO supplier_availability (supplier_id, day_of_week, start_time, end_time, is_available, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT(supplier_id, day_of_week) DO UPDATE SET
+            start_time = excluded.start_time,
+            end_time = excluded.end_time,
+            is_available = excluded.is_available,
+            updated_at = CURRENT_TIMESTAMP
+        `).bind(
+          companionId,
+          dayOfWeek,
+          slot.startTime,
+          slot.endTime,
+          slot.isAvailable ? 1 : 0
+        ).run();
+
+        savedAvailability.push({
+          date,
+          available: slot.isAvailable,
+          slots: [{ start: slot.startTime, end: slot.endTime, available: slot.isAvailable }]
+        });
+      }
+    }
+
+    await c.env.CACHE.delete(`supplier:${companionId}`);
+
+    await c.env.ANALYTICS_QUEUE.send({
+      eventType: 'companion_availability_update',
+      userId: companionId,
+      properties: {
+        ranges: slots.length,
+        days: savedAvailability.length
+      },
+      timestamp: new Date().toISOString()
+    });
+
+    return jsonSuccess(c, {
+      availability: savedAvailability
+    }, 'Availability saved successfully');
+
+  } catch (error) {
+    console.error('Save companion availability error:', error);
+    return jsonError(c, 'Failed to save availability', 'An error occurred while saving availability', 500);
   }
 });
 

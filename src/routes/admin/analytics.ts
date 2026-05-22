@@ -29,7 +29,7 @@ const reportConfigSchema = z.object({
  * Get user analytics
  */
 analytics.get('/users', validateDateRange(), async (c) => {
-  const { startDate, endDate } = c.req.valid('query');
+  const { startDate, endDate } = c.get('validatedQuery');
   
   try {
     // User registration trends
@@ -95,7 +95,7 @@ analytics.get('/users', validateDateRange(), async (c) => {
  * Get booking analytics
  */
 analytics.get('/bookings', validateDateRange(), async (c) => {
-  const { startDate, endDate } = c.req.valid('query');
+  const { startDate, endDate } = c.get('validatedQuery');
   
   try {
     // Booking trends
@@ -171,7 +171,7 @@ analytics.get('/bookings', validateDateRange(), async (c) => {
  * Get platform performance analytics
  */
 analytics.get('/performance', validateDateRange(), async (c) => {
-  const { startDate, endDate } = c.req.valid('query');
+  const { startDate, endDate } = c.get('validatedQuery');
   
   try {
     // Chat activity
@@ -189,7 +189,7 @@ analytics.get('/performance', validateDateRange(), async (c) => {
 
     // Search activity (if you have search logs)
     // For now, we'll simulate this data
-    const searchActivity = [];
+    const searchActivity: unknown[] = [];
 
     // Platform health metrics
     const healthMetrics = {

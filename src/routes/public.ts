@@ -38,7 +38,8 @@ publicRoutes.get('/stats', async (c) => {
         COUNT(*) as verified_suppliers,
         AVG(rating_average) as avg_rating
       FROM supplier_profiles 
-      WHERE verification_status = 'verified' AND subscription_status = 'active'
+      WHERE COALESCE(subscription_status, 'active') = 'active'
+        AND COALESCE(verification_status, 'pending') != 'rejected'
     `).first();
 
     const serviceStats = await c.env.DB.prepare(`
@@ -62,7 +63,7 @@ publicRoutes.get('/stats', async (c) => {
       },
       suppliers: {
         verified: supplierStats?.verified_suppliers || 0,
-        averageRating: Math.round((supplierStats?.avg_rating || 0) * 10) / 10
+        averageRating: Math.round(Number(supplierStats?.avg_rating ?? 0) * 10) / 10
       },
       services: {
         total: serviceStats?.total_services || 0
@@ -89,7 +90,7 @@ publicRoutes.get('/stats', async (c) => {
  * Get available categories
  */
 publicRoutes.get('/categories', validatePagination(), async (c) => {
-  const { page, limit } = c.req.valid('query');
+  const { page, limit } = c.get('validatedQuery');
   
   try {
     // Check cache first
@@ -153,7 +154,7 @@ publicRoutes.get('/categories', validatePagination(), async (c) => {
  * Get available regions
  */
 publicRoutes.get('/regions', validatePagination(), async (c) => {
-  const { page, limit } = c.req.valid('query');
+  const { page, limit } = c.get('validatedQuery');
   
   try {
     // Check cache first
@@ -213,7 +214,7 @@ publicRoutes.get('/regions', validatePagination(), async (c) => {
  * Get featured suppliers
  */
 publicRoutes.get('/featured-suppliers', validatePagination(), async (c) => {
-  const { page, limit } = c.req.valid('query');
+  const { page, limit } = c.get('validatedQuery');
   
   try {
     // Check cache first
@@ -239,8 +240,8 @@ publicRoutes.get('/featured-suppliers', validatePagination(), async (c) => {
         sp.verification_status,
         sp.created_at
       FROM supplier_profiles sp
-      WHERE sp.verification_status = 'verified' 
-        AND sp.subscription_status = 'active'
+      WHERE COALESCE(sp.verification_status, 'pending') != 'rejected'
+        AND COALESCE(sp.subscription_status, 'active') = 'active'
         AND sp.rating_average >= 4.0
         AND sp.rating_count >= 5
       ORDER BY sp.rating_average DESC, sp.rating_count DESC
@@ -266,8 +267,8 @@ publicRoutes.get('/featured-suppliers', validatePagination(), async (c) => {
     const countResult = await c.env.DB.prepare(`
       SELECT COUNT(*) as total
       FROM supplier_profiles 
-      WHERE verification_status = 'verified' 
-        AND subscription_status = 'active'
+      WHERE COALESCE(verification_status, 'pending') != 'rejected'
+        AND COALESCE(subscription_status, 'active') = 'active'
         AND rating_average >= 4.0
         AND rating_count >= 5
     `).first();
@@ -321,8 +322,8 @@ publicRoutes.get('/search-suggestions', async (c) => {
         SELECT user_id as id, display_name as name, 'supplier' as type
         FROM supplier_profiles 
         WHERE display_name LIKE ? 
-          AND verification_status = 'verified'
-          AND subscription_status = 'active'
+          AND COALESCE(verification_status, 'pending') != 'rejected'
+          AND COALESCE(subscription_status, 'active') = 'active'
         ORDER BY rating_average DESC
         LIMIT 5
       `).bind(`%${query}%`).all();

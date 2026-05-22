@@ -8,6 +8,14 @@ import type { Env, Variables } from '../index';
 
 const search = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+type SearchSuggestion = {
+  type: 'companion' | 'service' | 'location';
+  id: string;
+  text: string;
+  subtitle?: string;
+  image: string | null;
+};
+
 // Apply optional authentication and rate limiting
 search.use('*', optionalAuthMiddleware);
 search.use('*', createRateLimit('search'));
@@ -25,7 +33,7 @@ search.get('/suggestions', zValidator('query', searchSuggestionsSchema), async (
   const { query, type } = c.req.valid('query');
   
   try {
-    const suggestions = [];
+    const suggestions: SearchSuggestion[] = [];
     const searchTerm = `%${query}%`;
 
     // Search companions if no type specified or type is companions
@@ -39,8 +47,8 @@ search.get('/suggestions', zValidator('query', searchSuggestionsSchema), async (
         FROM supplier_profiles sp
         JOIN users u ON sp.user_id = u.id
         WHERE (sp.display_name LIKE ? OR sp.bio LIKE ?)
-          AND sp.subscription_status = 'active'
-          AND sp.verification_status = 'verified'
+          AND COALESCE(sp.subscription_status, 'active') = 'active'
+          AND COALESCE(sp.verification_status, 'pending') != 'rejected'
           AND u.status = 'active'
         ORDER BY sp.rating_average DESC
         LIMIT 5
@@ -70,8 +78,8 @@ search.get('/suggestions', zValidator('query', searchSuggestionsSchema), async (
         JOIN supplier_profiles sp ON ss.supplier_id = sp.user_id
         WHERE (ss.title LIKE ? OR ss.description LIKE ?)
           AND ss.is_active = TRUE
-          AND sp.subscription_status = 'active'
-          AND sp.verification_status = 'verified'
+          AND COALESCE(sp.subscription_status, 'active') = 'active'
+          AND COALESCE(sp.verification_status, 'pending') != 'rejected'
         ORDER BY sp.rating_average DESC
         LIMIT 5
       `).bind(searchTerm, searchTerm).all();
@@ -154,8 +162,8 @@ search.get('/categories', async (c) => {
         COUNT(DISTINCT sp.user_id) as companionCount
       FROM categories c
       LEFT JOIN supplier_profiles sp ON JSON_EXTRACT(sp.categories, '$') LIKE '%"' || c.id || '"%'
-        AND sp.subscription_status = 'active'
-        AND sp.verification_status = 'verified'
+        AND COALESCE(sp.subscription_status, 'active') = 'active'
+        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
       WHERE c.is_active = TRUE
       GROUP BY c.id, c.name_en, c.icon, c.color, c.description_en
       ORDER BY c.sort_order ASC, companionCount DESC
@@ -207,8 +215,8 @@ search.get('/locations', async (c) => {
         0 as longitude
       FROM regions r
       LEFT JOIN supplier_profiles sp ON JSON_EXTRACT(sp.regions, '$') LIKE '%"' || r.id || '"%'
-        AND sp.subscription_status = 'active'
-        AND sp.verification_status = 'verified'
+        AND COALESCE(sp.subscription_status, 'active') = 'active'
+        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
       WHERE r.is_active = TRUE
       GROUP BY r.id, r.name_en, r.name_th, r.country_code
       ORDER BY r.sort_order ASC, companionCount DESC
@@ -261,8 +269,8 @@ search.get('/popular', async (c) => {
       FROM categories c
       JOIN supplier_profiles sp ON JSON_EXTRACT(sp.categories, '$') LIKE '%"' || c.id || '"%'
       WHERE c.is_active = TRUE
-        AND sp.subscription_status = 'active'
-        AND sp.verification_status = 'verified'
+        AND COALESCE(sp.subscription_status, 'active') = 'active'
+        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
       GROUP BY c.id, c.name_en
       ORDER BY count DESC
       LIMIT 5
@@ -277,8 +285,8 @@ search.get('/popular', async (c) => {
       FROM regions r
       JOIN supplier_profiles sp ON JSON_EXTRACT(sp.regions, '$') LIKE '%"' || r.id || '"%'
       WHERE r.is_active = TRUE
-        AND sp.subscription_status = 'active'
-        AND sp.verification_status = 'verified'
+        AND COALESCE(sp.subscription_status, 'active') = 'active'
+        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
       GROUP BY r.id, r.name_en
       ORDER BY count DESC
       LIMIT 5

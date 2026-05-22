@@ -10,11 +10,26 @@ export interface WebSocketConnection {
 
 export interface WebSocketEvent {
   type: 'message_received' | 'typing_start' | 'typing_stop' | 'message_status_update' | 
-        'booking_status_update' | 'booking_request' | 'notification' | 'user_presence_update';
+        'booking_status_update' | 'booking_request' | 'notification' | 'user_presence_update' |
+        'connected' | 'pong' | 'error';
   data: any;
   timestamp: string;
   targetUserId?: string;
   roomId?: string;
+}
+
+function createWebSocketUpgradeResponse(client: WebSocket): Response {
+  try {
+    return new Response(null, {
+      status: 101,
+      webSocket: client,
+    } as ResponseInit & { webSocket: WebSocket });
+  } catch (error) {
+    return {
+      status: 101,
+      webSocket: client,
+    } as unknown as Response;
+  }
 }
 
 export class WebSocketService {
@@ -85,7 +100,7 @@ export class WebSocketService {
 
     // Send connection confirmation
     this.sendToUser(userId, {
-      type: 'connected' as any,
+      type: 'connected',
       data: {
         userId,
         userType,
@@ -94,10 +109,7 @@ export class WebSocketService {
       timestamp: new Date().toISOString()
     });
 
-    return new Response(null, {
-      status: 101,
-      webSocket: client,
-    });
+    return createWebSocketUpgradeResponse(client);
   }
 
   /**
@@ -113,7 +125,7 @@ export class WebSocketService {
     switch (data.type) {
       case 'ping':
         this.sendToUser(userId, {
-          type: 'pong' as any,
+          type: 'pong',
           data: { timestamp },
           timestamp
         });

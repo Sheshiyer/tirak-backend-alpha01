@@ -30,7 +30,8 @@ export interface UserPresence {
 
 export interface WebSocketEvent {
   type: 'message_received' | 'typing_start' | 'typing_stop' | 'message_status_update' |
-        'booking_status_update' | 'booking_request' | 'notification' | 'user_presence_update';
+        'booking_status_update' | 'booking_request' | 'notification' | 'user_presence_update' |
+        'connected' | 'error';
   data: any;
   timestamp: string;
 }
@@ -153,6 +154,7 @@ export class ChatRoom {
 
   private async handleSendMessage(request: Request): Promise<Response> {
     const body = await request.json() as {
+      roomId: string;
       senderId: string;
       recipientId: string;
       messageType: string;
@@ -160,7 +162,7 @@ export class ChatRoom {
       mediaUrl?: string;
       replyTo?: string;
     };
-    const { senderId, recipientId, messageType, content, mediaUrl, replyTo } = body;
+    const { roomId, senderId, recipientId, messageType, content, mediaUrl, replyTo } = body;
 
     try {
       const messageId = crypto.randomUUID();
@@ -169,7 +171,7 @@ export class ChatRoom {
       // Create message with mobile app format
       const message: ChatMessage = {
         id: messageId,
-        roomId: this.roomId,
+        roomId: roomId || this.roomId,
         senderId,
         recipientId,
         content: content || '',
@@ -212,6 +214,12 @@ export class ChatRoom {
         success: true,
         message: {
           id: messageId,
+          roomId: message.roomId,
+          senderId,
+          recipientId,
+          messageType,
+          content: message.content,
+          mediaUrl,
           status: message.status,
           timestamp
         }
@@ -376,19 +384,18 @@ export class ChatRoom {
     try {
       await this.env.DB.prepare(`
         INSERT INTO chat_messages (
-          id, room_id, sender_id, recipient_id, content, message_type,
-          media_url, reply_to_id, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, room_id, sender_id, content, message_type,
+          image_url, metadata, reply_to_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         message.id,
         message.roomId,
         message.senderId,
-        message.recipientId,
         message.content,
         message.messageType,
         message.mediaUrl || null,
+        null,
         message.replyTo || null,
-        message.timestamp,
         message.timestamp
       ).run();
     } catch (error) {
@@ -402,9 +409,9 @@ export class ChatRoom {
       const statusField = status === 'delivered' ? 'delivered_at' : 'read_at';
       await this.env.DB.prepare(`
         UPDATE chat_messages
-        SET ${statusField} = ?, updated_at = ?
+        SET ${statusField} = ?
         WHERE id = ?
-      `).bind(timestamp, timestamp, messageId).run();
+      `).bind(timestamp, messageId).run();
     } catch (error) {
       console.error('Failed to update message status:', error);
       throw error;

@@ -26,8 +26,8 @@ export const rateLimitConfigs = {
   
   // Authentication endpoints (stricter)
   auth: {
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // 5 attempts per 15 minutes
+    windowMs: 60 * 1000, // 1 minute
+    max: 60, // Preview/review login flow should not lock out test accounts
     message: 'Too many authentication attempts'
   },
   
@@ -74,7 +74,7 @@ export const rateLimitConfigs = {
   // Booking endpoints
   booking: {
     windowMs: 60 * 1000, // 1 minute
-    max: 10, // 10 booking actions per minute
+    max: 120, // Booking creation triggers several mobile list/detail refetches
     message: 'Too many booking requests'
   },
 
@@ -149,12 +149,12 @@ export function rateLimit(config: RateLimitConfig) {
       c.header('X-RateLimit-Remaining', remaining.toString());
       c.header('X-RateLimit-Reset', Math.ceil(resetTime / 1000).toString());
       
-      await next();
+      return await next();
       
     } catch (error) {
       console.error('Rate limiting error:', error);
       // Continue without rate limiting if there's an error
-      await next();
+      return await next();
     }
   };
 }
@@ -284,11 +284,11 @@ export function slidingWindowRateLimit(config: RateLimitConfig) {
       c.header('X-RateLimit-Remaining', Math.max(0, remaining).toString());
       c.header('X-RateLimit-Reset', Math.ceil((now + config.windowMs) / 1000).toString());
       
-      await next();
+      return await next();
       
     } catch (error) {
       console.error('Sliding window rate limiting error:', error);
-      await next();
+      return await next();
     }
   };
 }
@@ -350,11 +350,11 @@ export function burstRateLimit(burstConfig: RateLimitConfig, sustainedConfig: Ra
       c.header('X-RateLimit-Limit', Math.min(burstConfig.max, sustainedConfig.max).toString());
       c.header('X-RateLimit-Remaining', Math.max(0, remaining).toString());
       
-      await next();
+      return await next();
       
     } catch (error) {
       console.error('Burst rate limiting error:', error);
-      await next();
+      return await next();
     }
   };
 }

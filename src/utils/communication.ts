@@ -12,10 +12,12 @@ export interface SMSConfig {
 }
 
 export interface EmailConfig {
-  provider: 'sendgrid' | 'aws-ses';
+  provider: 'cloudflare' | 'mailchannels' | 'sendgrid' | 'aws-ses';
+  env?: any;
   apiKey?: string;
   fromEmail?: string;
   fromName?: string;
+  replyTo?: string;
   region?: string;
   accessKeyId?: string;
   secretAccessKey?: string;
@@ -44,6 +46,34 @@ export interface DeliveryStatus {
   error?: string;
   provider?: string;
 }
+
+const htmlEscape = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+export const renderBasicEmail = (title: string, body: string, action?: { label: string; url: string }) => {
+  const safeTitle = htmlEscape(title);
+  const safeBody = htmlEscape(body).replace(/\n/g, '<br />');
+  const actionHtml = action
+    ? `<p style="margin:24px 0"><a href="${htmlEscape(action.url)}" style="background:#A85CF9;color:#fff;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">${htmlEscape(action.label)}</a></p>`
+    : '';
+
+  return `<!doctype html>
+<html>
+  <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#161827;line-height:1.5;background:#fff8f5;margin:0;padding:24px">
+    <main style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;padding:28px;border:1px solid #f0e5ef">
+      <h1 style="font-size:24px;line-height:1.2;margin:0 0 16px">${safeTitle}</h1>
+      <p style="font-size:16px;margin:0 0 8px">${safeBody}</p>
+      ${actionHtml}
+      <p style="font-size:13px;color:#6e7584;margin-top:28px">Tirak support: support@tirak.app</p>
+    </main>
+  </body>
+</html>`;
+};
 
 // OTP generation and validation
 export function generateOTP(length: number = 6): string {
@@ -166,6 +196,10 @@ export async function sendEmail(
       return await sendSendGridEmail(config, to, subject, content, deliveryId);
     } else if (config.provider === 'aws-ses') {
       return await sendAWSEmail(config, to, subject, content, deliveryId);
+    } else if (config.provider === 'cloudflare') {
+      return await sendCloudflareEmail(config, to, subject, content, deliveryId);
+    } else if (config.provider === 'mailchannels') {
+      return await sendMailChannelsEmail(config, to, subject, content, deliveryId);
     } else {
       throw new Error(`Unsupported email provider: ${config.provider}`);
     }
@@ -178,6 +212,81 @@ export async function sendEmail(
       provider: config.provider
     };
   }
+}
+
+async function sendCloudflareEmail(
+  config: EmailConfig,
+  to: string,
+  subject: string,
+  content: string,
+  deliveryId: string
+): Promise<DeliveryStatus> {
+  if (!config.env?.EMAIL?.send || !config.fromEmail) {
+    throw new Error('Missing Cloudflare Email Service binding or sender');
+  }
+
+  const response = await config.env.EMAIL.send({
+    to,
+    from: { email: config.fromEmail, name: config.fromName || 'Tirak' },
+    replyTo: config.replyTo || config.fromEmail,
+    subject,
+    html: content.includes('<html') || content.includes('<p') ? content : renderBasicEmail(subject, content),
+    text: content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || subject
+  });
+
+  return {
+    id: response?.messageId || deliveryId,
+    status: 'sent',
+    timestamp: new Date(),
+    provider: 'cloudflare'
+  };
+}
+
+async function sendMailChannelsEmail(
+  config: EmailConfig,
+  to: string,
+  subject: string,
+  content: string,
+  deliveryId: string
+): Promise<DeliveryStatus> {
+  if (!config.apiKey || !config.fromEmail) {
+    throw new Error('Missing MailChannels configuration');
+  }
+
+  const response = await fetch('https://api.mailchannels.net/tx/v1/send', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': config.apiKey,
+    },
+    body: JSON.stringify({
+      personalizations: [{ to: [{ email: to }] }],
+      from: { email: config.fromEmail, name: config.fromName || 'Tirak' },
+      reply_to: config.replyTo ? { email: config.replyTo } : undefined,
+      subject,
+      content: [
+        {
+          type: 'text/html',
+          value: content.includes('<html') || content.includes('<p') ? content : renderBasicEmail(subject, content),
+        },
+        {
+          type: 'text/plain',
+          value: content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || subject,
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`MailChannels email failed with ${response.status}`);
+  }
+
+  return {
+    id: deliveryId,
+    status: 'sent',
+    timestamp: new Date(),
+    provider: 'mailchannels'
+  };
 }
 
 // Twilio SMS implementation
@@ -380,14 +489,31 @@ export function createSMSConfig(env: any): SMSConfig {
 }
 
 export function createEmailConfig(env: any): EmailConfig {
-  const provider = env.EMAIL_PROVIDER || 'sendgrid';
+  const provider = env.EMAIL_PROVIDER || 'cloudflare';
 
-  if (provider === 'sendgrid') {
+  if (provider === 'cloudflare') {
+    return {
+      provider: 'cloudflare',
+      env,
+      fromEmail: env.EMAIL_FROM || 'noreply@tirak.app',
+      fromName: env.EMAIL_FROM_NAME || 'Tirak',
+      replyTo: env.EMAIL_REPLY_TO || 'support@tirak.app'
+    };
+  } else if (provider === 'mailchannels') {
+    return {
+      provider: 'mailchannels',
+      apiKey: env.MAILCHANNELS_API_KEY,
+      fromEmail: env.MAILCHANNELS_FROM_EMAIL || env.EMAIL_FROM || 'noreply@tirak.app',
+      fromName: env.MAILCHANNELS_FROM_NAME || env.EMAIL_FROM_NAME || 'Tirak',
+      replyTo: env.EMAIL_REPLY_TO || 'support@tirak.app'
+    };
+  } else if (provider === 'sendgrid') {
     return {
       provider: 'sendgrid',
       apiKey: env.SENDGRID_API_KEY,
-      fromEmail: env.SENDGRID_FROM_EMAIL,
-      fromName: env.SENDGRID_FROM_NAME || 'Tirak'
+      fromEmail: env.SENDGRID_FROM_EMAIL || env.EMAIL_FROM,
+      fromName: env.SENDGRID_FROM_NAME || env.EMAIL_FROM_NAME || 'Tirak',
+      replyTo: env.EMAIL_REPLY_TO || 'support@tirak.app'
     };
   } else if (provider === 'aws-ses') {
     return {
@@ -395,8 +521,9 @@ export function createEmailConfig(env: any): EmailConfig {
       accessKeyId: env.AWS_ACCESS_KEY_ID,
       secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
       region: env.AWS_REGION || 'us-east-1',
-      fromEmail: env.AWS_SES_FROM_EMAIL,
-      fromName: env.AWS_SES_FROM_NAME || 'Tirak'
+      fromEmail: env.AWS_SES_FROM_EMAIL || env.EMAIL_FROM,
+      fromName: env.AWS_SES_FROM_NAME || env.EMAIL_FROM_NAME || 'Tirak',
+      replyTo: env.EMAIL_REPLY_TO || 'support@tirak.app'
     };
   }
 

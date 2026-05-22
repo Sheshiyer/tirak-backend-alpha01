@@ -5,6 +5,7 @@ import { validateUUID, validatePagination } from '../middleware/validation';
 import { authMiddleware } from '../middleware/auth';
 import { createRateLimit } from '../middleware/rateLimit';
 import { jsonSuccess, jsonError, jsonPaginated, createPagination } from '../utils/response';
+import { firstProfileImage } from '../utils/profileImages';
 import type { Env, Variables } from '../index';
 
 const reviews = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -54,7 +55,7 @@ reviews.post('/', zValidator('json', createReviewSchema), async (c) => {
 
     // Check if review already exists
     const existingReview = await c.env.DB.prepare(`
-      SELECT id FROM reviews WHERE booking_id = ? AND customer_id = ?
+      SELECT id FROM reviews WHERE booking_id = ? AND reviewer_id = ?
     `).bind(reviewData.bookingId, userId).first();
 
     if (existingReview) {
@@ -67,17 +68,16 @@ reviews.post('/', zValidator('json', createReviewSchema), async (c) => {
 
     await c.env.DB.prepare(`
       INSERT INTO reviews (
-        id, booking_id, companion_id, customer_id, rating, comment,
-        categories, verified, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, booking_id, reviewer_id, reviewee_id, rating, comment,
+        is_public, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       reviewId,
       reviewData.bookingId,
-      reviewData.companionId,
       userId,
+      reviewData.companionId,
       reviewData.rating,
       reviewData.comment,
-      JSON.stringify(reviewData.categories || {}),
       true, // Reviews from completed bookings are verified
       now,
       now
@@ -114,23 +114,29 @@ reviews.post('/', zValidator('json', createReviewSchema), async (c) => {
       SELECT 
         r.*,
         cp.display_name as customer_name,
-        cp.profile_images as customer_images
+        cp.profile_image as customer_image
       FROM reviews r
-      JOIN customer_profiles cp ON r.customer_id = cp.user_id
+      JOIN customer_profiles cp ON r.reviewer_id = cp.user_id
       WHERE r.id = ?
     `).bind(reviewId).first();
 
+    if (!createdReview) {
+      return jsonError(c, 'Review failed', 'Created review could not be loaded', 500);
+    }
+
+    const created = createdReview as any;
+
     return jsonSuccess(c, {
       review: {
-        id: createdReview.id,
-        bookingId: createdReview.booking_id,
-        companionId: createdReview.companion_id,
-        customerId: createdReview.customer_id,
-        rating: createdReview.rating,
-        comment: createdReview.comment,
-        categories: JSON.parse(createdReview.categories || '{}'),
-        verified: createdReview.verified,
-        createdAt: createdReview.created_at
+        id: created.id,
+        bookingId: created.booking_id,
+        companionId: created.reviewee_id,
+        customerId: created.reviewer_id,
+        rating: created.rating,
+        comment: created.comment,
+        categories: reviewData.categories || {},
+        verified: true,
+        createdAt: created.created_at
       }
     }, 'Review created successfully', 201);
 
@@ -143,9 +149,9 @@ reviews.post('/', zValidator('json', createReviewSchema), async (c) => {
 /**
  * Get companion reviews
  */
-reviews.get('/companion/:id', validateUUID('id'), validatePagination, async (c) => {
+reviews.get('/companion/:id', validateUUID('id'), validatePagination(), async (c) => {
   const companionId = c.req.param('id');
-  const { page, limit } = c.get('pagination');
+  const { page, limit } = c.get('validatedQuery');
   const rating = c.req.query('rating');
   
   try {
@@ -162,10 +168,10 @@ reviews.get('/companion/:id', validateUUID('id'), validatePagination, async (c) 
       SELECT 
         r.*,
         cp.display_name as customer_name,
-        cp.profile_images as customer_images
+        cp.profile_image as customer_image
       FROM reviews r
-      JOIN customer_profiles cp ON r.customer_id = cp.user_id
-      WHERE r.companion_id = ?
+      JOIN customer_profiles cp ON r.reviewer_id = cp.user_id
+      WHERE r.reviewee_id = ? AND r.is_public = TRUE
     `;
 
     const queryParams = [companionId];
@@ -180,7 +186,7 @@ reviews.get('/companion/:id', validateUUID('id'), validatePagination, async (c) 
     // Get total count
     const countQuery = query.replace(/SELECT.*FROM/, 'SELECT COUNT(*) as total FROM');
     const countResult = await c.env.DB.prepare(countQuery).bind(...queryParams).first();
-    const total = countResult?.total as number || 0;
+    const total = Number((countResult as any)?.total || 0);
 
     // Get paginated results
     const offset = (page - 1) * limit;
@@ -189,16 +195,16 @@ reviews.get('/companion/:id', validateUUID('id'), validatePagination, async (c) 
       .bind(...queryParams, limit, offset).all();
 
     const reviewsList = reviewsResult.results.map((review: any) => ({
-      id: review.id,
-      customer: {
-        id: review.customer_id,
+        id: review.id,
+        customer: {
+        id: review.reviewer_id,
         name: review.customer_name,
-        profileImage: JSON.parse(review.customer_images || '[]')[0] || null
+        profileImage: firstProfileImage(review.customer_image)
       },
       rating: review.rating,
       comment: review.comment,
-      categories: JSON.parse(review.categories || '{}'),
-      verified: review.verified,
+      categories: {},
+      verified: true,
       createdAt: review.created_at
     }));
 
@@ -212,29 +218,30 @@ reviews.get('/companion/:id', validateUUID('id'), validatePagination, async (c) 
         SUM(CASE WHEN rating = 3 THEN 1 ELSE 0 END) as rating_3,
         SUM(CASE WHEN rating = 2 THEN 1 ELSE 0 END) as rating_2,
         SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END) as rating_1,
-        AVG(JSON_EXTRACT(categories, '$.communication')) as avg_communication,
-        AVG(JSON_EXTRACT(categories, '$.punctuality')) as avg_punctuality,
-        AVG(JSON_EXTRACT(categories, '$.professionalism')) as avg_professionalism,
-        AVG(JSON_EXTRACT(categories, '$.knowledge')) as avg_knowledge
+        0 as avg_communication,
+        0 as avg_punctuality,
+        0 as avg_professionalism,
+        0 as avg_knowledge
       FROM reviews
-      WHERE companion_id = ?
+      WHERE reviewee_id = ? AND is_public = TRUE
     `).bind(companionId).first();
 
+    const summaryRow = summaryResult as any;
     const summary = {
-      averageRating: Math.round((summaryResult?.average_rating || 0) * 10) / 10,
-      totalReviews: summaryResult?.total_reviews || 0,
+      averageRating: Math.round(Number(summaryRow?.average_rating || 0) * 10) / 10,
+      totalReviews: Number(summaryRow?.total_reviews || 0),
       ratingDistribution: {
-        5: summaryResult?.rating_5 || 0,
-        4: summaryResult?.rating_4 || 0,
-        3: summaryResult?.rating_3 || 0,
-        2: summaryResult?.rating_2 || 0,
-        1: summaryResult?.rating_1 || 0
+        5: Number(summaryRow?.rating_5 || 0),
+        4: Number(summaryRow?.rating_4 || 0),
+        3: Number(summaryRow?.rating_3 || 0),
+        2: Number(summaryRow?.rating_2 || 0),
+        1: Number(summaryRow?.rating_1 || 0)
       },
       categoryAverages: {
-        communication: Math.round((summaryResult?.avg_communication || 0) * 10) / 10,
-        punctuality: Math.round((summaryResult?.avg_punctuality || 0) * 10) / 10,
-        professionalism: Math.round((summaryResult?.avg_professionalism || 0) * 10) / 10,
-        knowledge: Math.round((summaryResult?.avg_knowledge || 0) * 10) / 10
+        communication: Math.round(Number(summaryRow?.avg_communication || 0) * 10) / 10,
+        punctuality: Math.round(Number(summaryRow?.avg_punctuality || 0) * 10) / 10,
+        professionalism: Math.round(Number(summaryRow?.avg_professionalism || 0) * 10) / 10,
+        knowledge: Math.round(Number(summaryRow?.avg_knowledge || 0) * 10) / 10
       }
     };
 
@@ -255,7 +262,7 @@ async function updateCompanionRating(db: any, companionId: string) {
   const ratingResult = await db.prepare(`
     SELECT AVG(rating) as avg_rating, COUNT(*) as review_count
     FROM reviews
-    WHERE companion_id = ?
+    WHERE reviewee_id = ? AND is_public = TRUE
   `).bind(companionId).first();
 
   if (ratingResult) {

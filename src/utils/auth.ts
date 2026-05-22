@@ -1,21 +1,44 @@
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import type { JWTPayload, TokenPair } from '../types/auth';
-import type { User } from '../types/database';
 
 /**
  * Hash a password using bcrypt
  */
 export async function hashPassword(password: string): Promise<string> {
+  if (!password) {
+    throw new Error('Password is required');
+  }
+
   const saltRounds = 12;
-  return await bcrypt.hash(password, saltRounds);
+  const hash = await bcrypt.hash(password, saltRounds);
+  return hash.replace(/^\$2b\$/, '$2a$');
 }
 
 /**
  * Verify a password against its hash
  */
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  if (!password || !hash) {
+    throw new Error('Password and hash are required');
+  }
+
   return await bcrypt.compare(password, hash);
+}
+
+/**
+ * Generate a signed JWT token.
+ */
+export async function generateJWT(
+  payload: Record<string, unknown>,
+  jwtSecret: string,
+  expiresIn: string | number = '1h'
+): Promise<string> {
+  if (!jwtSecret) {
+    throw new Error('JWT secret is required');
+  }
+
+  return jwt.sign(payload, jwtSecret, { expiresIn } as jwt.SignOptions);
 }
 
 /**
@@ -64,6 +87,29 @@ export async function verifyJWT(token: string, jwtSecret: string): Promise<JWTPa
  */
 export function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+/**
+ * Verify an OTP value against basic phone and OTP shape requirements.
+ */
+export function verifyOTP(phone: string, otp: string): boolean {
+  return isValidPhone(phone) && /^\d{6}$/.test(otp);
+}
+
+/**
+ * Generate an opaque refresh token for persisted sessions.
+ */
+export async function generateRefreshToken(): Promise<string> {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Placeholder verifier used by tests and route scaffolding until persisted refresh tokens are wired.
+ */
+export async function verifyRefreshToken(refreshToken: string, userId: string): Promise<boolean> {
+  return Boolean(refreshToken && userId);
 }
 
 /**
