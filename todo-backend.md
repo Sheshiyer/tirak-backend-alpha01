@@ -743,3 +743,23 @@ This document provides a comprehensive, phase-based breakdown of all backend imp
 - The live database contains the referral tables plus the registration/profile persistence columns added by migrations `006` and `007`.
 - Deployed top-level Worker `tirak-backend` with `--env="" --keep-vars`; current Worker version is `29a50157-bded-46ad-87e0-02a7062d0680`.
 - Smoke checks passed: `/health` returned 200, `/api/public/health` returned healthy database/cache/storage/queues, and `/api/public/stats` returned live D1 data.
+
+## Production Binding Verification - 2026-05-26
+- [x] Confirm this backend repo has only the Tirak backend Worker config at `wrangler.toml`.
+- [x] Confirm current live Worker `https://tirak-backend.tirak-court.workers.dev` is healthy and reports `environment: development`.
+- [x] Pin `wrangler.toml` to Tirak backend Cloudflare account `2c0c96c68f0ee73b6d980054557bca5b` so future deploys fail loudly when Wrangler is authenticated to the wrong account.
+- [x] Add explicit staging/production Durable Object bindings because Wrangler environments do not inherit top-level Durable Objects.
+- [x] Re-authenticate Wrangler as the Tirak Cloudflare account and live-list D1/KV/R2/Queue resources before replacing production placeholders.
+- [x] Create production KV namespaces, production R2 bucket, production queues, and production DLQs in the Tirak account.
+- [x] Create fresh D1 `tirak-mobile-production` and import the current live `tirak-development` export into it.
+- [x] Deploy `tirak-backend-production` to the Tirak account and smoke-test health/stats.
+
+### Production Binding Notes
+- Wrangler OAuth is authenticated as `tirak.court@gmail.com` on account `2c0c96c68f0ee73b6d980054557bca5b`.
+- Live inventory showed D1 candidates under the Tirak account: `tirak-main` (`fe94000d-ef78-4059-ba2c-23a638909b27`, older profile data), `tirak-production` (`c7564c30-d5d9-4d4c-8585-2c5dd7c30ca7`, stale/empty rows and missing newer tables), `tirak-development` (`60443346-c480-4975-962e-bd4daf4a37a8`, current live source), and new `tirak-mobile-production` (`e17982a4-d4e0-47ae-bc24-3c88c4003a4c`, imported from `tirak-development`).
+- Tirak Plus Worker configs are separate (`tirakplus`, `tirakplus0admin`, `tirakplus-muse-rag`) and should not be used for this backend binding work.
+- Production bindings now resolve to `tirak-mobile-production`, `production-CACHE`, `production-SESSIONS`, `tirak-storage-production`, and the `tirak-*-production` queues/DLQs.
+- Production `JWT_SECRET` is stored as a Cloudflare Worker secret, not in `wrangler.toml`.
+- `tirak-backend-production` deployed as version `adb9ebf8-86ca-4f80-99b9-56fd12d00eca` at `https://tirak-backend-production.tirak-court.workers.dev`.
+- Smoke checks passed: `/health` returns production OK, `/api/public/health` returns healthy with cache marked `degraded` due Cloudflare KV daily write quota, and `/api/public/stats` returns migrated D1 data.
+- `/tmp/tirak-cloudflare-migration-2026-05-26/tirak-development-live-export.sql` is the local export used for the import. It contains live data and must not be committed.

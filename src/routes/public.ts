@@ -7,6 +7,24 @@ import type { Env, Variables } from '../index';
 
 const publicRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+async function getPublicCache<T>(cache: KVNamespace, key: string): Promise<T | null> {
+  try {
+    const cached = await cache.get(key);
+    return cached ? JSON.parse(cached) as T : null;
+  } catch (error) {
+    console.warn('Public cache read skipped:', error);
+    return null;
+  }
+}
+
+async function putPublicCache(cache: KVNamespace, key: string, value: unknown, expirationTtl: number): Promise<void> {
+  try {
+    await cache.put(key, JSON.stringify(value), { expirationTtl });
+  } catch (error) {
+    console.warn('Public cache write skipped:', error);
+  }
+}
+
 // Apply rate limiting
 publicRoutes.use('*', createRateLimit('general'));
 
@@ -17,10 +35,10 @@ publicRoutes.get('/stats', async (c) => {
   try {
     // Check cache first
     const cacheKey = 'public:stats';
-    const cached = await c.env.CACHE.get(cacheKey);
+    const cached = await getPublicCache(c.env.CACHE, cacheKey);
     
     if (cached) {
-      return cachedResponse(c, JSON.parse(cached), 300); // 5 minutes cache
+      return cachedResponse(c, cached, 300); // 5 minutes cache
     }
 
     // Get statistics from database
@@ -76,7 +94,7 @@ publicRoutes.get('/stats', async (c) => {
     };
 
     // Cache for 5 minutes
-    await c.env.CACHE.put(cacheKey, JSON.stringify(stats), { expirationTtl: 300 });
+    await putPublicCache(c.env.CACHE, cacheKey, stats, 300);
 
     return jsonSuccess(c, stats, 'Platform statistics retrieved successfully');
 
@@ -95,10 +113,10 @@ publicRoutes.get('/categories', validatePagination(), async (c) => {
   try {
     // Check cache first
     const cacheKey = `public:categories:${page}:${limit}`;
-    const cached = await c.env.CACHE.get(cacheKey);
+    const cached = await getPublicCache(c.env.CACHE, cacheKey);
     
     if (cached) {
-      return cachedResponse(c, JSON.parse(cached), 1800); // 30 minutes cache
+      return cachedResponse(c, cached, 1800); // 30 minutes cache
     }
 
     // Get total count
@@ -140,7 +158,7 @@ publicRoutes.get('/categories', validatePagination(), async (c) => {
     };
 
     // Cache for 30 minutes
-    await c.env.CACHE.put(cacheKey, JSON.stringify(response), { expirationTtl: 1800 });
+    await putPublicCache(c.env.CACHE, cacheKey, response, 1800);
 
     return jsonPaginated(c, categories, createPagination(page, limit, total), 'Categories retrieved successfully');
 
@@ -159,10 +177,10 @@ publicRoutes.get('/regions', validatePagination(), async (c) => {
   try {
     // Check cache first
     const cacheKey = `public:regions:${page}:${limit}`;
-    const cached = await c.env.CACHE.get(cacheKey);
+    const cached = await getPublicCache(c.env.CACHE, cacheKey);
     
     if (cached) {
-      return cachedResponse(c, JSON.parse(cached), 1800); // 30 minutes cache
+      return cachedResponse(c, cached, 1800); // 30 minutes cache
     }
 
     // Get total count
@@ -200,7 +218,7 @@ publicRoutes.get('/regions', validatePagination(), async (c) => {
     };
 
     // Cache for 30 minutes
-    await c.env.CACHE.put(cacheKey, JSON.stringify(response), { expirationTtl: 1800 });
+    await putPublicCache(c.env.CACHE, cacheKey, response, 1800);
 
     return jsonPaginated(c, regions, createPagination(page, limit, total), 'Regions retrieved successfully');
 
@@ -219,10 +237,10 @@ publicRoutes.get('/featured-suppliers', validatePagination(), async (c) => {
   try {
     // Check cache first
     const cacheKey = `public:featured:${page}:${limit}`;
-    const cached = await c.env.CACHE.get(cacheKey);
+    const cached = await getPublicCache(c.env.CACHE, cacheKey);
     
     if (cached) {
-      return cachedResponse(c, JSON.parse(cached), 600); // 10 minutes cache
+      return cachedResponse(c, cached, 600); // 10 minutes cache
     }
 
     // Get featured suppliers (top rated, verified, active)
@@ -280,7 +298,7 @@ publicRoutes.get('/featured-suppliers', validatePagination(), async (c) => {
     };
 
     // Cache for 10 minutes
-    await c.env.CACHE.put(cacheKey, JSON.stringify(response), { expirationTtl: 600 });
+    await putPublicCache(c.env.CACHE, cacheKey, response, 600);
 
     return jsonPaginated(c, suppliers, createPagination(page, limit, total), 'Featured suppliers retrieved successfully');
 
@@ -304,10 +322,10 @@ publicRoutes.get('/search-suggestions', async (c) => {
   try {
     // Check cache first
     const cacheKey = `suggestions:${type}:${query.toLowerCase()}`;
-    const cached = await c.env.CACHE.get(cacheKey);
+    const cached = await getPublicCache(c.env.CACHE, cacheKey);
     
     if (cached) {
-      return cachedResponse(c, JSON.parse(cached), 300); // 5 minutes cache
+      return cachedResponse(c, cached, 300); // 5 minutes cache
     }
 
     const suggestions: any = {
@@ -370,7 +388,7 @@ publicRoutes.get('/search-suggestions', async (c) => {
     }
 
     // Cache for 5 minutes
-    await c.env.CACHE.put(cacheKey, JSON.stringify(results), { expirationTtl: 300 });
+    await putPublicCache(c.env.CACHE, cacheKey, results, 300);
 
     return jsonSuccess(c, results, 'Search suggestions retrieved successfully');
 
@@ -387,10 +405,10 @@ publicRoutes.get('/config', async (c) => {
   try {
     // Check cache first
     const cacheKey = 'public:config';
-    const cached = await c.env.CACHE.get(cacheKey);
+    const cached = await getPublicCache(c.env.CACHE, cacheKey);
     
     if (cached) {
-      return cachedResponse(c, JSON.parse(cached), 3600); // 1 hour cache
+      return cachedResponse(c, cached, 3600); // 1 hour cache
     }
 
     const config = {
@@ -427,7 +445,7 @@ publicRoutes.get('/config', async (c) => {
     };
 
     // Cache for 1 hour
-    await c.env.CACHE.put(cacheKey, JSON.stringify(config), { expirationTtl: 3600 });
+    await putPublicCache(c.env.CACHE, cacheKey, config, 3600);
 
     return jsonSuccess(c, config, 'Platform configuration retrieved successfully');
 
@@ -446,17 +464,23 @@ publicRoutes.get('/health', async (c) => {
     const dbCheck = await c.env.DB.prepare('SELECT 1 as test').first();
     const dbHealthy = !!dbCheck;
 
-    // Check cache connectivity
-    const cacheCheck = await c.env.CACHE.get('health-check');
-    await c.env.CACHE.put('health-check', 'ok', { expirationTtl: 60 });
-    const cacheHealthy = true; // If we get here, cache is working
+    // Check cache connectivity. Cache quota exhaustion should degrade cache
+    // status without taking the public API offline.
+    let cacheHealthy = true;
+    try {
+      await c.env.CACHE.get('health-check');
+      await c.env.CACHE.put('health-check', 'ok', { expirationTtl: 60 });
+    } catch (error) {
+      console.warn('Public health cache check degraded:', error);
+      cacheHealthy = false;
+    }
 
     const health = {
-      status: dbHealthy && cacheHealthy ? 'healthy' : 'unhealthy',
+      status: dbHealthy ? 'healthy' : 'unhealthy',
       timestamp: new Date().toISOString(),
       services: {
         database: dbHealthy ? 'healthy' : 'unhealthy',
-        cache: cacheHealthy ? 'healthy' : 'unhealthy',
+        cache: cacheHealthy ? 'healthy' : 'degraded',
         storage: 'healthy', // Assume healthy if no errors
         queues: 'healthy' // Assume healthy if no errors
       },
