@@ -133,9 +133,13 @@ export function validatePagination() {
   const schema = z.object({
     page: z.string().optional().transform(val => val ? parseInt(val, 10) : 1),
     limit: z.string().optional().transform(val => val ? parseInt(val, 10) : 20),
+    pageSize: z.string().optional().transform(val => val ? parseInt(val, 10) : undefined),
     sort: z.string().optional(),
     order: z.enum(['asc', 'desc']).optional().default('desc')
-  }).refine(data => data.page > 0, {
+  }).transform(data => ({
+    ...data,
+    limit: data.pageSize ?? data.limit
+  })).refine(data => data.page > 0, {
     message: 'Page must be greater than 0',
     path: ['page']
   }).refine(data => data.limit > 0 && data.limit <= 100, {

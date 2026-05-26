@@ -22,6 +22,7 @@ const userSearchSchema = z.object({
   userType: z.enum(['customer', 'supplier', 'admin']).optional(),
   status: z.enum(['active', 'suspended', 'pending']).optional(),
   verified: z.boolean().optional(),
+  mode: z.enum(['tirak', 'tirakplus']).default('tirak'),
   sortBy: z.enum(['created_at', 'last_login_at', 'email']).default('created_at'),
   sortOrder: z.enum(['asc', 'desc']).default('desc')
 });
@@ -39,14 +40,23 @@ const bulkActionSchema = z.object({
   reason: z.string().optional()
 });
 
+const supplierVerificationSchema = z.object({
+  status: z.enum(['verified', 'rejected', 'pending']),
+  reason: z.string().max(500).optional()
+});
+
 /**
  * Get all users with filtering and pagination
  */
 users.get('/', validatePagination(), zValidator('query', userSearchSchema), async (c) => {
   const { page, limit } = c.get('validatedQuery');
-  const { search, userType, status, verified, sortBy, sortOrder } = c.req.valid('query');
+  const { search, userType, status, verified, mode, sortBy, sortOrder } = c.req.valid('query');
   
   try {
+    if (mode === 'tirakplus') {
+      return jsonPaginated(c, [], createPagination(page, limit, 0), 'Tirak Plus user data is served by the admin app demo layer.');
+    }
+
     // Build WHERE clause
     const conditions = [];
     const params = [];
@@ -106,9 +116,43 @@ users.get('/', validatePagination(), zValidator('query', userSearchSchema), asyn
         u.last_login_at,
         COALESCE(cp.display_name, sp.display_name) as display_name,
         sp.verification_status as supplier_verification,
+        sp.verification_status,
+        sp.verification_status as verificationStatus,
         sp.subscription_status,
+        sp.subscription_tier,
+        sp.subscription_tier as subscriptionTier,
+        sp.categories,
+        sp.regions,
+        sp.spoken_languages,
+        sp.location,
+        sp.first_name,
+        sp.last_name,
+        sp.bio as supplier_bio,
+        sp.profile_images,
+        cp.profile_image as customer_profile_image,
+        cp.preferences as customer_preferences,
+        cp.loyalty_points,
+        cp.bio as customer_bio,
         sp.rating_average,
-        sp.rating_count
+        sp.rating_average as ratingAverage,
+        sp.rating_count,
+        (
+          SELECT COUNT(*)
+          FROM bookings b
+          WHERE b.customer_id = u.id OR b.supplier_id = u.id
+        ) as booking_count,
+        (
+          SELECT COALESCE(SUM(b.total_amount), 0)
+          FROM bookings b
+          WHERE b.customer_id = u.id AND b.status = 'completed'
+        ) as total_spent,
+        (
+          SELECT COALESCE(SUM(b.total_amount), 0)
+          FROM bookings b
+          WHERE b.supplier_id = u.id
+            AND b.status = 'completed'
+            AND DATE(b.created_at) >= DATE('now', '-30 days')
+        ) as monthly_earnings
       FROM users u
       LEFT JOIN customer_profiles cp ON u.id = cp.user_id
       LEFT JOIN supplier_profiles sp ON u.id = sp.user_id
@@ -136,8 +180,17 @@ users.get('/', validatePagination(), zValidator('query', userSearchSchema), asyn
  */
 users.get('/:userId', validateUUID('userId'), async (c) => {
   const userId = c.req.param('userId');
+  const mode = c.req.query('mode') || 'tirak';
   
   try {
+    if (mode !== 'tirak' && mode !== 'tirakplus') {
+      return jsonError(c, 'Invalid mode', 'Admin user detail mode must be tirak or tirakplus', 400);
+    }
+
+    if (mode === 'tirakplus') {
+      return jsonError(c, 'User not available', 'Tirak Plus user details are served by the admin app demo layer', 404);
+    }
+
     // Get user with profile data
     const user = await c.env.DB.prepare(`
       SELECT 
@@ -157,7 +210,15 @@ users.get('/:userId', validateUUID('userId'), async (c) => {
         sp.verification_status,
         sp.subscription_status,
         sp.subscription_tier,
-        sp.subscription_expires_at
+        sp.subscription_expires_at,
+        sp.location as supplier_location,
+        sp.first_name as supplier_first_name,
+        sp.last_name as supplier_last_name,
+        sp.cover_photo as supplier_cover_photo,
+        sp.social_links as supplier_social_links,
+        sp.certifications as supplier_certifications,
+        sp.experience_stats as supplier_experience_stats,
+        cp.bio as customer_bio
       FROM users u
       LEFT JOIN customer_profiles cp ON u.id = cp.user_id
       LEFT JOIN supplier_profiles sp ON u.id = sp.user_id
@@ -205,8 +266,42 @@ users.get('/:userId', validateUUID('userId'), async (c) => {
       ORDER BY last_active_at DESC
     `).bind(userId).all();
 
+    const bookingStats = await c.env.DB.prepare(`
+      SELECT
+        COUNT(*) as total_bookings,
+        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_bookings,
+        COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_bookings,
+        COALESCE(SUM(CASE WHEN customer_id = ? AND status = 'completed' THEN total_amount ELSE 0 END), 0) as total_spent,
+        COALESCE(SUM(CASE WHEN supplier_id = ? AND status = 'completed' THEN total_amount ELSE 0 END), 0) as supplier_earnings
+      FROM bookings
+      WHERE customer_id = ? OR supplier_id = ?
+    `).bind(userId, userId, userId, userId).first();
+
+    const favoriteStats = await c.env.DB.prepare(`
+      SELECT preferences
+      FROM customer_profiles
+      WHERE user_id = ?
+    `).bind(userId).first();
+
+    let favoriteSuppliers = 0;
+    try {
+      const preferences = JSON.parse(String((favoriteStats as any)?.preferences || '{}'));
+      const favorites = preferences.favoriteSuppliers || preferences.favorite_supplier_ids || [];
+      favoriteSuppliers = Array.isArray(favorites) ? favorites.length : 0;
+    } catch {
+      favoriteSuppliers = 0;
+    }
+
     return jsonSuccess(c, {
       user,
+      stats: {
+        totalBookings: (bookingStats as any)?.total_bookings || 0,
+        completedBookings: (bookingStats as any)?.completed_bookings || 0,
+        pendingBookings: (bookingStats as any)?.pending_bookings || 0,
+        totalSpent: (bookingStats as any)?.total_spent || 0,
+        supplierEarnings: (bookingStats as any)?.supplier_earnings || 0,
+        favoriteSuppliers
+      },
       recentActivity: recentActivity.results || [],
       activeSessions: sessions.results || []
     }, 'User details retrieved successfully');
@@ -214,6 +309,58 @@ users.get('/:userId', validateUUID('userId'), async (c) => {
   } catch (error) {
     console.error('Admin user details error:', error);
     return jsonError(c, 'Failed to retrieve user', 'An error occurred while retrieving user details', 500);
+  }
+});
+
+/**
+ * Update supplier/local-guide verification status.
+ */
+users.patch('/:userId/supplier-verification', validateUUID('userId'), zValidator('json', supplierVerificationSchema), async (c) => {
+  const userId = c.req.param('userId');
+  const { status, reason } = c.req.valid('json');
+  const adminUserId = c.get('userId');
+
+  try {
+    const supplier = await c.env.DB.prepare(`
+      SELECT sp.user_id, u.email
+      FROM supplier_profiles sp
+      JOIN users u ON u.id = sp.user_id
+      WHERE sp.user_id = ?
+    `).bind(userId).first();
+
+    if (!supplier) {
+      return jsonError(c, 'Supplier not found', 'The specified user does not have a supplier profile', 404);
+    }
+
+    await c.env.DB.prepare(`
+      UPDATE supplier_profiles
+      SET verification_status = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = ?
+    `).bind(status, userId).run();
+
+    await c.env.DB.prepare(`
+      INSERT INTO notifications (id, user_id, type, title, message, data, read, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, FALSE, ?)
+    `).bind(
+      crypto.randomUUID(),
+      userId,
+      status === 'verified' ? 'supplier_verified' : status === 'rejected' ? 'supplier_rejected' : 'supplier_review_pending',
+      status === 'verified' ? 'Profile verified' : status === 'rejected' ? 'Profile needs updates' : 'Profile review reset',
+      reason || (status === 'verified' ? 'Your local guide profile has been verified.' : status === 'rejected' ? 'Your local guide profile was not approved yet.' : 'Your local guide profile is back in review.'),
+      JSON.stringify({ status, reason, reviewedBy: adminUserId }),
+      new Date().toISOString()
+    ).run();
+
+    console.log(`Admin ${adminUserId} updated supplier verification ${userId}:`, { status, reason });
+
+    return jsonSuccess(c, {
+      userId,
+      verificationStatus: status,
+      reason
+    }, 'Supplier verification updated successfully');
+  } catch (error) {
+    console.error('Supplier verification update error:', error);
+    return jsonError(c, 'Failed to update supplier', 'An error occurred while updating supplier verification', 500);
   }
 });
 

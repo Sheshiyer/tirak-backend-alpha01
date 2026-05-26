@@ -22,6 +22,67 @@ type DashboardIntegration = {
   error?: string;
 };
 
+type AdminBusinessMode = 'tirak' | 'tirakplus';
+
+function parseAdminBusinessMode(value?: string | null): AdminBusinessMode | null {
+  if (!value || value === 'tirak') {
+    return 'tirak';
+  }
+  if (value === 'tirakplus') {
+    return 'tirakplus';
+  }
+  return null;
+}
+
+function emptyOverview(mode: AdminBusinessMode, integrations: DashboardIntegration[]) {
+  return {
+    mode,
+    users: {
+      total: 0,
+      active: 0,
+      today: 0,
+      byType: {}
+    },
+    bookings: {
+      total: 0,
+      completed: 0,
+      today: 0,
+      revenue: { total: 0, monthly: 0 }
+    },
+    chat: {
+      activeRooms: 0,
+      totalMessages: 0,
+      todayMessages: 0
+    },
+    suppliers: {
+      verification: {}
+    },
+    recentActivity: {},
+    operations: {
+      bookings: {
+        pending: 0,
+        confirmed: 0,
+        upcoming: 0
+      },
+      notifications: {
+        unread: 0,
+        recent: 0
+      },
+      referrals: {
+        awardedEvents: 0,
+        coinsIssued: 0
+      },
+      email: {
+        configured: false,
+        provider: 'unconfigured',
+        from: null
+      }
+    },
+    integrations,
+    generatedAt: new Date().toISOString()
+  };
+}
+
 function missingIntegration(id: string, label: string, required: string[]): DashboardIntegration {
   return {
     id,
@@ -309,6 +370,16 @@ dashboard.use('*', createRateLimit('admin'));
  */
 dashboard.get('/overview', async (c) => {
   try {
+    const mode = parseAdminBusinessMode(c.req.query('mode'));
+    if (!mode) {
+      return jsonError(c, 'Invalid mode', 'Admin dashboard mode must be tirak or tirakplus', 400);
+    }
+
+    const integrations = await getIntegrationOverview(c.env);
+    if (mode === 'tirakplus') {
+      return jsonSuccess(c, emptyOverview(mode, integrations), 'Tirak Plus dashboard data is served by the admin app demo layer.');
+    }
+
     // Get current date for time-based queries
     const now = new Date();
     const today = now.toISOString().split('T')[0];
@@ -380,9 +451,37 @@ dashboard.get('/overview', async (c) => {
       WHERE created_at >= datetime('now', '-24 hours')
     `).all();
 
-    const integrations = await getIntegrationOverview(c.env);
+    const pendingBookings = await c.env.DB.prepare(`
+      SELECT
+        COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending,
+        COUNT(CASE WHEN status = 'confirmed' THEN 1 END) as confirmed
+      FROM bookings
+    `).first();
+
+    const upcomingBookings = await c.env.DB.prepare(`
+      SELECT COUNT(*) as count
+      FROM bookings
+      WHERE status IN ('pending', 'confirmed')
+        AND scheduled_at >= datetime('now')
+    `).first();
+
+    const referralStats = await c.env.DB.prepare(`
+      SELECT
+        COUNT(*) as total_events,
+        COALESCE(SUM(coins_awarded), 0) as coins_issued
+      FROM referral_events
+      WHERE status = 'awarded'
+    `).first();
+
+    const notificationBacklog = await c.env.DB.prepare(`
+      SELECT
+        COUNT(CASE WHEN read = FALSE THEN 1 END) as unread,
+        COUNT(CASE WHEN created_at >= datetime('now', '-24 hours') THEN 1 END) as recent
+      FROM notifications
+    `).first();
 
     return jsonSuccess(c, {
+      mode,
       users: {
         total: userStats.results?.reduce((sum: number, row: any) => sum + row.count, 0) || 0,
         active: userStats.results?.reduce((sum: number, row: any) => sum + row.active_count, 0) || 0,
@@ -420,6 +519,26 @@ dashboard.get('/overview', async (c) => {
         acc[row.type] = row.count;
         return acc;
       }, {}) || {},
+      operations: {
+        bookings: {
+          pending: pendingBookings?.pending || 0,
+          confirmed: pendingBookings?.confirmed || 0,
+          upcoming: upcomingBookings?.count || 0
+        },
+        notifications: {
+          unread: notificationBacklog?.unread || 0,
+          recent: notificationBacklog?.recent || 0
+        },
+        referrals: {
+          awardedEvents: referralStats?.total_events || 0,
+          coinsIssued: referralStats?.coins_issued || 0
+        },
+        email: {
+          configured: Boolean(c.env.EMAIL || c.env.SENDGRID_API_KEY || c.env.MAILCHANNELS_API_KEY),
+          provider: c.env.EMAIL_PROVIDER || (c.env.EMAIL ? 'cloudflare-email' : c.env.SENDGRID_API_KEY ? 'sendgrid' : c.env.MAILCHANNELS_API_KEY ? 'mailchannels' : 'unconfigured'),
+          from: c.env.EMAIL_FROM || c.env.SENDGRID_FROM_EMAIL || c.env.MAILCHANNELS_FROM_EMAIL || null
+        }
+      },
       integrations,
       generatedAt: new Date().toISOString()
     }, 'Platform overview retrieved successfully');
@@ -528,8 +647,23 @@ dashboard.get('/health', async (c) => {
  */
 dashboard.get('/metrics', validateDateRange(), async (c) => {
   const { startDate, endDate } = c.get('validatedQuery');
+  const mode = parseAdminBusinessMode(c.req.query('mode'));
   
   try {
+    if (!mode) {
+      return jsonError(c, 'Invalid mode', 'Admin dashboard mode must be tirak or tirakplus', 400);
+    }
+
+    if (mode === 'tirakplus') {
+      return jsonSuccess(c, {
+        mode,
+        dateRange: { startDate, endDate },
+        users: [],
+        bookings: [],
+        chat: []
+      }, 'Tirak Plus metrics are served by the admin app demo layer.');
+    }
+
     // User registration metrics
     const userMetrics = await c.env.DB.prepare(`
       SELECT 
@@ -568,6 +702,7 @@ dashboard.get('/metrics', validateDateRange(), async (c) => {
     `).bind(startDate, endDate).all();
 
     return jsonSuccess(c, {
+      mode,
       dateRange: { startDate, endDate },
       users: userMetrics.results || [],
       bookings: bookingMetrics.results || [],
