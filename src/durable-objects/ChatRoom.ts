@@ -77,13 +77,12 @@ export class ChatRoom {
 
     const { 0: client, 1: server } = new WebSocketPair();
     
-    // Get user ID from URL params or auth token
+    // The authenticated route injects the verified user ID before forwarding.
     const url = new URL(request.url);
     const userId = url.searchParams.get('userId');
-    const token = url.searchParams.get('token');
     
-    if (!userId || !token) {
-      return new Response('Missing userId or token', { status: 401 });
+    if (!userId) {
+      return new Response('Missing authenticated user ID', { status: 401 });
     }
     
     // Store the connection

@@ -1,7 +1,7 @@
 {
   "name": "tirak-backend",
   "version": "1.0.0",
-  "description": "Tirak companion booking platform backend API",
+  "description": "Tirak guided-experience marketplace backend API",
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",

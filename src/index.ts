@@ -14,10 +14,8 @@ import { reviewRoutes } from './routes/reviews';
 import { paymentRoutes } from './routes/payments';
 import { notificationRoutes } from './routes/notifications';
 import { companionRoutes } from './routes/companions';
-import { conversationRoutes } from './routes/conversations';
 import { searchRoutes } from './routes/search';
 import { referralRoutes } from './routes/referrals';
-import { WebSocketService } from './services/websocket';
 import { handleModerationQueue } from './background/moderation';
 import { handleAnalyticsQueue } from './background/analytics';
 import { handleNotificationQueue } from './background/notifications';
@@ -33,6 +31,8 @@ export interface Env {
   CHAT_ROOM: DurableObjectNamespace;
   NOTIFICATION_SERVICE: DurableObjectNamespace;
   JWT_SECRET: string;
+  OMISE_SECRET_KEY?: string;
+  OMISE_WEBHOOK_SECRET?: string;
   ENVIRONMENT: string;
   FRONTEND_URLS: string;
   EMAIL?: {
@@ -88,9 +88,6 @@ export interface Variables {
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-// WebSocket service instance
-let webSocketService: WebSocketService;
-
 // Global middleware
 app.use('*', cors({
   origin: (origin, c) => {
@@ -104,38 +101,12 @@ app.use('*', cors({
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// Initialize WebSocket service
-app.use('*', async (c, next) => {
-  if (!webSocketService) {
-    webSocketService = new WebSocketService(c.env);
-  }
-  c.set('webSocketService', webSocketService);
-  await next();
-});
-
-// WebSocket endpoint for mobile app
-app.get('/ws', async (c) => {
-  if (!webSocketService) {
-    webSocketService = new WebSocketService(c.env);
-  }
-
-  const upgradeHeader = c.req.header('upgrade');
-  if (upgradeHeader !== 'websocket') {
-    return c.text('Expected Upgrade: websocket', 426);
-  }
-
-  return await webSocketService.handleUpgrade(c.req.raw);
-});
-
 // Health check endpoint
 app.get('/health', (c) => {
   return c.json({
     status: 'ok',
     environment: c.env.ENVIRONMENT,
-    timestamp: new Date().toISOString(),
-    websocket: {
-      connected: webSocketService?.getConnectedUsersCount() || 0
-    }
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -158,7 +129,6 @@ app.route('/api/reviews', reviewRoutes);
 app.route('/api/payments', paymentRoutes);
 app.route('/api/notifications', notificationRoutes);
 app.route('/api/companions', companionRoutes);
-app.route('/api/conversations', conversationRoutes);
 app.route('/api/search', searchRoutes);
 app.route('/api/referrals', referralRoutes);
 

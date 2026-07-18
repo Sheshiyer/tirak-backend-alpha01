@@ -1,6 +1,6 @@
 # Tirak Backend
 
-A comprehensive backend API for the Tirak companion booking platform, built with Cloudflare Workers and modern web technologies.
+A comprehensive backend API for Tirak's guided-experience marketplace, built with Cloudflare Workers and modern web technologies. Legacy `companion` identifiers remain internal compatibility aliases while public contracts use local-guide and named-experience language.
 
 ## 🚀 Features
 

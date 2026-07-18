@@ -15,8 +15,8 @@ bookings.use('*', authMiddleware);
 bookings.use('*', createRateLimit('booking'));
 
 const createBookingSchema = z.object({
-  companionId: z.string().uuid('Invalid companion ID'),
-  serviceId: z.string().min(1, 'Invalid service ID').optional(),
+  companionId: z.string().uuid('Invalid guide ID'),
+  serviceId: z.string().min(1, 'A guided experience is required'),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
   startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Start time must be in HH:MM format'),
   endTime: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be in HH:MM format').optional(),
@@ -39,6 +39,28 @@ const updateBookingStatusSchema = z.object({
 });
 
 type BookingData = z.infer<typeof createBookingSchema>;
+type RequestedBookingStatus = z.infer<typeof updateBookingStatusSchema>['status'];
+type BookingActor = 'customer' | 'supplier';
+
+const allowedBookingTransitions: Record<
+  BookingActor,
+  Record<string, readonly RequestedBookingStatus[]>
+> = {
+  customer: {
+    pending: ['cancelled'],
+    confirmed: ['cancelled'],
+    in_progress: [],
+    completed: [],
+    cancelled: [],
+  },
+  supplier: {
+    pending: ['confirmed', 'cancelled'],
+    confirmed: ['completed', 'cancelled'],
+    in_progress: ['completed'],
+    completed: [],
+    cancelled: [],
+  },
+};
 
 const timeToMinutes = (value: string): number => {
   const [hours = 0, minutes = 0] = value.split(':').map(Number);
@@ -72,6 +94,14 @@ const stringifyOptional = (value: unknown): string | null => {
 
 const getLocation = (booking: any): string | undefined => {
   return booking.location || booking.notes || booking.meeting_point || undefined;
+};
+
+const mobilePaymentStatus = (value: unknown, bookingStatus: unknown): string => {
+  const status = String(value || '').toLowerCase();
+  if (['completed', 'paid', 'successful', 'succeeded'].includes(status)) return 'paid';
+  if (status === 'refunded' || bookingStatus === 'cancelled') return 'refunded';
+  if (['processing', 'creating', 'indeterminate'].includes(status)) return 'processing';
+  return 'pending';
 };
 
 const formatBooking = (booking: any, userType?: string) => {
@@ -112,7 +142,7 @@ const formatBooking = (booking: any, userType?: string) => {
     status: booking.status,
     totalAmount: Number(booking.total_amount || 0),
     serviceFee: 0,
-    paymentStatus: booking.status === 'cancelled' ? 'refunded' : 'pending',
+    paymentStatus: mobilePaymentStatus(booking.payment_status, booking.status),
     createdAt: booking.created_at,
     updatedAt: booking.updated_at
   };
@@ -177,7 +207,7 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
 
   try {
     if (userType !== 'customer') {
-      return jsonError(c, 'Access denied', 'Only customers can create bookings', 403);
+      return jsonError(c, 'Access denied', 'Only travelers can create experience bookings', 403);
     }
 
     const companion = await c.env.DB.prepare(`
@@ -192,28 +222,17 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
     `).bind(bookingData.companionId).first();
 
     if (!companion) {
-      return jsonError(c, 'Companion not found', 'The selected companion is not available', 404);
+      return jsonError(c, 'Guide not found', 'The selected guide is not available', 404);
     }
 
-    let service: any = null;
-    if (bookingData.serviceId) {
-      service = await c.env.DB.prepare(`
-        SELECT id, title, description, price_min, price_max, currency, duration_hours
-        FROM supplier_services
-        WHERE id = ? AND supplier_id = ? AND is_active = TRUE
-      `).bind(bookingData.serviceId, bookingData.companionId).first();
+    const service: any = await c.env.DB.prepare(`
+      SELECT id, title, description, price_min, price_max, currency, duration_hours
+      FROM supplier_services
+      WHERE id = ? AND supplier_id = ? AND is_active = TRUE
+    `).bind(bookingData.serviceId, bookingData.companionId).first();
 
-      if (!service) {
-        return jsonError(c, 'Service not found', 'The selected service is not available', 404);
-      }
-    } else {
-      service = await c.env.DB.prepare(`
-        SELECT id, title, description, price_min, price_max, currency, duration_hours
-        FROM supplier_services
-        WHERE supplier_id = ? AND is_active = TRUE
-        ORDER BY price_min ASC
-        LIMIT 1
-      `).bind(bookingData.companionId).first();
+    if (!service) {
+      return jsonError(c, 'Experience not found', 'The selected guided experience is not available', 404);
     }
 
     const scheduledAt = toScheduledAt(bookingData.date, bookingData.startTime);
@@ -253,7 +272,7 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
       bookingId,
       userId,
       bookingData.companionId,
-      service?.id || bookingData.serviceId || null,
+      service.id,
       'pending',
       scheduledAt,
       duration,
@@ -267,7 +286,7 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
       preferredLanguage,
       null,
       dietaryRequirements,
-      service?.id || bookingData.serviceId || null
+      service.id
     ).run();
 
     await c.env.ANALYTICS_QUEUE.send({
@@ -276,7 +295,7 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
       properties: {
         bookingId,
         companionId: bookingData.companionId,
-        serviceId: service?.id || bookingData.serviceId,
+        serviceId: service.id,
         totalAmount,
         duration
       },
@@ -499,24 +518,31 @@ bookings.put('/:id/status', validateUUID('id'), zValidator('json', updateBooking
 
     const row = booking as any;
     const currentStatus = String(row.status);
-    const validTransitions: Record<string, string[]> = {
-      pending: ['confirmed', 'cancelled'],
-      confirmed: ['cancelled', 'completed'],
-      in_progress: ['completed', 'cancelled'],
-      completed: [],
-      cancelled: []
-    };
+    const actor: BookingActor = row.supplier_id === userId ? 'supplier' : 'customer';
+    const validTransitions = allowedBookingTransitions[actor][currentStatus] || [];
 
-    if (!validTransitions[currentStatus]?.includes(status)) {
-      return jsonError(c, 'Invalid status transition', `Cannot change status from ${currentStatus} to ${status}`, 400);
+    if (!validTransitions.includes(status)) {
+      const detail = currentStatus === 'pending' && status === 'confirmed' && actor === 'customer'
+        ? 'Only the assigned guide can confirm a pending experience booking'
+        : `This ${actor === 'supplier' ? 'guide' : 'traveler'} cannot change the experience booking from ${currentStatus} to ${status}`;
+      return jsonError(c, 'Invalid booking transition', detail, 403);
     }
 
     const now = new Date().toISOString();
-    await c.env.DB.prepare(`
+    const updateResult = await c.env.DB.prepare(`
       UPDATE bookings
       SET status = ?, updated_at = ?
-      WHERE id = ?
-    `).bind(status, now, bookingId).run();
+      WHERE id = ? AND status = ?
+    `).bind(status, now, bookingId, currentStatus).run();
+
+    if (Number(updateResult.meta?.changes || 0) !== 1) {
+      return jsonError(
+        c,
+        'Booking changed',
+        'The experience booking changed before this update could be applied',
+        409
+      );
+    }
 
     const otherUserId = String(row.customer_id === userId ? row.supplier_id : row.customer_id);
     await createNotification(

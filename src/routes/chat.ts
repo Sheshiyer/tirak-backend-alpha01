@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
+import { z } from 'zod';
 import { chatMessageSchema } from '../utils/validation';
 import { validateUUID, validatePagination } from '../middleware/validation';
 import { authMiddleware } from '../middleware/auth';
@@ -8,6 +9,18 @@ import { jsonSuccess, jsonError, jsonPaginated, createPagination } from '../util
 import type { Env, Variables } from '../index';
 
 const chat = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+const createChatRoomSchema = z.object({
+  bookingId: z.string().uuid('Booking ID must be a valid UUID'),
+});
+
+const eligibleBookingJoin = (roomAlias: string): string => `
+  INNER JOIN bookings b
+    ON b.id = ${roomAlias}.booking_id
+   AND b.customer_id = ${roomAlias}.customer_id
+   AND b.supplier_id = ${roomAlias}.supplier_id
+   AND b.status IN ('confirmed', 'in_progress')
+`;
 
 // Apply authentication middleware to all routes
 chat.use('*', authMiddleware);
@@ -26,8 +39,9 @@ chat.get('/rooms', validatePagination(), async (c) => {
     // Get total count
     const countResult = await c.env.DB.prepare(`
       SELECT COUNT(*) as total 
-      FROM chat_rooms 
-      WHERE customer_id = ? OR supplier_id = ?
+      FROM chat_rooms cr
+      ${eligibleBookingJoin('cr')}
+      WHERE b.customer_id = ? OR b.supplier_id = ?
     `).bind(userId, userId).first();
     
     const total = countResult?.total as number || 0;
@@ -36,18 +50,19 @@ chat.get('/rooms', validatePagination(), async (c) => {
     const offset = (page - 1) * limit;
     const roomsResult = await c.env.DB.prepare(`
       SELECT 
-        cr.id, cr.customer_id, cr.supplier_id, cr.status, 
+        cr.id, cr.booking_id, cr.customer_id, cr.supplier_id, cr.status,
         cr.last_message_at, cr.created_at,
         cp.display_name as customer_name, cp.profile_image as customer_image,
         sp.display_name as supplier_name, sp.profile_images as supplier_images,
         cm.content as last_message, cm.message_type as last_message_type,
         cm.created_at as last_message_time
       FROM chat_rooms cr
+      ${eligibleBookingJoin('cr')}
       LEFT JOIN customer_profiles cp ON cr.customer_id = cp.user_id
       LEFT JOIN supplier_profiles sp ON cr.supplier_id = sp.user_id
       LEFT JOIN chat_messages cm ON cr.id = cm.room_id 
         AND cm.created_at = cr.last_message_at
-      WHERE cr.customer_id = ? OR cr.supplier_id = ?
+      WHERE b.customer_id = ? OR b.supplier_id = ?
       ORDER BY cr.last_message_at DESC NULLS LAST, cr.created_at DESC
       LIMIT ? OFFSET ?
     `).bind(userId, userId, limit, offset).all();
@@ -68,6 +83,7 @@ chat.get('/rooms', validatePagination(), async (c) => {
 
       return {
         id: room.id,
+        bookingId: room.booking_id,
         status: room.status,
         otherParty,
         lastMessage: room.last_message ? {
@@ -94,70 +110,73 @@ chat.get('/rooms', validatePagination(), async (c) => {
  */
 chat.post('/rooms', async (c) => {
   const userId = c.get('userId') as string;
-  const userType = c.get('userType');
-  
+
   try {
     const body = await c.req.json();
-    const otherUserId = typeof body?.otherUserId === 'string' ? body.otherUserId : '';
+    const parsed = createChatRoomSchema.safeParse(body);
 
-    if (!otherUserId) {
-      return jsonError(c, 'Missing participant', 'Other user ID is required', 400);
+    if (!parsed.success) {
+      return jsonError(
+        c,
+        'Booking required',
+        parsed.error.issues[0]?.message || 'A valid experience booking ID is required',
+        400
+      );
     }
 
-    if (otherUserId === userId) {
-      return jsonError(c, 'Invalid participant', 'Cannot create chat room with yourself', 400);
+    const { bookingId } = parsed.data;
+
+    const booking = await c.env.DB.prepare(`
+      SELECT id, customer_id, supplier_id, status
+      FROM bookings
+      WHERE id = ?
+    `).bind(bookingId).first();
+
+    if (!booking) {
+      return jsonError(c, 'Experience booking not found', 'The requested experience booking does not exist', 404);
     }
 
-    // Verify other user exists and determine room participants
-    const otherUser = await c.env.DB.prepare(`
-      SELECT id, user_type FROM users WHERE id = ? AND status = 'active'
-    `).bind(otherUserId).first();
-
-    if (!otherUser) {
-      return jsonError(c, 'User not found', 'The specified user does not exist', 404);
+    const customerId = String(booking.customer_id);
+    const supplierId = String(booking.supplier_id);
+    if (userId !== customerId && userId !== supplierId) {
+      return jsonError(
+        c,
+        'Booking access denied',
+        'Only the traveler and assigned guide can open chat for this experience booking',
+        403
+      );
     }
 
-    // Determine customer and supplier IDs. Older mobile builds and some
-    // historical tokens use "companion" for local guides, while the DB stores
-    // the canonical role as "supplier".
-    let customerId: string, supplierId: string;
-    const currentIsCustomer = userType === 'customer';
-    const currentIsSupplier = userType === 'supplier' || userType === 'companion';
-    const otherUserType = String(otherUser.user_type);
-    const otherIsCustomer = otherUserType === 'customer';
-    const otherIsSupplier = otherUserType === 'supplier' || otherUserType === 'companion';
-
-    if (currentIsCustomer && otherIsSupplier) {
-      customerId = userId;
-      supplierId = otherUserId;
-    } else if (currentIsSupplier && otherIsCustomer) {
-      customerId = otherUserId;
-      supplierId = userId;
-    } else {
-      return jsonError(c, 'Invalid chat participants', 'Chat rooms can only be created between customers and local guides', 400);
+    if (!['confirmed', 'in_progress'].includes(String(booking.status))) {
+      return jsonError(
+        c,
+        'Experience chat unavailable',
+        'Chat becomes available after the guide confirms the experience and closes when the experience ends',
+        403
+      );
     }
 
-    // Check if room already exists
     const existingRoom = await c.env.DB.prepare(`
-      SELECT id FROM chat_rooms 
-      WHERE customer_id = ? AND supplier_id = ?
-    `).bind(customerId, supplierId).first();
+      SELECT id FROM chat_rooms
+      WHERE booking_id = ? AND customer_id = ? AND supplier_id = ?
+    `).bind(bookingId, customerId, supplierId).first();
 
     if (existingRoom) {
-      return jsonSuccess(c, { 
+      return jsonSuccess(c, {
         roomId: existingRoom.id,
+        bookingId,
         existed: true 
       }, 'Chat room already exists');
     }
 
-    // Create new chat room
     const roomId = crypto.randomUUID();
-    
+
     await c.env.DB.prepare(`
-      INSERT INTO chat_rooms (id, customer_id, supplier_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO chat_rooms (id, booking_id, customer_id, supplier_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `).bind(
       roomId,
+      bookingId,
       customerId,
       supplierId,
       new Date().toISOString(),
@@ -168,17 +187,17 @@ chat.post('/rooms', async (c) => {
     await c.env.ANALYTICS_QUEUE.send({
       eventType: 'chat_room_created',
       userId,
-      properties: { 
+      properties: {
         roomId,
-        otherUserId,
-        userType,
-        otherUserType: otherUser.user_type
+        bookingId,
+        otherUserId: userId === customerId ? supplierId : customerId,
       },
       timestamp: new Date().toISOString()
     });
 
-    return jsonSuccess(c, { 
+    return jsonSuccess(c, {
       roomId,
+      bookingId,
       existed: false 
     }, 'Chat room created successfully', 201);
 
@@ -200,13 +219,14 @@ chat.get('/rooms/:roomId', validateUUID('roomId'), validatePagination(), async (
     // Verify user has access to this chat room
     const room = await c.env.DB.prepare(`
       SELECT 
-        cr.id, cr.customer_id, cr.supplier_id, cr.status, cr.created_at,
+        cr.id, cr.booking_id, cr.customer_id, cr.supplier_id, cr.status, cr.created_at,
         cp.display_name as customer_name, cp.profile_image as customer_image,
         sp.display_name as supplier_name, sp.profile_images as supplier_images
       FROM chat_rooms cr
+      ${eligibleBookingJoin('cr')}
       LEFT JOIN customer_profiles cp ON cr.customer_id = cp.user_id
       LEFT JOIN supplier_profiles sp ON cr.supplier_id = sp.user_id
-      WHERE cr.id = ? AND (cr.customer_id = ? OR cr.supplier_id = ?)
+      WHERE cr.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)
     `).bind(roomId, userId, userId).first();
 
     if (!room) {
@@ -266,6 +286,7 @@ chat.get('/rooms/:roomId', validateUUID('roomId'), validatePagination(), async (
 
     const roomData = {
       id: room.id,
+      bookingId: room.booking_id,
       status: room.status,
       otherParty,
       createdAt: room.created_at,
@@ -291,8 +312,10 @@ chat.get('/rooms/:roomId/ws', validateUUID('roomId'), async (c) => {
   try {
     // Verify user has access to this chat room
     const room = await c.env.DB.prepare(`
-      SELECT id FROM chat_rooms 
-      WHERE id = ? AND (customer_id = ? OR supplier_id = ?)
+      SELECT cr.id, cr.booking_id
+      FROM chat_rooms cr
+      ${eligibleBookingJoin('cr')}
+      WHERE cr.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)
     `).bind(roomId, userId, userId).first();
 
     if (!room) {
@@ -308,6 +331,7 @@ chat.get('/rooms/:roomId/ws', validateUUID('roomId'), async (c) => {
     url.pathname = '/websocket';
     url.searchParams.set('userId', userId);
     url.searchParams.set('roomId', roomId);
+    url.searchParams.set('bookingId', String(room.booking_id));
 
     return await durableObject.fetch(url.toString(), {
       headers: c.req.raw.headers,
@@ -333,8 +357,10 @@ chat.post('/rooms/:roomId/messages',
     try {
       // Verify user has access to this chat room
       const room = await c.env.DB.prepare(`
-        SELECT id, customer_id, supplier_id FROM chat_rooms
-        WHERE id = ? AND (customer_id = ? OR supplier_id = ?)
+        SELECT cr.id, cr.booking_id, cr.customer_id, cr.supplier_id
+        FROM chat_rooms cr
+        ${eligibleBookingJoin('cr')}
+        WHERE cr.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)
       `).bind(roomId, userId, userId).first();
 
       if (!room) {
@@ -351,6 +377,7 @@ chat.post('/rooms/:roomId/messages',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           roomId,
+          bookingId: room.booking_id,
           senderId: userId,
           recipientId: room.customer_id === userId ? room.supplier_id : room.customer_id,
           messageType: messageData.messageType,
@@ -406,8 +433,10 @@ chat.post('/rooms/:roomId/read', validateUUID('roomId'), async (c) => {
 
     // Verify user has access to this chat room
     const room = await c.env.DB.prepare(`
-      SELECT id FROM chat_rooms 
-      WHERE id = ? AND (customer_id = ? OR supplier_id = ?)
+      SELECT cr.id, cr.booking_id
+      FROM chat_rooms cr
+      ${eligibleBookingJoin('cr')}
+      WHERE cr.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)
     `).bind(roomId, userId, userId).first();
 
     if (!room) {
@@ -421,6 +450,7 @@ chat.post('/rooms/:roomId/read', validateUUID('roomId'), async (c) => {
       userId,
       properties: { 
         roomId,
+        bookingId: room.booking_id,
         messageId: messageId || 'latest'
       },
       timestamp: new Date().toISOString()
@@ -450,8 +480,10 @@ chat.get('/rooms/:roomId/search', validateUUID('roomId'), async (c) => {
   try {
     // Verify user has access to this chat room
     const room = await c.env.DB.prepare(`
-      SELECT id FROM chat_rooms 
-      WHERE id = ? AND (customer_id = ? OR supplier_id = ?)
+      SELECT cr.id, cr.booking_id
+      FROM chat_rooms cr
+      ${eligibleBookingJoin('cr')}
+      WHERE cr.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)
     `).bind(roomId, userId, userId).first();
 
     if (!room) {
