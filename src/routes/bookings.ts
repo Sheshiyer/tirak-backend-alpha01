@@ -6,6 +6,11 @@ import { authMiddleware } from '../middleware/auth';
 import { createRateLimit } from '../middleware/rateLimit';
 import { jsonSuccess, jsonError, jsonPaginated, createPagination } from '../utils/response';
 import { firstProfileImage } from '../utils/profileImages';
+import {
+  cancellationBlockReason,
+  publicBookingPaymentStatus,
+  type PaymentAttemptStatus,
+} from '../contracts/payment';
 import type { Env, Variables } from '../index';
 import { createNotification } from './notifications';
 
@@ -96,14 +101,6 @@ const getLocation = (booking: any): string | undefined => {
   return booking.location || booking.notes || booking.meeting_point || undefined;
 };
 
-const mobilePaymentStatus = (value: unknown, bookingStatus: unknown): string => {
-  const status = String(value || '').toLowerCase();
-  if (['completed', 'paid', 'successful', 'succeeded'].includes(status)) return 'paid';
-  if (status === 'refunded' || bookingStatus === 'cancelled') return 'refunded';
-  if (['processing', 'creating', 'indeterminate'].includes(status)) return 'processing';
-  return 'pending';
-};
-
 const formatBooking = (booking: any, userType?: string) => {
   const date = getBookingDate(booking.scheduled_at);
   const startTime = getBookingStartTime(booking.scheduled_at);
@@ -142,7 +139,7 @@ const formatBooking = (booking: any, userType?: string) => {
     status: booking.status,
     totalAmount: Number(booking.total_amount || 0),
     serviceFee: 0,
-    paymentStatus: mobilePaymentStatus(booking.payment_status, booking.status),
+    paymentStatus: publicBookingPaymentStatus(booking.payment_status),
     createdAt: booking.created_at,
     updatedAt: booking.updated_at
   };
@@ -526,6 +523,20 @@ bookings.put('/:id/status', validateUUID('id'), zValidator('json', updateBooking
         ? 'Only the assigned guide can confirm a pending experience booking'
         : `This ${actor === 'supplier' ? 'guide' : 'traveler'} cannot change the experience booking from ${currentStatus} to ${status}`;
       return jsonError(c, 'Invalid booking transition', detail, 403);
+    }
+
+    if (status === 'cancelled') {
+      const paymentAttempt = await c.env.DB.prepare(`
+        SELECT status
+        FROM payment_attempts
+        WHERE booking_id = ? AND provider = 'omise' AND payment_method = 'promptpay'
+        ORDER BY attempt_number DESC
+        LIMIT 1
+      `).bind(bookingId).first<{ status: PaymentAttemptStatus }>();
+      const blockReason = cancellationBlockReason(paymentAttempt?.status || null);
+      if (blockReason) {
+        return jsonError(c, 'PAYMENT_OUTCOME_UNRESOLVED', blockReason, 409);
+      }
     }
 
     const now = new Date().toISOString();

@@ -33,6 +33,8 @@ export interface Env {
   JWT_SECRET: string;
   OMISE_SECRET_KEY?: string;
   OMISE_WEBHOOK_SECRET?: string;
+  PAYMENT_MODE?: string;
+  PROMPTPAY_ENABLED?: string;
   ENVIRONMENT: string;
   FRONTEND_URLS: string;
   EMAIL?: {

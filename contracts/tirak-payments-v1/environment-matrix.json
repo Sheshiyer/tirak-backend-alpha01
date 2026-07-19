@@ -1,0 +1,51 @@
+{
+  "contractVersion": "tirak-payments-v1",
+  "authorizedProductionOperator": "human release owner",
+  "environments": [
+    {
+      "name": "test",
+      "worker": "local disposable Worker",
+      "database": "disposable SQLite or local D1",
+      "apiUrl": "http://localhost:8787",
+      "paymentMode": "test",
+      "secretMode": "test",
+      "promptPayEnabled": true,
+      "deployable": false
+    },
+    {
+      "name": "staging",
+      "worker": "tirak-backend-staging",
+      "database": "tirak-staging",
+      "kv": ["CACHE", "SESSIONS"],
+      "queues": ["MODERATION_QUEUE", "ANALYTICS_QUEUE", "NOTIFICATION_QUEUE"],
+      "durableObjects": ["CHAT_ROOM", "NOTIFICATION_SERVICE"],
+      "apiUrl": "REQUIRES_T025_CONFIRMATION",
+      "paymentMode": "disabled",
+      "secretMode": "test",
+      "promptPayEnabled": false,
+      "deployable": false
+    },
+    {
+      "name": "production",
+      "worker": "tirak-backend-production",
+      "database": "tirak-mobile-production",
+      "kv": ["CACHE", "SESSIONS"],
+      "queues": ["MODERATION_QUEUE", "ANALYTICS_QUEUE", "NOTIFICATION_QUEUE"],
+      "durableObjects": ["CHAT_ROOM", "NOTIFICATION_SERVICE"],
+      "apiUrl": "REQUIRES_T072_CONFIRMATION",
+      "paymentMode": "disabled",
+      "secretMode": "live",
+      "promptPayEnabled": false,
+      "deployable": false
+    }
+  ],
+  "secrets": ["OMISE_SECRET_KEY", "OMISE_WEBHOOK_SECRET"],
+  "rules": [
+    "bindings and secrets are environment-specific and never inherited by assumption",
+    "placeholder or unresolved resource identity refuses release operations",
+    "test and live secret prefixes must match PAYMENT_MODE",
+    "PROMPTPAY_ENABLED=false blocks new charge creation only",
+    "webhook, status, and reconciliation remain available for in-flight attempts",
+    "production mode changes require an audited human release owner action without code deployment"
+  ]
+}

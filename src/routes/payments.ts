@@ -1,10 +1,15 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { validateUUID, validatePagination } from '../middleware/validation';
 import { authMiddleware } from '../middleware/auth';
 import { createRateLimit } from '../middleware/rateLimit';
-import { jsonSuccess, jsonError, jsonPaginated, createPagination } from '../utils/response';
+import { jsonSuccess, jsonError } from '../utils/response';
+import {
+  TIRAK_PAYMENTS_CONTRACT_VERSION,
+  paymentRuntimePolicy,
+  publicPaymentStatus,
+  type PaymentAttemptStatus,
+} from '../contracts/payment';
 import {
   createPromptPayCharge,
   OmiseRequestError,
@@ -14,22 +19,10 @@ import {
   verifyOmiseWebhookSignature,
   webhookReplayKey,
   type OmiseCharge,
-  type PaymentAttemptStatus,
 } from '../services/omise';
 import type { Env, Variables } from '../index';
 
 const payments = new Hono<{ Bindings: Env; Variables: Variables }>();
-
-// Payment method creation schema
-const createPaymentMethodSchema = z.object({
-  type: z.literal('promptpay', {
-    errorMap: () => ({ message: 'Only PromptPay payment methods are accepted' })
-  }),
-  details: z.object({
-    phoneNumber: z.string().min(9).max(20)
-  }).strict(),
-  isDefault: z.boolean().optional().default(false)
-}).strict();
 
 const promptPayBookingSchema = z.object({
   bookingId: z.string().uuid('Invalid booking ID'),
@@ -76,11 +69,14 @@ const FINAL_ATTEMPT_STATUSES = new Set<PaymentAttemptStatus>(['successful', 'fai
 
 function safeAttemptResponse(attempt: PaymentAttemptRow) {
   return {
+    contractVersion: TIRAK_PAYMENTS_CONTRACT_VERSION,
     chargeId: attempt.provider_charge_id,
-    qrCode: attempt.qr_code_url,
-    amount: attempt.amount,
+    paymentStatus: publicPaymentStatus(attempt.status),
+    attemptStatus: attempt.status,
+    qrCodeUrl: attempt.qr_code_url,
+    amountSatang: attempt.amount,
+    displayTotalThb: attempt.amount / 100,
     currency: attempt.currency.toUpperCase(),
-    status: attempt.status,
     ...(attempt.expires_at ? { expiresAt: attempt.expires_at } : {}),
   };
 }
@@ -312,8 +308,9 @@ payments.use('*', createRateLimit('payment'));
  */
 payments.post('/charges', zValidator('json', promptPayBookingSchema), async (c) => {
   const secretKey = c.env.OMISE_SECRET_KEY;
-  if (!secretKey) {
-    return jsonError(c, 'Payment service unavailable', 'Omise configuration is missing', 503);
+  const runtime = paymentRuntimePolicy(c.env);
+  if (!runtime.createEnabled || !secretKey) {
+    return jsonError(c, 'PAYMENT_CREATION_DISABLED', `PromptPay charge creation is closed: ${runtime.reason || 'missing_secret'}`, 503);
   }
 
   const customerId = c.get('userId');
@@ -587,260 +584,6 @@ payments.get('/charges/:chargeId', async (c) => {
     return jsonSuccess(c, safeAttemptResponse(reconciled));
   } catch (error) {
     return omiseFailure(c, error);
-  }
-});
-
-/**
- * Get user payment methods
- */
-payments.get('/payment-methods', async (c) => {
-  const userId = c.get('userId');
-  
-  try {
-    const paymentMethods = await c.env.DB.prepare(`
-      SELECT id, type, is_default, details, created_at
-      FROM payment_methods
-      WHERE user_id = ? AND is_active = TRUE AND type = 'promptpay'
-      ORDER BY is_default DESC, created_at DESC
-    `).bind(userId).all();
-
-    const methods = paymentMethods.results.map((pm: any) => {
-      const details = JSON.parse(pm.details || '{}');
-      
-      // Mask sensitive information
-      const maskedDetails = { phoneNumber: details.phoneNumber };
-
-      return {
-        id: pm.id,
-        type: pm.type,
-        isDefault: pm.is_default,
-        details: maskedDetails,
-        createdAt: pm.created_at
-      };
-    });
-
-    return jsonSuccess(c, {
-      paymentMethods: methods
-    }, 'Payment methods retrieved successfully');
-
-  } catch (error) {
-    console.error('Get payment methods error:', error);
-    return jsonError(c, 'Failed to retrieve payment methods', 'An error occurred while fetching payment methods', 500);
-  }
-});
-
-/**
- * Add payment method
- */
-payments.post('/payment-methods', zValidator('json', createPaymentMethodSchema), async (c) => {
-  const userId = c.get('userId');
-  const { type, details, isDefault } = c.req.valid('json');
-  
-  try {
-    // This endpoint stores only a PromptPay contact reference. Raw PAN, CVV,
-    // expiry, bank-account, and wallet credentials are rejected by the strict schema.
-    const processedDetails = { phoneNumber: details.phoneNumber };
-
-    // If this is set as default, unset other defaults
-    if (isDefault) {
-      await c.env.DB.prepare(`
-        UPDATE payment_methods 
-        SET is_default = FALSE 
-        WHERE user_id = ? AND is_active = TRUE
-      `).bind(userId).run();
-    }
-
-    // Create payment method
-    const paymentMethodId = crypto.randomUUID();
-    const now = new Date().toISOString();
-
-    await c.env.DB.prepare(`
-      INSERT INTO payment_methods (
-        id, user_id, type, details, is_default, is_active, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      paymentMethodId,
-      userId,
-      type,
-      JSON.stringify(processedDetails),
-      isDefault,
-      true,
-      now,
-      now
-    ).run();
-
-    // Track payment method addition
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'payment_method_added',
-      userId,
-      properties: {
-        paymentMethodId,
-        type,
-        isDefault
-      },
-      timestamp: now
-    });
-
-    return jsonSuccess(c, {
-      paymentMethod: {
-        id: paymentMethodId,
-        type,
-        isDefault,
-        details: processedDetails
-      }
-    }, 'Payment method added successfully', 201);
-
-  } catch (error) {
-    console.error('Add payment method error:', error);
-    return jsonError(c, 'Failed to add payment method', 'An error occurred while adding the payment method', 500);
-  }
-});
-
-/**
- * Remove payment method
- */
-payments.delete('/payment-methods/:id', validateUUID('id'), async (c) => {
-  const paymentMethodId = c.req.param('id');
-  const userId = c.get('userId');
-  
-  try {
-    // Check if payment method exists and belongs to user
-    const paymentMethod = await c.env.DB.prepare(`
-      SELECT id, is_default FROM payment_methods
-      WHERE id = ? AND user_id = ? AND is_active = TRUE
-    `).bind(paymentMethodId, userId).first();
-
-    if (!paymentMethod) {
-      return jsonError(c, 'Payment method not found', 'The requested payment method does not exist', 404);
-    }
-
-    // Check if there are pending payments using this method
-    const pendingPayments = await c.env.DB.prepare(`
-      SELECT id FROM bookings
-      WHERE payment_method_id = ? AND payment_status = 'pending'
-    `).bind(paymentMethodId).first();
-
-    if (pendingPayments) {
-      return jsonError(c, 'Cannot remove payment method', 'This payment method has pending transactions', 409);
-    }
-
-    // Soft delete the payment method
-    await c.env.DB.prepare(`
-      UPDATE payment_methods 
-      SET is_active = FALSE, updated_at = ?
-      WHERE id = ?
-    `).bind(new Date().toISOString(), paymentMethodId).run();
-
-    // If this was the default method, set another as default
-    if (paymentMethod.is_default) {
-      const nextMethod = await c.env.DB.prepare(`
-        SELECT id FROM payment_methods
-        WHERE user_id = ? AND is_active = TRUE
-        ORDER BY created_at DESC
-        LIMIT 1
-      `).bind(userId).first();
-
-      if (nextMethod) {
-        await c.env.DB.prepare(`
-          UPDATE payment_methods 
-          SET is_default = TRUE 
-          WHERE id = ?
-        `).bind(nextMethod.id).run();
-      }
-    }
-
-    // Track payment method removal
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'payment_method_removed',
-      userId,
-      properties: {
-        paymentMethodId
-      },
-      timestamp: new Date().toISOString()
-    });
-
-    return jsonSuccess(c, {}, 'Payment method removed successfully');
-
-  } catch (error) {
-    console.error('Remove payment method error:', error);
-    return jsonError(c, 'Failed to remove payment method', 'An error occurred while removing the payment method', 500);
-  }
-});
-
-/**
- * Get payment history
- */
-payments.get('/payments/history', validatePagination(), async (c) => {
-  const userId = c.get('userId');
-  const { page, limit } = c.get('validatedQuery');
-  const status = c.req.query('status');
-  
-  try {
-    let query = `
-      SELECT 
-        b.id as booking_id,
-        b.total_amount,
-        b.service_fee,
-        b.payment_status,
-        b.created_at,
-        b.updated_at,
-        pm.type as payment_method_type,
-        JSON_EXTRACT(pm.details, '$.last4') as payment_method_last4,
-        sp.display_name as companion_name,
-        s.title as service_name
-      FROM bookings b
-      LEFT JOIN payment_methods pm ON b.payment_method_id = pm.id
-      LEFT JOIN supplier_profiles sp ON b.companion_id = sp.user_id
-      LEFT JOIN supplier_services s ON b.service_id = s.id
-      WHERE b.customer_id = ?
-    `;
-
-    const queryParams = [userId];
-
-    if (status) {
-      query += ` AND b.payment_status = ?`;
-      queryParams.push(status);
-    }
-
-    query += ` ORDER BY b.created_at DESC`;
-
-    // Get total count
-    const countQuery = query.replace(/SELECT.*FROM/, 'SELECT COUNT(*) as total FROM');
-    const countResult = await c.env.DB.prepare(countQuery).bind(...queryParams).first();
-    const total = countResult?.total as number || 0;
-
-    // Get paginated results
-    const offset = (page - 1) * limit;
-    const paginatedQuery = `${query} LIMIT ? OFFSET ?`;
-    const paymentsResult = await c.env.DB.prepare(paginatedQuery)
-      .bind(...queryParams, limit, offset).all();
-
-    const paymentsList = paymentsResult.results.map((payment: any) => ({
-      id: payment.booking_id,
-      bookingId: payment.booking_id,
-      amount: payment.total_amount - payment.service_fee,
-      serviceFee: payment.service_fee,
-      totalAmount: payment.total_amount,
-      currency: 'THB',
-      status: payment.payment_status,
-      paymentMethod: {
-        type: payment.payment_method_type,
-        last4: payment.payment_method_last4
-      },
-      companionName: payment.companion_name,
-      serviceName: payment.service_name,
-      createdAt: payment.created_at,
-      completedAt: payment.payment_status === 'completed' ? payment.updated_at : null
-    }));
-
-    return jsonSuccess(c, {
-      payments: paymentsList,
-      pagination: createPagination(page, limit, total)
-    });
-
-  } catch (error) {
-    console.error('Get payment history error:', error);
-    return jsonError(c, 'Failed to retrieve payment history', 'An error occurred while fetching payment history', 500);
   }
 });
 

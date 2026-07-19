@@ -175,11 +175,14 @@ describe('Omise PromptPay booking payments', () => {
 
     expect(response.status).toBe(201);
     expect(payload.data).toEqual({
+      contractVersion: 'tirak-payments-v1',
       chargeId: 'chrg_promptpay_1',
-      qrCode: 'https://example.test/promptpay-qr.png',
-      amount: 100000,
+      qrCodeUrl: 'https://example.test/promptpay-qr.png',
+      amountSatang: 100000,
+      displayTotalThb: 1000,
       currency: 'THB',
-      status: 'pending',
+      paymentStatus: 'pending',
+      attemptStatus: 'pending',
     });
     expect(JSON.stringify(payload)).not.toContain('src_promptpay_1');
 
@@ -211,7 +214,7 @@ describe('Omise PromptPay booking payments', () => {
     }
   });
 
-  it('rejects legacy raw-card payment-method creation', async () => {
+  it('does not mount legacy payment-method creation', async () => {
     const response = await app.request(createMockRequest('http://localhost/payments/payment-methods', {
       method: 'POST',
       headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
@@ -221,7 +224,7 @@ describe('Omise PromptPay booking payments', () => {
       }),
     }), undefined, env);
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(404);
   });
 
   it('only creates charges for an owned booking whose persisted status is exactly confirmed', async () => {
@@ -379,7 +382,8 @@ describe('Omise PromptPay booking payments', () => {
     const payload = await response.json() as any;
 
     expect(response.status).toBe(200);
-    expect(payload.data.status).toBe('successful');
+    expect(payload.data.attemptStatus).toBe('successful');
+    expect(payload.data.paymentStatus).toBe('paid');
     expect(omiseFetch).toHaveBeenCalledWith(
       expect.stringContaining('/charges/chrg_promptpay_1'),
       expect.objectContaining({ method: 'GET' }),
@@ -585,7 +589,8 @@ describe('Omise PromptPay booking payments', () => {
     const payload = await response.json() as any;
 
     expect(response.status).toBe(200);
-    expect(payload.data.status).toBe('successful');
+    expect(payload.data.attemptStatus).toBe('successful');
+    expect(payload.data.paymentStatus).toBe('paid');
     expect(omiseFetch).toHaveBeenCalledTimes(1);
     expect(statements.some(entry => entry.query.includes('UPDATE payment_attempts'))).toBe(false);
   });
@@ -700,10 +705,13 @@ describe('Omise PromptPay booking payments', () => {
 
     expect(response.status).toBe(200);
     expect(payload.data).toMatchObject({
+      contractVersion: 'tirak-payments-v1',
       chargeId: 'chrg_recovered_1',
-      amount: 100000,
+      amountSatang: 100000,
+      displayTotalThb: 1000,
       currency: 'THB',
-      status: 'pending',
+      paymentStatus: 'pending',
+      attemptStatus: 'pending',
     });
     expect(omiseFetch).toHaveBeenCalledTimes(1);
     expect(omiseFetch).toHaveBeenCalledWith(

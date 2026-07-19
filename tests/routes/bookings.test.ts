@@ -136,6 +136,34 @@ describe('Booking Routes', () => {
     expect(data.data.items[0].paymentStatus).toBe('paid');
   });
 
+  it('never infers a refund from booking cancellation', async () => {
+    const booking = createTestBooking({
+      id: bookingId,
+      customer_id: mockUser.id,
+      supplier_id: 'supplier-1',
+      status: 'cancelled',
+      payment_status: 'pending',
+      service_name: 'Old Town Walk',
+    });
+
+    installDb((query) => {
+      if (query.includes('COUNT(*)')) {
+        return statement({ first: async () => ({ total: 1 }) });
+      }
+      return statement({ all: async () => ({ results: [booking] }) });
+    });
+
+    const response = await app.request(createMockRequest('http://localhost/bookings', {
+      method: 'GET',
+      headers: { Authorization: authHeader },
+    }), undefined, testEnv);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.data.items[0].paymentStatus).toBe('pending');
+    expect(JSON.stringify(data.data.items[0])).not.toContain('refunded');
+  });
+
   it('loads booking details for a booking participant', async () => {
     installDb(() => statement({
       first: async () => createTestBooking({
@@ -273,4 +301,52 @@ describe('Booking Routes', () => {
     expect(updated).toBe(true);
     expect(data.data.booking.status).toBe('confirmed');
   });
+
+  it.each(['creating', 'indeterminate', 'pending', 'successful'])(
+    'blocks ordinary cancellation while the latest PromptPay attempt is %s',
+    async (paymentAttemptStatus) => {
+      let updated = false;
+      installDb((query) => {
+        if (query.includes('FROM payment_attempts')) {
+          return statement({ first: async () => ({ status: paymentAttemptStatus }) });
+        }
+        if (query.includes('UPDATE bookings')) {
+          return statement({
+            run: async () => {
+              updated = true;
+              return { success: true, meta: { changes: 1 } };
+            },
+          });
+        }
+        if (query.includes('SELECT * FROM bookings') && query.includes('WHERE id = ?')) {
+          return statement({
+            first: async () => createTestBooking({
+              id: bookingId,
+              customer_id: mockUser.id,
+              supplier_id: 'supplier-1',
+              status: 'confirmed',
+            }),
+          });
+        }
+        return statement({ first: async () => null });
+      });
+
+      const response = await app.request(createMockRequest(
+        `http://localhost/bookings/${bookingId}/status`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ status: 'cancelled' }),
+          headers: {
+            Authorization: authHeader,
+            'Content-Type': 'application/json',
+          },
+        },
+      ), undefined, testEnv);
+      const data = await response.json();
+
+      expect(response.status).toBe(409);
+      expect(data.error).toBe('PAYMENT_OUTCOME_UNRESOLVED');
+      expect(updated).toBe(false);
+    },
+  );
 });
