@@ -1,0 +1,25 @@
+name: Tirak backend release gate
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: sudo apt-get update && sudo apt-get install --yes sqlite3
+      - run: npm ci
+      - run: npm run release:verify
+
+# T-021 prepares this workflow locally. No workflow is published or executed
+# on GitHub until T-024 records separate human authorization.

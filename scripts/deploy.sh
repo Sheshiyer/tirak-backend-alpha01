@@ -1,260 +1,88 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Tirak Backend Deployment Script
-# Usage: ./scripts/deploy.sh [staging|production]
+set -euo pipefail
 
-set -e  # Exit on any error
-
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Configuration
-ENVIRONMENT=${1:-staging}
-PROJECT_NAME="tirak-backend"
+ENVIRONMENT="${1:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+TEST_MODE="${TIRAK_RELEASE_TEST_MODE:-0}"
+FAIL_STEP="${TIRAK_RELEASE_FAIL_STEP:-}"
 
-# Logging function
-log() {
-    echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
+case "$ENVIRONMENT" in
+  staging)
+    DATABASE_NAME="tirak-staging"
+    REQUIRED_AUTHORIZATION="T-024_APPROVED"
+    HEALTH_URL="https://api-staging.tirak.app/health"
+    ;;
+  production)
+    DATABASE_NAME="tirak-mobile-production"
+    REQUIRED_AUTHORIZATION="T-072_APPROVED"
+    HEALTH_URL="https://api.tirak.app/health"
+    ;;
+  *)
+    echo "usage: deploy.sh <staging|production>" >&2
+    exit 1
+    ;;
+esac
+
+if [[ "$TEST_MODE" == "1" ]]; then
+  REQUIRED_AUTHORIZATION="TEST_ONLY"
+  [[ -n "${TIRAK_WRANGLER_CONFIG:-}" ]] || {
+    echo "test mode requires an isolated TIRAK_WRANGLER_CONFIG fixture" >&2
+    exit 1
+  }
+fi
+
+[[ "${TIRAK_RELEASE_AUTHORIZATION:-}" == "$REQUIRED_AUTHORIZATION" ]] || {
+  echo "deployment authorization mismatch for $ENVIRONMENT; expected $REQUIRED_AUTHORIZATION" >&2
+  exit 1
 }
 
-error() {
-    echo -e "${RED}[ERROR]${NC} $1" >&2
+if [[ "$ENVIRONMENT" == "production" && "$TEST_MODE" != "1" ]]; then
+  [[ -n "${TIRAK_PRODUCTION_CHANGE_ID:-}" ]] || {
+    echo "production deployment requires TIRAK_PRODUCTION_CHANGE_ID" >&2
+    exit 1
+  }
+fi
+
+cd "$PROJECT_DIR"
+
+fail_if_injected() {
+  local step="$1"
+  if [[ "$FAIL_STEP" == "$step" ]]; then
+    echo "injected $step failure" >&2
+    return 97
+  fi
 }
 
-success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+run_local_step() {
+  local step="$1"
+  shift
+  fail_if_injected "$step"
+  "$@"
 }
 
-warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+run_external_step() {
+  local step="$1"
+  shift
+  fail_if_injected "$step"
+  if [[ "$TEST_MODE" == "1" ]]; then
+    printf 'TEST_ONLY external step: %s\n' "$step"
+    return 0
+  fi
+  "$@"
 }
 
-# Validate environment
-validate_environment() {
-    log "Validating deployment environment: $ENVIRONMENT"
-    
-    if [[ "$ENVIRONMENT" != "staging" && "$ENVIRONMENT" != "production" ]]; then
-        error "Invalid environment. Use 'staging' or 'production'"
-        exit 1
-    fi
-    
-    # Check if wrangler is installed
-    if ! command -v wrangler &> /dev/null; then
-        error "Wrangler CLI is not installed. Please install it first:"
-        error "npm install -g wrangler"
-        exit 1
-    fi
-    
-    # Check if logged in to Cloudflare
-    if ! wrangler whoami &> /dev/null; then
-        error "Not logged in to Cloudflare. Please run 'wrangler login' first"
-        exit 1
-    fi
-    
-    success "Environment validation passed"
-}
+run_local_step target node scripts/validate-target.mjs \
+  "$ENVIRONMENT" "$DATABASE_NAME" "${TIRAK_WRANGLER_CONFIG:-wrangler.toml}"
+run_external_step typecheck npm run typecheck
+run_external_step test npm run test:run
+run_local_step restore ./scripts/verify-local-recovery.sh
+run_external_step backup ./scripts/backup.sh "$ENVIRONMENT"
+run_external_step migration npx --no-install wrangler d1 migrations list "$DATABASE_NAME" --env "$ENVIRONMENT" --remote
+run_external_step migration npx --no-install wrangler d1 migrations apply "$DATABASE_NAME" --env "$ENVIRONMENT" --remote
+run_external_step deploy npx --no-install wrangler deploy --env "$ENVIRONMENT"
+run_external_step health curl --fail --show-error --silent --max-time 20 "$HEALTH_URL"
 
-# Install dependencies
-install_dependencies() {
-    log "Installing dependencies..."
-    cd "$PROJECT_DIR"
-    
-    if [[ -f "package-lock.json" ]]; then
-        npm ci
-    else
-        npm install
-    fi
-    
-    success "Dependencies installed"
-}
-
-# Run type checking
-type_check() {
-    log "Running TypeScript type checking..."
-    cd "$PROJECT_DIR"
-    
-    npm run type-check || {
-        error "TypeScript type checking failed"
-        exit 1
-    }
-    
-    success "Type checking passed"
-}
-
-# Run tests
-run_tests() {
-    log "Running tests..."
-    cd "$PROJECT_DIR"
-    
-    if npm run test:ci &> /dev/null; then
-        success "All tests passed"
-    else
-        warning "Tests failed or not configured. Continuing with deployment..."
-    fi
-}
-
-# Run database migrations
-run_migrations() {
-    log "Running database migrations for $ENVIRONMENT..."
-    cd "$PROJECT_DIR"
-    
-    # Set the appropriate wrangler environment
-    local wrangler_env=""
-    if [[ "$ENVIRONMENT" == "production" ]]; then
-        wrangler_env="--env production"
-    fi
-    
-    # Run migrations
-    for migration in migrations/*.sql; do
-        if [[ -f "$migration" ]]; then
-            log "Applying migration: $(basename "$migration")"
-            wrangler d1 execute tirak-db $wrangler_env --file="$migration" || {
-                error "Migration failed: $migration"
-                exit 1
-            }
-        fi
-    done
-    
-    success "Database migrations completed"
-}
-
-# Deploy worker
-deploy_worker() {
-    log "Deploying worker to $ENVIRONMENT..."
-    cd "$PROJECT_DIR"
-    
-    local deploy_cmd="wrangler deploy"
-    
-    if [[ "$ENVIRONMENT" == "production" ]]; then
-        deploy_cmd="$deploy_cmd --env production"
-    fi
-    
-    $deploy_cmd || {
-        error "Worker deployment failed"
-        exit 1
-    }
-    
-    success "Worker deployed successfully"
-}
-
-# Deploy durable objects
-deploy_durable_objects() {
-    log "Deploying Durable Objects..."
-    cd "$PROJECT_DIR"
-    
-    # Durable Objects are deployed with the worker
-    # This is a placeholder for any specific DO deployment steps
-    success "Durable Objects deployed with worker"
-}
-
-# Deploy queue consumers
-deploy_queue_consumers() {
-    log "Deploying queue consumers..."
-    cd "$PROJECT_DIR"
-    
-    local wrangler_env=""
-    if [[ "$ENVIRONMENT" == "production" ]]; then
-        wrangler_env="--env production"
-    fi
-    
-    # Queue consumers are deployed with the worker
-    # Verify queues exist
-    log "Verifying queues..."
-    
-    success "Queue consumers deployed"
-}
-
-# Seed initial data
-seed_data() {
-    if [[ "$ENVIRONMENT" == "staging" ]]; then
-        log "Seeding initial data for staging..."
-        cd "$PROJECT_DIR"
-        
-        if [[ -f "scripts/seed-data.sql" ]]; then
-            wrangler d1 execute tirak-db --file="scripts/seed-data.sql" || {
-                warning "Data seeding failed, but continuing..."
-            }
-        fi
-        
-        success "Data seeding completed"
-    else
-        log "Skipping data seeding for production environment"
-    fi
-}
-
-# Post-deployment verification
-verify_deployment() {
-    log "Verifying deployment..."
-    
-    local base_url
-    if [[ "$ENVIRONMENT" == "production" ]]; then
-        base_url="https://api.tirak.app"
-    else
-        base_url="https://api-staging.tirak.app"
-    fi
-    
-    # Test health endpoint
-    local health_check=$(curl -s -o /dev/null -w "%{http_code}" "$base_url/health" || echo "000")
-    
-    if [[ "$health_check" == "200" ]]; then
-        success "Health check passed"
-    else
-        warning "Health check failed (HTTP $health_check). Service might still be starting..."
-    fi
-    
-    # Test auth endpoint
-    local auth_check=$(curl -s -o /dev/null -w "%{http_code}" "$base_url/api/auth" || echo "000")
-    
-    if [[ "$auth_check" == "404" || "$auth_check" == "405" ]]; then
-        success "Auth endpoint accessible"
-    else
-        warning "Auth endpoint check failed (HTTP $auth_check)"
-    fi
-    
-    success "Deployment verification completed"
-}
-
-# Cleanup function
-cleanup() {
-    log "Cleaning up temporary files..."
-    # Add any cleanup steps here
-    success "Cleanup completed"
-}
-
-# Main deployment function
-main() {
-    log "Starting deployment of $PROJECT_NAME to $ENVIRONMENT"
-    log "Project directory: $PROJECT_DIR"
-    
-    # Trap cleanup on exit
-    trap cleanup EXIT
-    
-    # Run deployment steps
-    validate_environment
-    install_dependencies
-    type_check
-    run_tests
-    run_migrations
-    deploy_worker
-    deploy_durable_objects
-    deploy_queue_consumers
-    seed_data
-    verify_deployment
-    
-    success "🚀 Deployment to $ENVIRONMENT completed successfully!"
-    
-    if [[ "$ENVIRONMENT" == "production" ]]; then
-        log "Production URL: https://api.tirak.app"
-    else
-        log "Staging URL: https://api-staging.tirak.app"
-    fi
-}
-
-# Run main function
-main "$@"
+printf '{"status":"PASS","environment":"%s","database":"%s","testMode":%s}\n' \
+  "$ENVIRONMENT" "$DATABASE_NAME" "$([[ "$TEST_MODE" == "1" ]] && echo true || echo false)"
