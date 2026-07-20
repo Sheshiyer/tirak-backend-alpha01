@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T-025",
+  "contractVersion": "tirak-payments-v1",
+  "generatedAt": "2026-07-20T13:51:12.003Z",
+  "environment": "staging",
+  "authority": "T-024 approved authenticated read-only staging evidence only",
+  "discoveryState": "HALTED_FAIL_CLOSED",
+  "status": "PENDING_HUMAN_CONFIRMATION",
+  "blockers": [
+    {
+      "code": "CONFIG_BOUNDARY",
+      "message": "D1 DB identity is unresolved or placeholder"
+    },
+    {
+      "code": "CONFIG_BOUNDARY",
+      "message": "KV CACHE identity is unresolved or placeholder"
+    },
+    {
+      "code": "CONFIG_BOUNDARY",
+      "message": "KV SESSIONS identity is unresolved or placeholder"
+    },
+    {
+      "code": "AUTHENTICATED_TARGET_ACCOUNT",
+      "message": "authenticated membership does not include the pinned staging account; all resource discovery must stop"
+    }
+  ],
+  "checks": [
+    {
+      "name": "AUTHENTICATED_TARGET_ACCOUNT",
+      "status": "FAIL",
+      "detail": "authenticated membership does not include the pinned staging account; all resource discovery must stop"
+    }
+  ],
+  "targetFingerprint": null,
+  "resourcesVerified": false,
+  "humanConfirmation": null,
+  "mutationAllowed": false,
+  "mutationBoundary": "T-025 evidence never authorizes deployment, migration application, secret changes, resource creation/deletion, production access, live Omise charging, or App Store submission.",
+  "configured": {
+    "accountId": "2c0c96c68f0ee73b6d980054557bca5b",
+    "worker": "tirak-backend-staging",
+    "database": [
+      {
+        "binding": "DB",
+        "name": "tirak-staging",
+        "id": "placeholder-staging-db-id"
+      }
+    ],
+    "kv": [
+      {
+        "binding": "CACHE",
+        "id": "placeholder-cache-staging-id"
+      },
+      {
+        "binding": "SESSIONS",
+        "id": "placeholder-sessions-staging-id"
+      }
+    ],
+    "r2": [
+      {
+        "binding": "STORAGE",
+        "name": "tirak-storage-staging"
+      }
+    ],
+    "queues": {
+      "producers": [
+        {
+          "binding": "MODERATION_QUEUE",
+          "name": "tirak-moderation-staging"
+        },
+        {
+          "binding": "ANALYTICS_QUEUE",
+          "name": "tirak-analytics-staging"
+        },
+        {
+          "binding": "NOTIFICATION_QUEUE",
+          "name": "tirak-notification-staging"
+        }
+      ],
+      "consumers": [
+        {
+          "name": "tirak-moderation-staging",
+          "deadLetterQueue": "tirak-moderation-dlq-staging"
+        },
+        {
+          "name": "tirak-analytics-staging",
+          "deadLetterQueue": "tirak-analytics-dlq-staging"
+        },
+        {
+          "name": "tirak-notification-staging",
+          "deadLetterQueue": "tirak-notification-dlq-staging"
+        }
+      ]
+    },
+    "durableObjects": [
+      {
+        "binding": "CHAT_ROOM",
+        "className": "ChatRoom"
+      },
+      {
+        "binding": "NOTIFICATION_SERVICE",
+        "className": "NotificationService"
+      }
+    ],
+    "durableObjectMigrations": [
+      {
+        "tag": "v1",
+        "newSqliteClasses": [
+          "ChatRoom",
+          "NotificationService"
+        ]
+      }
+    ],
+    "variables": {
+      "environment": "staging",
+      "paymentMode": "disabled",
+      "promptPayEnabled": "false"
+    },
+    "containsPlaceholders": true
+  },
+  "evidence": {
+    "account": {
+      "authenticated": true,
+      "targetAccountPresent": false,
+      "observedMembershipCount": 1,
+      "observedAccountIdsDigest": "0251a8ac03bb0ac3c29e4da743946dcc99b60cf0321d77c6c54821028be6fcb9",
+      "identitiesRedacted": true
+    }
+  },
+  "commandLog": [
+    {
+      "label": "authenticated account membership",
+      "command": [
+        "wrangler",
+        "whoami",
+        "--json"
+      ],
+      "exitCode": 0
+    }
+  ],
+  "secretsCaptured": false,
+  "productionCommandsExecuted": 0,
+  "remoteMutationsExecuted": 0,
+  "requiredNextAction": "Authenticate Wrangler into the pinned Tirak account or resolve each blocker, then rerun read-only discovery. Do not guess identities."
+}
