@@ -1,5 +1,7 @@
-import { accessSync, constants, readFileSync } from 'node:fs';
+import { accessSync, constants, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
 
 const requiredScripts = [
   'scripts/deploy.sh',
@@ -47,7 +49,17 @@ try {
   const recovery = JSON.parse(run('bash', ['scripts/verify-local-recovery.sh']));
   const negatives = JSON.parse(run('node', ['scripts/release-negative-matrix.mjs']));
 
-  const stagingProbe = spawnSync('node', ['scripts/validate-target.mjs', 'staging', 'tirak-staging', 'wrangler.toml'], {
+  const currentConfig = readFileSync('wrangler.toml', 'utf8');
+  const placeholderConfig = currentConfig.replace(
+    /(\[\[env\.staging\.d1_databases\]\][\s\S]*?database_id\s*=\s*")[^"]+(")/,
+    '$1placeholder-staging-db-id$2',
+  );
+  assert(placeholderConfig !== currentConfig, 'could not create isolated placeholder staging fixture');
+  const fixtureRoot = mkdtempSync(resolve(tmpdir(), 'tirak-release-gate-'));
+  const placeholderConfigPath = resolve(fixtureRoot, 'wrangler-placeholder.toml');
+  writeFileSync(placeholderConfigPath, placeholderConfig);
+
+  const stagingProbe = spawnSync('node', ['scripts/validate-target.mjs', 'staging', 'tirak-staging', placeholderConfigPath], {
     cwd: process.cwd(),
     encoding: 'utf8',
   });
