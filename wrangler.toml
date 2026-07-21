@@ -27,7 +27,7 @@ database_id = "60443346-c480-4975-962e-bd4daf4a37a8"
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "tirak-staging"
-database_id = "placeholder-staging-db-id"
+database_id = "5132c8cc-8f23-4dd2-94d1-9d53edb92888"
 
 [[env.production.d1_databases]]
 binding = "DB"
@@ -58,11 +58,11 @@ id = "486126fb5afb41feb30458231bde3a96"
 
 [[env.staging.kv_namespaces]]
 binding = "CACHE"
-id = "placeholder-cache-staging-id"
+id = "ff06486f6291490f83c1864d812ef7f8"
 
 [[env.staging.kv_namespaces]]
 binding = "SESSIONS"
-id = "placeholder-sessions-staging-id"
+id = "6f29f29cd08d4920aa3cc35577377270"
 
 [[env.production.kv_namespaces]]
 binding = "CACHE"

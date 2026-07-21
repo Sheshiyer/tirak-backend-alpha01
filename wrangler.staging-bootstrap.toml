@@ -1,0 +1,54 @@
+name = "tirak-backend-staging"
+main = "scripts/staging/bootstrap-worker.mjs"
+account_id = "2c0c96c68f0ee73b6d980054557bca5b"
+compatibility_date = "2026-07-21"
+workers_dev = false
+
+# Dry-run-only sentinel identifiers. A later evidence-gated bootstrap action must
+# render the concrete T-025 D1/KV identifiers; this isolated file is never the
+# T-036 application deployment configuration.
+[[d1_databases]]
+binding = "DB"
+database_name = "tirak-staging"
+database_id = "00000000-0000-4000-8000-000000000000"
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "00000000000000000000000000000000"
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "11111111111111111111111111111111"
+
+[[r2_buckets]]
+binding = "STORAGE"
+bucket_name = "tirak-storage-staging"
+
+[[queues.producers]]
+binding = "MODERATION_QUEUE"
+queue = "tirak-moderation-staging"
+
+[[queues.producers]]
+binding = "ANALYTICS_QUEUE"
+queue = "tirak-analytics-staging"
+
+[[queues.producers]]
+binding = "NOTIFICATION_QUEUE"
+queue = "tirak-notification-staging"
+
+[[durable_objects.bindings]]
+name = "CHAT_ROOM"
+class_name = "ChatRoom"
+
+[[durable_objects.bindings]]
+name = "NOTIFICATION_SERVICE"
+class_name = "NotificationService"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRoom", "NotificationService"]
+
+[vars]
+ENVIRONMENT = "staging"
+PAYMENT_MODE = "disabled"
+PROMPTPAY_ENABLED = "false"
