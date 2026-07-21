@@ -1,0 +1,52 @@
+{
+  "contractVersion": "tirak-payments-v1",
+  "basePath": "/api/payments",
+  "currency": "THB",
+  "providerAmountUnit": "satang",
+  "displayAmountUnit": "THB",
+  "authentication": {
+    "customerRoutes": "Bearer JWT; booking ownership required",
+    "webhookRoute": "Omise raw-body HMAC-SHA256 signature plus replay window"
+  },
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/api/payments/charges",
+      "request": { "bookingId": "uuid", "method": "promptpay" },
+      "successStatuses": [200, 201],
+      "responseFields": ["contractVersion", "chargeId", "paymentStatus", "attemptStatus", "qrCodeUrl", "amountSatang", "displayTotalThb", "currency", "expiresAt"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/payments/charges/:chargeId",
+      "request": {},
+      "successStatuses": [200],
+      "responseFields": ["contractVersion", "chargeId", "paymentStatus", "attemptStatus", "qrCodeUrl", "amountSatang", "displayTotalThb", "currency", "expiresAt"]
+    },
+    {
+      "method": "POST",
+      "path": "/api/payments/charges/recover",
+      "request": { "bookingId": "uuid", "chargeId": "chrg_*" },
+      "successStatuses": [200],
+      "responseFields": ["contractVersion", "chargeId", "paymentStatus", "attemptStatus", "qrCodeUrl", "amountSatang", "displayTotalThb", "currency", "expiresAt"]
+    },
+    {
+      "method": "POST",
+      "path": "/api/payments/webhooks/omise",
+      "request": "exact raw bytes",
+      "successStatuses": [200],
+      "responseFields": ["received", "duplicate"]
+    }
+  ],
+  "forbiddenRequestFields": ["amount", "amountSatang", "currency", "card", "cardNumber", "cvv", "tip", "gift", "subscription", "beneficiary"],
+  "blockedRoutes": [
+    "/api/payments/payment-methods",
+    "/api/payments/payment-methods/:id",
+    "/api/payments/payments/history"
+  ],
+  "errorEnvelope": {
+    "success": false,
+    "error": "stable machine-readable code or validation label",
+    "message": "safe operator or customer detail"
+  }
+}

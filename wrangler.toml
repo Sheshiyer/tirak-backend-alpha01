@@ -27,7 +27,7 @@ database_id = "60443346-c480-4975-962e-bd4daf4a37a8"
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "tirak-staging"
-database_id = "placeholder-staging-db-id"
+database_id = "5132c8cc-8f23-4dd2-94d1-9d53edb92888"
 
 [[env.production.d1_databases]]
 binding = "DB"
@@ -58,11 +58,11 @@ id = "486126fb5afb41feb30458231bde3a96"
 
 [[env.staging.kv_namespaces]]
 binding = "CACHE"
-id = "placeholder-cache-staging-id"
+id = "ff06486f6291490f83c1864d812ef7f8"
 
 [[env.staging.kv_namespaces]]
 binding = "SESSIONS"
-id = "placeholder-sessions-staging-id"
+id = "6f29f29cd08d4920aa3cc35577377270"
 
 [[env.production.kv_namespaces]]
 binding = "CACHE"
@@ -228,6 +228,8 @@ allowed_sender_addresses = ["noreply@tirak.app"]
 # Environment variables (secrets will be set via wrangler secret)
 [vars]
 ENVIRONMENT = "development"
+PAYMENT_MODE = "disabled"
+PROMPTPAY_ENABLED = "false"
 FRONTEND_URLS = "http://localhost:3000,http://localhost:5173"
 JWT_SECRET = "dev-jwt-secret-change-in-production"
 EMAIL_PROVIDER = "cloudflare"
@@ -237,6 +239,8 @@ EMAIL_REPLY_TO = "support@tirak.app"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
+PAYMENT_MODE = "disabled"
+PROMPTPAY_ENABLED = "false"
 FRONTEND_URLS = "https://staging.tirak.app"
 EMAIL_PROVIDER = "cloudflare"
 EMAIL_FROM = "noreply@tirak.app"
@@ -245,6 +249,8 @@ EMAIL_REPLY_TO = "support@tirak.app"
 
 [env.production.vars]
 ENVIRONMENT = "production"
+PAYMENT_MODE = "disabled"
+PROMPTPAY_ENABLED = "false"
 FRONTEND_URLS = "https://tirak.app,https://www.tirak.app"
 EMAIL_PROVIDER = "cloudflare"
 EMAIL_FROM = "noreply@tirak.app"

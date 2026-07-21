@@ -1,0 +1,20 @@
+{
+  "contractVersion": "tirak-payments-v1",
+  "rules": [
+    { "attempt": "creating", "restitution": "none", "publicPayment": "processing", "ordinaryCancellation": "blocked" },
+    { "attempt": "indeterminate", "restitution": "none", "publicPayment": "processing", "ordinaryCancellation": "blocked" },
+    { "attempt": "pending", "restitution": "none", "publicPayment": "pending", "ordinaryCancellation": "blocked" },
+    { "attempt": "successful", "restitution": "none", "publicPayment": "paid", "ordinaryCancellation": "blocked" },
+    { "attempt": "successful", "restitution": "restitution_pending", "publicPayment": "restitution_pending", "ordinaryCancellation": "blocked" },
+    { "attempt": "successful", "restitution": "restituted", "publicPayment": "restituted", "ordinaryCancellation": "allowed_by_manual_case_only" },
+    { "attempt": "successful", "restitution": "restitution_failed", "publicPayment": "restitution_failed", "ordinaryCancellation": "blocked" },
+    { "attempt": "failed", "restitution": "none", "publicPayment": "failed", "ordinaryCancellation": "allowed" },
+    { "attempt": "expired", "restitution": "none", "publicPayment": "failed", "ordinaryCancellation": "allowed" }
+  ],
+  "bookingRules": {
+    "pending": "cannot pay or chat",
+    "confirmed": "can pay when unpaid or definitely failed; can use booking logistics chat",
+    "cancelled": "never changes provider truth and never implies refund",
+    "completed": "describes experience delivery, not provider settlement"
+  }
+}

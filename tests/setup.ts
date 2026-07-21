@@ -61,6 +61,8 @@ export const createTestEnv = () => ({
   },
   JWT_SECRET: 'test-jwt-secret-key-for-testing-only',
   ENVIRONMENT: 'test',
+  PAYMENT_MODE: 'test',
+  PROMPTPAY_ENABLED: 'true',
   FRONTEND_URLS: 'http://localhost:3000,http://localhost:3001',
 });
 

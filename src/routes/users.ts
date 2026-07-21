@@ -292,7 +292,7 @@ users.put('/companion/profile', async (c) => {
     if (error instanceof z.ZodError) {
       return jsonError(c, 'Invalid profile data', error.errors[0]?.message || 'Invalid companion profile payload', 400);
     }
-    return jsonError(c, 'Failed to update profile', 'An error occurred while updating the companion profile', 500);
+    return jsonError(c, 'Failed to update profile', 'An error occurred while updating the local guide profile', 500);
   }
 });
 

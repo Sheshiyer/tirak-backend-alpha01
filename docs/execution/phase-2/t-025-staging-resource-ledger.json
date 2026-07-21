@@ -1,0 +1,758 @@
+{
+  "schemaVersion": 2,
+  "taskId": "T-025",
+  "contractVersion": "tirak-payments-v1",
+  "generatedAt": "2026-07-21T08:52:40.384Z",
+  "environment": "staging",
+  "authority": "T-024 approved authenticated read-only staging evidence only",
+  "discoveryTransport": "Cloudflare REST API token through fixed read-only client",
+  "discoveryState": "READ_ONLY_EVIDENCE_HUMAN_CONFIRMED",
+  "status": "HUMAN_CONFIRMED_STAGING_IDENTITIES",
+  "blockers": [],
+  "checks": [
+    {
+      "name": "AUTHENTICATED_TARGET_ACCOUNT",
+      "status": "PASS",
+      "detail": "authenticated membership includes the pinned staging account"
+    },
+    {
+      "name": "CURRENT_TOKEN_SCOPE_INSPECTED",
+      "status": "PASS",
+      "detail": "current-token policies were inspected and include the pinned Tirak account; only a coarse permission-risk class is retained"
+    },
+    {
+      "name": "REST_METADATA_VARIANCE_PROPOSED",
+      "status": "PASS",
+      "detail": "official REST read-only metadata is recorded as a fingerprint-bound proposed variance requiring human release-owner confirmation"
+    },
+    {
+      "name": "RESOURCE_DIAGNOSTICS_SAFE",
+      "status": "PASS",
+      "detail": "resource diagnostics retain only bounded aggregate counts and unresolved staging-only projections, remain informational, and are excluded from identity acceptance"
+    },
+    {
+      "name": "PROPOSED_CONFIGURATION_EXACT",
+      "status": "PASS",
+      "detail": "proposed local correction contains exactly one remote-matched DB identity and the remote-matched CACHE/SESSIONS identities with no extras"
+    },
+    {
+      "name": "CONFIGURED_IDENTITIES_CONCRETE",
+      "status": "PASS",
+      "detail": "staging configuration contains no placeholder resource identity"
+    },
+    {
+      "name": "STAGING_WORKER_UNIQUE",
+      "status": "PASS",
+      "detail": "expected one tirak-backend-staging Worker, observed 1"
+    },
+    {
+      "name": "STAGING_WORKER_ACTIVE_DEPLOYMENT",
+      "status": "PASS",
+      "detail": "staging Worker has an active deployment whose version details were inspected read-only"
+    },
+    {
+      "name": "STAGING_WORKER_BINDINGS_VERIFIED",
+      "status": "PASS",
+      "detail": "all active staging Worker versions agree on the safe resource-binding projection"
+    },
+    {
+      "name": "STAGING_WORKER_ENVIRONMENT_SAFE",
+      "status": "PASS",
+      "detail": "active Worker ENVIRONMENT is exactly staging across every serving version"
+    },
+    {
+      "name": "STAGING_WORKER_PAYMENT_DISABLED",
+      "status": "PASS",
+      "detail": "active Worker PAYMENT_MODE is exactly disabled across every serving version"
+    },
+    {
+      "name": "STAGING_WORKER_PROMPTPAY_DISABLED",
+      "status": "PASS",
+      "detail": "active Worker PROMPTPAY_ENABLED is exactly false across every serving version"
+    },
+    {
+      "name": "STAGING_WORKER_MIGRATION_TAG",
+      "status": "PASS",
+      "detail": "active Worker Durable Object migration tag matches the configured staging tag"
+    },
+    {
+      "name": "STAGING_D1_UNIQUE",
+      "status": "PASS",
+      "detail": "expected one tirak-staging D1 database, observed 1"
+    },
+    {
+      "name": "STAGING_D1_ID_VALID",
+      "status": "PASS",
+      "detail": "D1 candidate has a concrete UUID"
+    },
+    {
+      "name": "STAGING_D1_INFO_MATCH",
+      "status": "PASS",
+      "detail": "D1 info identity matches list identity"
+    },
+    {
+      "name": "STAGING_D1_CONFIGURED_ID_MATCH",
+      "status": "PASS",
+      "detail": "configured D1 identifier matches authenticated remote evidence"
+    },
+    {
+      "name": "STAGING_D1_STORAGE_VERSION",
+      "status": "PASS",
+      "detail": "D1 platform/storage version was captured from authenticated Cloudflare metadata"
+    },
+    {
+      "name": "STAGING_D1_SCHEMA_USER_VERSION",
+      "status": "PASS",
+      "detail": "D1 schema user_version was captured read-only or bounded to zero by the fingerprinted pristine-empty D1 invariant after Cloudflare SQLITE_AUTH refusal"
+    },
+    {
+      "name": "STAGING_D1_SCHEMA_INVENTORY",
+      "status": "PASS",
+      "detail": "sqlite_schema evidence contains a consistent nonnegative user-table count with explicit internal-table exclusion"
+    },
+    {
+      "name": "STAGING_KV_CACHE_UNIQUE",
+      "status": "PASS",
+      "detail": "expected one staging namespace mapped to CACHE, observed 1"
+    },
+    {
+      "name": "STAGING_KV_CACHE_ID_VALID",
+      "status": "PASS",
+      "detail": "CACHE namespace has a concrete identifier"
+    },
+    {
+      "name": "STAGING_KV_CACHE_CONFIGURED_ID_MATCH",
+      "status": "PASS",
+      "detail": "configured CACHE identifier matches authenticated remote evidence"
+    },
+    {
+      "name": "STAGING_KV_SESSIONS_UNIQUE",
+      "status": "PASS",
+      "detail": "expected one staging namespace mapped to SESSIONS, observed 1"
+    },
+    {
+      "name": "STAGING_KV_SESSIONS_ID_VALID",
+      "status": "PASS",
+      "detail": "SESSIONS namespace has a concrete identifier"
+    },
+    {
+      "name": "STAGING_KV_SESSIONS_CONFIGURED_ID_MATCH",
+      "status": "PASS",
+      "detail": "configured SESSIONS identifier matches authenticated remote evidence"
+    },
+    {
+      "name": "STAGING_R2_STORAGE_UNIQUE",
+      "status": "PASS",
+      "detail": "expected one tirak-storage-staging bucket, observed 1"
+    },
+    {
+      "name": "STAGING_QUEUE_tirak-moderation-staging_UNIQUE",
+      "status": "PASS",
+      "detail": "expected one tirak-moderation-staging queue/DLQ, observed 1"
+    },
+    {
+      "name": "STAGING_QUEUE_tirak-analytics-staging_UNIQUE",
+      "status": "PASS",
+      "detail": "expected one tirak-analytics-staging queue/DLQ, observed 1"
+    },
+    {
+      "name": "STAGING_QUEUE_tirak-notification-staging_UNIQUE",
+      "status": "PASS",
+      "detail": "expected one tirak-notification-staging queue/DLQ, observed 1"
+    },
+    {
+      "name": "STAGING_QUEUE_tirak-moderation-dlq-staging_UNIQUE",
+      "status": "PASS",
+      "detail": "expected one tirak-moderation-dlq-staging queue/DLQ, observed 1"
+    },
+    {
+      "name": "STAGING_QUEUE_tirak-analytics-dlq-staging_UNIQUE",
+      "status": "PASS",
+      "detail": "expected one tirak-analytics-dlq-staging queue/DLQ, observed 1"
+    },
+    {
+      "name": "STAGING_QUEUE_tirak-notification-dlq-staging_UNIQUE",
+      "status": "PASS",
+      "detail": "expected one tirak-notification-dlq-staging queue/DLQ, observed 1"
+    },
+    {
+      "name": "STAGING_WORKER_QUEUE_MODERATION_QUEUE",
+      "status": "PASS",
+      "detail": "active Worker binds MODERATION_QUEUE to tirak-moderation-staging"
+    },
+    {
+      "name": "STAGING_WORKER_QUEUE_ANALYTICS_QUEUE",
+      "status": "PASS",
+      "detail": "active Worker binds ANALYTICS_QUEUE to tirak-analytics-staging"
+    },
+    {
+      "name": "STAGING_WORKER_QUEUE_NOTIFICATION_QUEUE",
+      "status": "PASS",
+      "detail": "active Worker binds NOTIFICATION_QUEUE to tirak-notification-staging"
+    },
+    {
+      "name": "STAGING_DO_CHAT_ROOM",
+      "status": "PASS",
+      "detail": "expected deployed CHAT_ROOM/ChatRoom binding, observed 1"
+    },
+    {
+      "name": "STAGING_DO_CHAT_ROOM_SQLITE",
+      "status": "PASS",
+      "detail": "CHAT_ROOM/ChatRoom uses SQLite-backed Durable Object storage"
+    },
+    {
+      "name": "STAGING_DO_NOTIFICATION_SERVICE",
+      "status": "PASS",
+      "detail": "expected deployed NOTIFICATION_SERVICE/NotificationService binding, observed 1"
+    },
+    {
+      "name": "STAGING_DO_NOTIFICATION_SERVICE_SQLITE",
+      "status": "PASS",
+      "detail": "NOTIFICATION_SERVICE/NotificationService uses SQLite-backed Durable Object storage"
+    },
+    {
+      "name": "STAGING_MIGRATION_LEDGER_CAPTURED",
+      "status": "PASS",
+      "detail": "d1_migrations ledger was captured read-only"
+    },
+    {
+      "name": "STAGING_MIGRATION_STATUS_CAPTURED",
+      "status": "PASS",
+      "detail": "local migration inventory was compared with the remote read-only ledger"
+    },
+    {
+      "name": "STAGING_MIGRATION_LINEAGE_RECORDED",
+      "status": "PASS",
+      "detail": "duplicate local migration-prefix lineage is recorded as blocked_pending_T028 without suppressing T-025 read-only evidence"
+    },
+    {
+      "name": "STAGING_ROW_COUNTS_CAPTURED",
+      "status": "PASS",
+      "detail": "sqlite_schema explicitly proves zero user tables after internal-table exclusion; empty user-table row counts are accepted"
+    }
+  ],
+  "targetFingerprint": "52431d704ca2ea3dbf208785ea6ea09f60c9629a00ea37544ad49b30d04c7f10",
+  "resourcesVerified": true,
+  "humanConfirmation": {
+    "taskId": "T-025",
+    "targetFingerprint": "52431d704ca2ea3dbf208785ea6ea09f60c9629a00ea37544ad49b30d04c7f10",
+    "approvedBy": "human release owner",
+    "approvedAt": "2026-07-21T08:52:07.937Z",
+    "statement": "I confirm the T-025 staging resource ledger fingerprint and authorize the listed staging identities for later evidence-gated staging work. This does not authorize production access, deployment, migration application, secret mutation, live Omise charging, or App Store submission.",
+    "acceptedVarianceIds": [
+      "CLOUDFLARE_OFFICIAL_REST_READ_ONLY_METADATA"
+    ]
+  },
+  "localConfigurationCorrectionAuthorized": false,
+  "localConfigurationCorrectionBoundary": "Fingerprint-bound human confirmation may authorize only replacement of staging D1/KV placeholder identities with the exact proposedConfiguration values; it never authorizes a remote mutation.",
+  "mutationAllowed": false,
+  "mutationBoundary": "T-025 evidence never authorizes deployment, migration application, secret changes, resource creation/deletion, production access, live Omise charging, or App Store submission.",
+  "configured": {
+    "accountId": "2c0c96c68f0ee73b6d980054557bca5b",
+    "worker": "tirak-backend-staging",
+    "database": [
+      {
+        "binding": "DB",
+        "name": "tirak-staging",
+        "id": "5132c8cc-8f23-4dd2-94d1-9d53edb92888"
+      }
+    ],
+    "kv": [
+      {
+        "binding": "CACHE",
+        "id": "ff06486f6291490f83c1864d812ef7f8"
+      },
+      {
+        "binding": "SESSIONS",
+        "id": "6f29f29cd08d4920aa3cc35577377270"
+      }
+    ],
+    "r2": [
+      {
+        "binding": "STORAGE",
+        "name": "tirak-storage-staging"
+      }
+    ],
+    "queues": {
+      "producers": [
+        {
+          "binding": "MODERATION_QUEUE",
+          "name": "tirak-moderation-staging"
+        },
+        {
+          "binding": "ANALYTICS_QUEUE",
+          "name": "tirak-analytics-staging"
+        },
+        {
+          "binding": "NOTIFICATION_QUEUE",
+          "name": "tirak-notification-staging"
+        }
+      ],
+      "consumers": [
+        {
+          "name": "tirak-moderation-staging",
+          "deadLetterQueue": "tirak-moderation-dlq-staging"
+        },
+        {
+          "name": "tirak-analytics-staging",
+          "deadLetterQueue": "tirak-analytics-dlq-staging"
+        },
+        {
+          "name": "tirak-notification-staging",
+          "deadLetterQueue": "tirak-notification-dlq-staging"
+        }
+      ]
+    },
+    "durableObjects": [
+      {
+        "binding": "CHAT_ROOM",
+        "className": "ChatRoom"
+      },
+      {
+        "binding": "NOTIFICATION_SERVICE",
+        "className": "NotificationService"
+      }
+    ],
+    "durableObjectMigrations": [
+      {
+        "tag": "v1",
+        "newSqliteClasses": [
+          "ChatRoom",
+          "NotificationService"
+        ]
+      }
+    ],
+    "variables": {
+      "environment": "staging",
+      "paymentMode": "disabled",
+      "promptPayEnabled": "false"
+    },
+    "containsPlaceholders": false
+  },
+  "evidence": {
+    "account": {
+      "authenticated": true,
+      "targetAccountPresent": true,
+      "verifiedAccountId": "2c0c96c68f0ee73b6d980054557bca5b",
+      "identitiesRedacted": true
+    },
+    "credential": {
+      "present": true,
+      "source": "owner-only-environment-file",
+      "tokenCaptured": false,
+      "scopeInspected": true,
+      "pinnedAccountIncluded": true,
+      "permissionRisk": "write-capable-or-broad",
+      "verificationType": "account-token"
+    },
+    "acceptanceVariance": {
+      "id": "CLOUDFLARE_OFFICIAL_REST_READ_ONLY_METADATA",
+      "status": "PROPOSED_OWNER_CONFIRMATION_REQUIRED",
+      "requestedContractTransport": "Wrangler authenticated metadata",
+      "proposedTransport": "Cloudflare official REST API with a deny-by-default read-only client",
+      "reason": "Wrangler OAuth did not provide the authenticated staging metadata path required by T-025.",
+      "confirmationMechanism": "The human release owner confirms the exact targetFingerprint, which includes this variance proposal."
+    },
+    "workers": [
+      {
+        "name": "tirak-backend-staging",
+        "deploymentCount": 1,
+        "activeVersionIds": [
+          "83af4a2f-a9a4-40ca-a1c8-8f40b51e8caa"
+        ],
+        "activeBindingsVerified": true
+      }
+    ],
+    "workerRuntime": {
+      "environment": "staging",
+      "paymentMode": "disabled",
+      "promptPayEnabled": "false",
+      "migrationTag": "v1"
+    },
+    "databases": [
+      {
+        "name": "tirak-staging",
+        "uuid": "5132c8cc-8f23-4dd2-94d1-9d53edb92888"
+      }
+    ],
+    "kvNamespaces": [
+      {
+        "binding": "CACHE",
+        "title": "tirak-cache-staging",
+        "id": "ff06486f6291490f83c1864d812ef7f8"
+      },
+      {
+        "binding": "SESSIONS",
+        "title": "tirak-sessions-staging",
+        "id": "6f29f29cd08d4920aa3cc35577377270"
+      }
+    ],
+    "r2Buckets": [
+      {
+        "name": "tirak-storage-staging"
+      }
+    ],
+    "queues": [
+      {
+        "name": "tirak-analytics-dlq-staging",
+        "id": "fded643df5b34426bd23ab91fba538a0"
+      },
+      {
+        "name": "tirak-analytics-staging",
+        "id": "3f27f02a543c424993bd87c6c144afca"
+      },
+      {
+        "name": "tirak-moderation-dlq-staging",
+        "id": "32aac1aa4d3f4f91b2f5ff6fa3626481"
+      },
+      {
+        "name": "tirak-moderation-staging",
+        "id": "5113351c19964890b1d1fadcba8e877c"
+      },
+      {
+        "name": "tirak-notification-dlq-staging",
+        "id": "7029c3645c594d6f8116c15d61049d7d"
+      },
+      {
+        "name": "tirak-notification-staging",
+        "id": "6bdb802e9e4e4b0685aac2208536d493"
+      }
+    ],
+    "durableObjects": [
+      {
+        "binding": "CHAT_ROOM",
+        "className": "ChatRoom",
+        "namespaceId": "51bf04b8717f4db2a49bf1f3d445e3eb",
+        "script": "tirak-backend-staging",
+        "useSqlite": true
+      },
+      {
+        "binding": "NOTIFICATION_SERVICE",
+        "className": "NotificationService",
+        "namespaceId": "abea79dad4e640188eba905602fc9180",
+        "script": "tirak-backend-staging",
+        "useSqlite": true
+      }
+    ],
+    "resourceDiagnostics": {
+      "informationalOnly": true,
+      "acceptanceEffect": "NONE",
+      "mutationAllowed": false,
+      "fingerprintPolicy": {
+        "included": false,
+        "reason": "Aggregate counts and unresolved staging candidates are troubleshooting context, not human-reviewed identity selections."
+      },
+      "limits": {
+        "maxObservedPerResourceType": 10000,
+        "maxObservedTotal": 60000,
+        "maxCandidatesPerResourceType": 20,
+        "maxCandidatesTotal": 100
+      },
+      "observedCounts": {
+        "workers": 11,
+        "d1Databases": 6,
+        "kvNamespaces": 24,
+        "r2Buckets": 6,
+        "queues": 18,
+        "durableObjects": 6,
+        "total": 71
+      },
+      "unresolvedFrozenMatches": [],
+      "stagingCandidates": {
+        "workers": [],
+        "d1Databases": [],
+        "kvNamespaces": [],
+        "r2Buckets": [],
+        "queues": [],
+        "durableObjects": []
+      }
+    },
+    "workerBindings": [
+      {
+        "type": "d1",
+        "binding": "DB",
+        "id": "5132c8cc-8f23-4dd2-94d1-9d53edb92888"
+      },
+      {
+        "type": "durable_object_namespace",
+        "binding": "CHAT_ROOM",
+        "className": "ChatRoom",
+        "namespaceId": "51bf04b8717f4db2a49bf1f3d445e3eb"
+      },
+      {
+        "type": "durable_object_namespace",
+        "binding": "NOTIFICATION_SERVICE",
+        "className": "NotificationService",
+        "namespaceId": "abea79dad4e640188eba905602fc9180"
+      },
+      {
+        "type": "kv_namespace",
+        "binding": "CACHE",
+        "id": "ff06486f6291490f83c1864d812ef7f8"
+      },
+      {
+        "type": "kv_namespace",
+        "binding": "SESSIONS",
+        "id": "6f29f29cd08d4920aa3cc35577377270"
+      },
+      {
+        "type": "queue",
+        "binding": "ANALYTICS_QUEUE",
+        "name": "tirak-analytics-staging"
+      },
+      {
+        "type": "queue",
+        "binding": "MODERATION_QUEUE",
+        "name": "tirak-moderation-staging"
+      },
+      {
+        "type": "queue",
+        "binding": "NOTIFICATION_QUEUE",
+        "name": "tirak-notification-staging"
+      },
+      {
+        "type": "r2_bucket",
+        "binding": "STORAGE",
+        "name": "tirak-storage-staging"
+      }
+    ],
+    "schemaInventory": {
+      "source": "sqlite_schema",
+      "excludedInternalTables": [
+        "sqlite_%",
+        "_cf_%",
+        "d1_migrations"
+      ],
+      "userTableCount": 0,
+      "userTableNames": [],
+      "migrationLedgerTablePresent": false
+    },
+    "rowCounts": {},
+    "migrationLedger": [],
+    "databaseInfo": {
+      "id": "5132c8cc-8f23-4dd2-94d1-9d53edb92888",
+      "name": "tirak-staging",
+      "storageVersion": "production",
+      "schemaUserVersion": 0,
+      "schemaUserVersionEvidence": {
+        "source": "fresh-empty-d1-invariant",
+        "directReadStatus": "cloudflare-sqlite-auth-refused",
+        "providerErrorCode": 7500,
+        "remoteReportedTableCount": 0
+      },
+      "fileSize": 12288,
+      "reportedTableCount": 0
+    },
+    "pendingMigrations": [
+      "001_initial_schema.sql",
+      "002_add_indexes.sql",
+      "003_add_analytics_tables.sql",
+      "004_background_jobs_tables.sql",
+      "004_mobile_app_features.sql",
+      "005_muse_ai_foundation.sql",
+      "006_referrals_tirak_coins.sql",
+      "007_registration_profile_persistence.sql",
+      "008_omise_promptpay_payments.sql",
+      "009_booking_scoped_chat.sql"
+    ],
+    "migrationLineage": {
+      "status": "blocked_pending_T028",
+      "anomalies": [
+        {
+          "code": "LOCAL_MIGRATION_PREFIX_DUPLICATE",
+          "prefix": "004",
+          "files": [
+            "004_background_jobs_tables.sql",
+            "004_mobile_app_features.sql"
+          ]
+        }
+      ],
+      "t028Blocked": true,
+      "mutationAuthorized": false
+    },
+    "proposedConfiguration": {
+      "database": [
+        {
+          "binding": "DB",
+          "name": "tirak-staging",
+          "id": "5132c8cc-8f23-4dd2-94d1-9d53edb92888"
+        }
+      ],
+      "kv": [
+        {
+          "binding": "CACHE",
+          "id": "ff06486f6291490f83c1864d812ef7f8"
+        },
+        {
+          "binding": "SESSIONS",
+          "id": "6f29f29cd08d4920aa3cc35577377270"
+        }
+      ]
+    }
+  },
+  "requestLog": [
+    {
+      "operation": "token verification",
+      "method": "GET",
+      "path": "/client/v4/user/tokens/verify",
+      "status": 401,
+      "outcome": "api-failure",
+      "success": false
+    },
+    {
+      "operation": "account token verification",
+      "method": "GET",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/tokens/verify",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "current account token details",
+      "method": "GET",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/tokens/{verified-current-token}",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "account identity",
+      "method": "GET",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "Worker list",
+      "method": "GET",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/workers/scripts",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true,
+      "pagination": {
+        "mode": "single",
+        "ordinal": 1,
+        "resultCount": 11
+      }
+    },
+    {
+      "operation": "Worker deployments",
+      "method": "GET",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/workers/scripts/tirak-backend-staging/deployments",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "Worker version detail",
+      "method": "GET",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/workers/scripts/tirak-backend-staging/versions/83af4a2f-a9a4-40ca-a1c8-8f40b51e8caa",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 list",
+      "method": "GET",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true,
+      "pagination": {
+        "mode": "page",
+        "ordinal": 1,
+        "resultCount": 6
+      }
+    },
+    {
+      "operation": "KV list",
+      "method": "GET",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/storage/kv/namespaces",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true,
+      "pagination": {
+        "mode": "page",
+        "ordinal": 1,
+        "resultCount": 24
+      }
+    },
+    {
+      "operation": "R2 list",
+      "method": "GET",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/r2/buckets",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true,
+      "pagination": {
+        "mode": "cursor",
+        "ordinal": 1,
+        "resultCount": 6
+      }
+    },
+    {
+      "operation": "Queue list",
+      "method": "GET",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/queues",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true,
+      "pagination": {
+        "mode": "page",
+        "ordinal": 1,
+        "resultCount": 18
+      }
+    },
+    {
+      "operation": "Durable Object list",
+      "method": "GET",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/workers/durable_objects/namespaces",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true,
+      "pagination": {
+        "mode": "page",
+        "ordinal": 1,
+        "resultCount": 6
+      }
+    },
+    {
+      "operation": "D1 detail",
+      "method": "GET",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 400,
+      "outcome": "api-failure",
+      "success": false
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    }
+  ],
+  "secretsCaptured": false,
+  "productionCommandsExecuted": 0,
+  "remoteMutationsExecuted": 0,
+  "t026Blocked": false,
+  "requiredNextAction": "T-025 accepted; T-026 remains separately evidence-gated and mutation remains unauthorized."
+}

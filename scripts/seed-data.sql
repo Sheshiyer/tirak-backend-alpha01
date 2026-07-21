@@ -3,11 +3,11 @@
 
 -- Insert categories
 INSERT OR IGNORE INTO categories (id, name_en, name_th, description_en, description_th, icon, color, sort_order, is_active) VALUES
-('cat_companion', 'Companion Services', 'บริการเพื่อน', 'Professional companion services', 'บริการเพื่อนมืออาชีพ', 'users', '#3B82F6', 1, TRUE),
+('cat_city_walks', 'City Walks', 'เดินเที่ยวชมเมือง', 'Guided walking routes through local neighborhoods', 'เส้นทางเดินพร้อมไกด์ในย่านท้องถิ่น', 'map-pin', '#3B82F6', 1, TRUE),
 ('cat_tour_guide', 'Tour Guide', 'ไกด์นำเที่ยว', 'Local tour guide services', 'บริการไกด์นำเที่ยวท้องถิ่น', 'map', '#10B981', 2, TRUE),
 ('cat_translator', 'Translation', 'แปลภาษา', 'Language translation services', 'บริการแปลภาษา', 'globe', '#8B5CF6', 3, TRUE),
 ('cat_shopping', 'Shopping Assistant', 'ผู้ช่วยช้อปปิ้ง', 'Personal shopping assistance', 'ผู้ช่วยช้อปปิ้งส่วนตัว', 'shopping-bag', '#F59E0B', 4, TRUE),
-('cat_dining', 'Dining Companion', 'เพื่อนทานอาหาร', 'Dining and food experience companion', 'เพื่อนทานอาหารและสัมผัสประสบการณ์อาหาร', 'utensils', '#EF4444', 5, TRUE),
+('cat_food_tours', 'Food Tours', 'ทัวร์อาหาร', 'Guided market and local food experiences', 'ประสบการณ์ตลาดและอาหารท้องถิ่นพร้อมไกด์', 'utensils', '#EF4444', 5, TRUE),
 ('cat_cultural', 'Cultural Experience', 'ประสบการณ์วัฒนธรรม', 'Cultural and traditional experience guide', 'ไกด์ประสบการณ์วัฒนธรรมและประเพณี', 'star', '#06B6D4', 6, TRUE);
 
 -- Insert regions
@@ -200,7 +200,7 @@ INSERT OR IGNORE INTO supplier_profiles (
     'supplier_002',
     'กิต ไกด์เชียงใหม่',
     'ไกด์ท้องถิ่นเชียงใหม่ มีประสบการณ์ 3 ปี รู้จักสถานที่ท่องเที่ยวดีๆ',
-    '["cat_tour_guide", "cat_dining", "cat_cultural"]',
+    '["cat_tour_guide", "cat_food_tours", "cat_cultural"]',
     '["region_chiang_mai"]',
     '["th", "en"]',
     '["https://example.com/supplier2.jpg"]',
@@ -260,7 +260,7 @@ INSERT OR IGNORE INTO supplier_services (
     'supplier_002',
     'Chiang Mai Food Tour',
     'Authentic northern Thai food experience with local markets',
-    'cat_dining',
+    'cat_food_tours',
     1800,
     2800,
     'THB',

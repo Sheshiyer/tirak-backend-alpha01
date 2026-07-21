@@ -240,7 +240,7 @@ export function apiDocsResponse(c: Context, docs: any): Response {
   return jsonResponse(c, {
     name: 'Tirak API',
     version: '1.0.0',
-    description: 'Tirak companion booking platform API',
+    description: 'Tirak guided-experience marketplace API',
     documentation: docs,
     timestamp: new Date().toISOString()
   });
