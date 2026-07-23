@@ -1,0 +1,15 @@
+{
+  "probe": "per-user-table table_info / index_list / foreign_key_list",
+  "status": "NOT_APPLICABLE",
+  "reason": "Zero user tables exist in tirak-staging. PRAGMA table_list returned only _cf_KV (Cloudflare-internal), sqlite_schema, sqlite_temp_schema. No user tables to introspect; empty set is the expected PASS evidence per T-025/T-026 pristine-empty proof.",
+  "user_tables": [],
+  "commands_that_would_run_per_table": [
+    "PRAGMA table_info(<table>);",
+    "PRAGMA index_list(<table>);",
+    "PRAGMA foreign_key_list(<table>);"
+  ],
+  "source_evidence": [
+    "staging-table-list.json",
+    "staging-sqlite-schema.json"
+  ]
+}

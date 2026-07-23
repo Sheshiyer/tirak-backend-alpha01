@@ -1,0 +1,121 @@
+{
+  "task": "T-027",
+  "issue": "Sheshiyer/tirak-mobile-app-v2#27",
+  "title": "Inspect staging booking, payment, and chat schema",
+  "generated": "2026-07-24",
+  "contract": "tirak-payments-v1",
+  "status": "COMPLETE - all preconditions classified; all FAILs are expected strategy-compliant states; no corruption or drift detected",
+  "staging": {
+    "database_name": "tirak-staging",
+    "database_id": "5132c8cc-8f23-4dd2-94d1-9d53edb92888",
+    "region": "APAC",
+    "fingerprint": "52431d704ca2ea3dbf208785ea6ea09f60c9629a00ea37544ad49b30d04c7f10",
+    "fingerprint_source": "T-026 re-verification 2026-07-23; Lane C probes 2026-07-24 consistent, zero drift",
+    "user_tables": 0,
+    "internal_tables": ["_cf_KV"],
+    "d1_migrations_ledger": "absent",
+    "user_version": "unavailable",
+    "bookmark_surface": "not exposed via d1 info or per-query meta.bookmark; T-026 Time Travel bookmark + export remain the recovery point"
+  },
+  "counts": {
+    "lane_a": {
+      "total": 80,
+      "pass": 15,
+      "fail": 63,
+      "fail_baseline_required": 37,
+      "fail_repo_artifact_nonconformant": 26,
+      "not_applicable": 2,
+      "note": "Row count computed from the actual Lane A file (sections A:10, B:4, C:17, D:7, E:17, F:15, G:6, H:4 = 80 rows)."
+    },
+    "lane_b": {
+      "total": 20,
+      "pass": 6,
+      "fail": 8,
+      "fail_baseline_required": 6,
+      "fail_repo_artifact_nonconformant": 2,
+      "not_applicable": 6
+    },
+    "overall": {
+      "total": 100,
+      "pass": 21,
+      "fail": 71,
+      "fail_baseline_required": 43,
+      "fail_repo_artifact_nonconformant": 28,
+      "not_applicable": 8
+    }
+  },
+  "classification_rule": {
+    "pass": "Expected absence/quarantine/non-application confirmed by probes; identity/classification metadata confirmed; or contract-level design cross-check (state-matrix set comparison, FK action inspection) verified from frozen contract and lane documents.",
+    "fail_baseline_required": "Requires schema objects (parent tables, contract tables, indexes, constraints, ledger rows) that pristine-empty staging intentionally lacks; expected, strategy-compliant state per migration-strategy.md empty-target canonical-baseline path - not corruption.",
+    "fail_repo_artifact_nonconformant": "Repo migration artifact (008/009, or absent restitutions migration) diverges from the frozen T-011 contract; T-028 must correct before any apply.",
+    "not_applicable": "Forward-looking process/plan/tooling gate not observable from staging state; deferred to T-028/T-029/release plan."
+  },
+  "divergences": [
+    {
+      "id": "DIV-1",
+      "artifact": "migrations/008_omise_promptpay_payments.sql",
+      "summary": "Amount column named `amount`; contract requires `amount_satang` (integer minor unit)",
+      "contract_refs": ["C9"],
+      "classification": "FAIL (repo artifact non-conformant - T-028 must correct)"
+    },
+    {
+      "id": "DIV-2",
+      "artifact": "migrations/008_omise_promptpay_payments.sql",
+      "summary": "Missing partial unique index `uq_payment_attempt_active_booking ON payment_attempts(booking_id) WHERE status IN ('creating','indeterminate','pending')`; repo has non-unique `idx_payment_attempts_booking` instead",
+      "contract_refs": ["C15", "G5", "H3"],
+      "classification": "FAIL (repo artifact non-conformant - T-028 must correct)"
+    },
+    {
+      "id": "DIV-3",
+      "artifact": "migrations/ (no file)",
+      "summary": "No repo migration creates `payment_restitutions` (contract-only table, E1-E17 incl. lifecycle CHECKs E13-E15 and uniques E3/E4); T-028 must author it",
+      "contract_refs": ["E1-E17", "G2", "G3", "G4"],
+      "classification": "FAIL (repo artifact non-conformant - T-028 must correct)"
+    },
+    {
+      "id": "DIV-4",
+      "artifact": "migrations/009_booking_scoped_chat.sql",
+      "summary": "Forbidden renaming variant: renames legacy `chat_rooms`/`chat_messages`, reuses those names (collision with legacy tables), uses DATETIME vs contract TEXT, and `reply_to_id` lacks its self-referencing REFERENCES clause; contract requires additive `booking_chat_rooms`/`booking_chat_messages`",
+      "contract_refs": ["A7", "F1", "F10", "B-C2", "B-C3"],
+      "classification": "FAIL (repo artifact non-conformant - T-028 must correct)"
+    },
+    {
+      "id": "DIV-5",
+      "artifact": "staging D1 tirak-staging",
+      "summary": "Baseline gap: staging is pristine-empty, so FK parents `users`/`bookings` and legacy pair chat tables do not exist; canonical baseline (001-003, 004_background_jobs_tables, 005-007; excluding quarantined 004_mobile_app_features) must be generated and applied first, recorded as exactly one d1_migrations row",
+      "contract_refs": ["B1", "B2", "B-P5", "B-P6", "B-P7"],
+      "classification": "FAIL (baseline required)"
+    }
+  ],
+  "d1_platform_notes": [
+    "PRAGMA user_version is unavailable on D1: refused with `not authorized: SQLITE_AUTH [code: 7500]` via wrangler remote execute (Lane C, staging-user-version.json) and via REST (T-025). Lineage verification must be d1_migrations-table-based; the first `wrangler d1 migrations apply` will create the ledger fresh on this database.",
+    "No bookmark-based consistency checks available from query metadata: `d1 info --json` exposes no bookmark field and per-query `meta.bookmark` was null; cross-task schema-dump fingerprinting (T-025/T-026 style) remains the drift-detection mechanism.",
+    "`_cf_KV` is Cloudflare-internal: excluded from the T-011 contract surface; must never be migrated or dropped."
+  ],
+  "evidence": {
+    "lane_a": "evidence/t027/lane-a-t011-contract-checklist.md",
+    "lane_b": "evidence/t027/lane-b-migration-preconditions.md",
+    "lane_c": "evidence/t027/lane-c-staging-actuals.md",
+    "staging_probes": [
+      "evidence/t027/staging-d1-info.json",
+      "evidence/t027/staging-sqlite-schema.json",
+      "evidence/t027/staging-table-list.json",
+      "evidence/t027/staging-user-tables.json",
+      "evidence/t027/staging-migration-ledger.json",
+      "evidence/t027/staging-user-version.json"
+    ],
+    "synthesis": "docs/execution/phase-2/t-027-staging-schema-inspection.md"
+  },
+  "t028_implications": [
+    "Generate canonical baseline from 001-003, 004_background_jobs_tables, 005-007 (exclude 004_mobile_app_features); record as exactly one d1_migrations row.",
+    "Correct 008: rename amount -> amount_satang; add partial unique index uq_payment_attempt_active_booking.",
+    "Author the missing payment_restitutions migration (E1-E17).",
+    "Rewrite 009 as additive expand (booking_chat_rooms/booking_chat_messages; TEXT timestamps; reply_to_id self-FK; collision-free idx_booking_chat_* names with IF NOT EXISTS).",
+    "Fail-closed lineage tooling: target schema + d1_migrations only; refuse/escalate on unrecognized state; no raw replay; Wrangler ledger after disposable rehearsal (T-029).",
+    "Never rely on PRAGMA user_version (SQLITE_AUTH 7500 on D1)."
+  ],
+  "constraints_honored": [
+    "Read-only: no git operations, no database writes, no credentials touched",
+    "Lane evidence files unmodified; only this ledger and the synthesis document were created"
+  ]
+}
