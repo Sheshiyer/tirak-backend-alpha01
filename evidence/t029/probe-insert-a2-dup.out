@@ -1,0 +1,16 @@
+npm warn Unknown user config "allow-scripts". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+{
+  "error": {
+    "text": "A request to the Cloudflare API (/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/aafab53c-2b83-402e-a9b7-01209ed8f894/query) failed.",
+    "notes": [
+      {
+        "text": "UNIQUE constraint failed: payment_attempts.booking_id: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_UNIQUE) [code: 7500]"
+      }
+    ],
+    "kind": "error",
+    "name": "APIError",
+    "code": 7500,
+    "accountTag": "2c0c96c68f0ee73b6d980054557bca5b"
+  }
+}

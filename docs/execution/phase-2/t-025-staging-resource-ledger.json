@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "taskId": "T-025",
   "contractVersion": "tirak-payments-v1",
-  "generatedAt": "2026-07-23T18:20:20.023Z",
+  "generatedAt": "2026-07-23T19:42:18.234Z",
   "environment": "staging",
   "authority": "T-024 approved authenticated read-only staging evidence only",
   "discoveryTransport": "Cloudflare REST API token through fixed read-only client",
@@ -231,13 +231,13 @@
       "detail": "sqlite_schema explicitly proves zero user tables after internal-table exclusion; empty user-table row counts are accepted"
     }
   ],
-  "targetFingerprint": "52431d704ca2ea3dbf208785ea6ea09f60c9629a00ea37544ad49b30d04c7f10",
+  "targetFingerprint": "3b57299a2a7cadc048243a18aeae8cc6d568b548eacf3edcfaa5ddbc24eef7cc",
   "resourcesVerified": true,
   "humanConfirmation": {
     "taskId": "T-025",
-    "targetFingerprint": "52431d704ca2ea3dbf208785ea6ea09f60c9629a00ea37544ad49b30d04c7f10",
+    "targetFingerprint": "3b57299a2a7cadc048243a18aeae8cc6d568b548eacf3edcfaa5ddbc24eef7cc",
     "approvedBy": "human release owner",
-    "approvedAt": "2026-07-21T08:52:07.937Z",
+    "approvedAt": "2026-07-23T19:32:43.958Z",
     "statement": "I confirm the T-025 staging resource ledger fingerprint and authorize the listed staging identities for later evidence-gated staging work. This does not authorize production access, deployment, migration application, secret mutation, live Omise charging, or App Store submission.",
     "acceptedVarianceIds": [
       "CLOUDFLARE_OFFICIAL_REST_READ_ONLY_METADATA"
@@ -553,7 +553,9 @@
       "006_referrals_tirak_coins.sql",
       "007_registration_profile_persistence.sql",
       "008_omise_promptpay_payments.sql",
-      "009_booking_scoped_chat.sql"
+      "009_booking_scoped_chat.sql",
+      "010_booking_chat_expansion.sql",
+      "011_payment_restitutions.sql"
     ],
     "migrationLineage": {
       "status": "blocked_pending_T028",
