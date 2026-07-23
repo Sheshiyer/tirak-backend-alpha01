@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T-026",
+  "contractVersion": "tirak-payments-v1",
+  "environment": "staging",
+  "capturedAt": "2026-07-23T18:12:04Z",
+  "authority": "T-024 read-only staging evidence; T-025 provisioning authority consumed; zero mutation authority inherited",
+  "stages": {
+    "A-preflight": {
+      "status": "PASS",
+      "permissionRisk": "write-capable-or-broad",
+      "note": "full-scope court.tirak account token materialized into owner-only .env.tirak-staging (0600, git-ignored, untracked); rotation still requires separate secret-mutation authority",
+      "pinnedAccountVerified": true,
+      "requestsExecuted": 4,
+      "remoteMutationsExecuted": 0
+    },
+    "A-discovery": {
+      "status": "HUMAN_CONFIRMED_STAGING_IDENTITIES",
+      "targetFingerprint": "52431d704ca2ea3dbf208785ea6ea09f60c9629a00ea37544ad49b30d04c7f10",
+      "driftSinceT025": false,
+      "requestsExecuted": 16,
+      "remoteMutationsExecuted": 0
+    },
+    "B-capture": {
+      "status": "PASS",
+      "d1": {
+        "name": "tirak-staging",
+        "uuid": "5132c8cc-8f23-4dd2-94d1-9d53edb92888",
+        "created_at": "2026-07-21T08:31:52.401Z",
+        "num_tables": 0,
+        "region": "APAC",
+        "read_replication": "disabled",
+        "queries_24h": { "read": 0, "write": 0 }
+      },
+      "timeTravelBookmark": "00000004-00000000-000050b1-8a569dc1ed6892b99a7f807910fd90a9",
+      "export": {
+        "file": "tirak-staging-20260723T181204Z.sql",
+        "bytes": 32,
+        "contentSummary": "PRAGMA defer_foreign_keys=TRUE; only — consistent with zero user tables",
+        "sha256": "309d1516f5d4f4f792b17106f7b761312f848c634e3028d70e6eb8ed39df7398"
+      },
+      "schemaProbe": {
+        "query": "sqlite_schema minus sqlite_%, _cf_%, d1_migrations",
+        "result": [],
+        "userTableCount": 0
+      },
+      "rowCountManifest": "exactly empty (zero user tables)",
+      "activeStagingWrites": 0
+    },
+    "C-rehearsal-restore": {
+      "status": "PASS",
+      "gate1": "human release owner approved 2026-07-23 via exact runbook statement",
+      "rehearsalDatabase": {
+        "name": "tirak-t026-rehearsal",
+        "uuid": "15469a54-cd99-4ae2-9d84-c8a1dfae59ed",
+        "region": "APAC",
+        "created_at": "2026-07-23T18:17:48.796Z",
+        "distinctFromStaging": true
+      },
+      "restore": {
+        "source": "tirak-staging-20260723T181204Z.sql",
+        "success": true,
+        "finalBookmark": "00000000-0000000a-000050b1-dd9bb0948b2e4a2e83ebc46339eee9e3",
+        "rowsWritten": 0,
+        "num_tables": 0
+      },
+      "proof": {
+        "schemaProbeIdenticalToCapture": true,
+        "rowCountManifestIdentical": "exactly empty on both",
+        "activeStagingNeverWriteTargeted": true
+      }
+    },
+    "D-teardown": {
+      "status": "PASS",
+      "gate2": "human release owner approved Option A (delete) 2026-07-23; separate deletion authority, nothing else deleted",
+      "deleted": "tirak-t026-rehearsal (15469a54-cd99-4ae2-9d84-c8a1dfae59ed)",
+      "absenceVerified": "wrangler d1 list — rehearsal absent, tirak-staging present and untouched",
+      "postTeardownFingerprint": "52431d704ca2ea3dbf208785ea6ea09f60c9629a00ea37544ad49b30d04c7f10",
+      "postTeardownDrift": false
+    }
+  },
+  "artifacts": {
+    "d1-info.json": "7b2dbc3c866ba931ddf55ee102a5fbe3f20c41a3458385b51dad4cc5b6273c5a",
+    "time-travel-bookmark.json": "fd83cd80492e1aae72737c6d6f89f7135fc850f8d5f5941f54b027cd51d446fe",
+    "schema-probe.json": "see checksums.sha256",
+    "checksums": "evidence/t026/checksums.sha256"
+  },
+  "sanitization": "one-hour signed export URL redacted from export.stdout; token material never serialized",
+  "abortTriggers": "none fired; fingerprint matched T-025 exactly"
+}
