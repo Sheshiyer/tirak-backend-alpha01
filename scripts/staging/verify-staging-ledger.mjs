@@ -346,7 +346,7 @@ const evidence = {
     { binding: 'NOTIFICATION_SERVICE', className: 'NotificationService', useSqlite: true },
   ],
   migrationLedger: [{ id: 1, name: '001_initial_schema.sql', applied_at: '2026-01-01T00:00:00Z' }],
-  pendingMigrations: ['008_payment_attempts.sql'],
+  pendingMigrations: ['008_omise_promptpay_payments.sql'],
   migrationLineage: { status: 'clear', anomalies: [], t028Blocked: false, mutationAuthorized: false },
   rowCounts: { bookings: 12, d1_migrations: 1, chat_rooms: 3 },
   proposedConfiguration: {
