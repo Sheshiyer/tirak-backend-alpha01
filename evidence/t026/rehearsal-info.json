@@ -1,0 +1,16 @@
+{
+  "uuid": "15469a54-cd99-4ae2-9d84-c8a1dfae59ed",
+  "name": "tirak-t026-rehearsal",
+  "created_at": "2026-07-23T18:17:48.796Z",
+  "num_tables": 0,
+  "running_in_region": "APAC",
+  "read_replication": {
+    "mode": "disabled"
+  },
+  "jurisdiction": null,
+  "database_size": 12288,
+  "read_queries_24h": 0,
+  "write_queries_24h": 0,
+  "rows_read_24h": 0,
+  "rows_written_24h": 0
+}

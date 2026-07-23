@@ -1,0 +1,10 @@
+
+ ⛅️ wrangler 4.93.0 (update available 4.114.0)
+──────────────────────────────────────────────
+Resource location: remote 
+
+About to delete remote database DB 'tirak-t026-rehearsal' (15469a54-cd99-4ae2-9d84-c8a1dfae59ed).
+This action is irreversible and will permanently delete all data in the database.
+
+Deleting...
+Deleted 'tirak-t026-rehearsal' successfully.
