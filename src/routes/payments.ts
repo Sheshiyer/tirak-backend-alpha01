@@ -52,7 +52,7 @@ interface PaymentAttemptRow {
   provider_charge_id: string | null;
   idempotency_key: string;
   attempt_number: number;
-  amount: number;
+  amount_satang: number;
   currency: string;
   status: PaymentAttemptStatus;
   qr_code_url: string | null;
@@ -74,8 +74,8 @@ function safeAttemptResponse(attempt: PaymentAttemptRow) {
     paymentStatus: publicPaymentStatus(attempt.status),
     attemptStatus: attempt.status,
     qrCodeUrl: attempt.qr_code_url,
-    amountSatang: attempt.amount,
-    displayTotalThb: attempt.amount / 100,
+    amountSatang: attempt.amount_satang,
+    displayTotalThb: attempt.amount_satang / 100,
     currency: attempt.currency.toUpperCase(),
     ...(attempt.expires_at ? { expiresAt: attempt.expires_at } : {}),
   };
@@ -102,7 +102,7 @@ async function ownedBooking(db: D1Database, bookingId: string, customerId: strin
 async function latestAttempt(db: D1Database, bookingId: string, customerId: string): Promise<PaymentAttemptRow | null> {
   return db.prepare(`
     SELECT id, booking_id, customer_id, provider_charge_id, idempotency_key,
-           attempt_number, amount, currency, status, qr_code_url, expires_at,
+           attempt_number, amount_satang, currency, status, qr_code_url, expires_at,
            indeterminate_at, last_error_at, last_error_code, recovered_at,
            created_at, updated_at
     FROM payment_attempts
@@ -119,7 +119,7 @@ async function ownedAttemptByCharge(
 ): Promise<PaymentAttemptRow | null> {
   return db.prepare(`
     SELECT pa.id, pa.booking_id, pa.customer_id, pa.provider_charge_id, pa.idempotency_key,
-           pa.attempt_number, pa.amount, pa.currency, pa.status, pa.qr_code_url,
+           pa.attempt_number, pa.amount_satang, pa.currency, pa.status, pa.qr_code_url,
            pa.expires_at, pa.indeterminate_at, pa.last_error_at, pa.last_error_code,
            pa.recovered_at, pa.created_at, pa.updated_at
     FROM payment_attempts pa
@@ -141,7 +141,7 @@ async function reconcileAttempt(
   if (
     !attempt.provider_charge_id
     || charge.id !== attempt.provider_charge_id
-    || charge.amount !== attempt.amount
+    || charge.amount !== attempt.amount_satang
     || charge.currency?.toUpperCase() !== attempt.currency.toUpperCase()
   ) {
     throw new OmiseRequestError('Omise charge no longer matches the payment attempt', 502);
@@ -270,7 +270,7 @@ payments.post('/webhooks/omise', async (c) => {
 
   const attempt = await c.env.DB.prepare(`
     SELECT id, booking_id, customer_id, provider_charge_id, idempotency_key,
-           attempt_number, amount, currency, status, qr_code_url, expires_at,
+           attempt_number, amount_satang, currency, status, qr_code_url, expires_at,
            created_at, updated_at
     FROM payment_attempts
     WHERE provider = 'omise' AND provider_charge_id = ?
@@ -373,7 +373,7 @@ payments.post('/charges', zValidator('json', promptPayBookingSchema), async (c) 
     provider_charge_id: null,
     idempotency_key: idempotencyKey,
     attempt_number: attemptNumber,
-    amount,
+    amount_satang: amount,
     currency: 'THB',
     status: 'creating',
     qr_code_url: null,
@@ -384,7 +384,7 @@ payments.post('/charges', zValidator('json', promptPayBookingSchema), async (c) 
   const inserted = await c.env.DB.prepare(`
     INSERT OR IGNORE INTO payment_attempts (
       id, booking_id, customer_id, provider, payment_method, idempotency_key,
-      attempt_number, amount, currency, status, created_at, updated_at
+      attempt_number, amount_satang, currency, status, created_at, updated_at
     ) VALUES (?, ?, ?, 'omise', 'promptpay', ?, ?, ?, 'THB', 'creating', ?, ?)
   `).bind(
     attemptId,
@@ -522,7 +522,7 @@ payments.post('/charges/recover', zValidator('json', recoverPromptPayChargeSchem
     const charge = await retrieveOmiseCharge(secretKey, chargeId);
     if (
       charge.amount !== amount
-      || charge.amount !== attempt.amount
+      || charge.amount !== attempt.amount_satang
       || charge.currency?.toUpperCase() !== 'THB'
       || charge.currency?.toUpperCase() !== attempt.currency.toUpperCase()
       || charge.metadata?.booking_id !== bookingId

@@ -1,5 +1,12 @@
 -- Omise PromptPay payment attempts for confirmed Tirak bookings.
 -- Amounts are stored in the gateway's integer minor unit (satang).
+-- Corrected in place to tirak-payments-v1 contract conformance under T-028:
+-- the amount column is named `amount_satang` per target-schema.sql, the
+-- partial unique index `uq_payment_attempt_active_booking` enforces at most
+-- one active attempt per booking, and the non-contract index
+-- `idx_payment_attempts_booking` was removed. Safe to correct in place:
+-- this file has never been applied to any database (staging verified
+-- pristine-empty by T-027).
 
 CREATE TABLE IF NOT EXISTS payment_attempts (
     id TEXT PRIMARY KEY,
@@ -10,7 +17,7 @@ CREATE TABLE IF NOT EXISTS payment_attempts (
     idempotency_key TEXT NOT NULL UNIQUE,
     attempt_number INTEGER NOT NULL CHECK (attempt_number > 0),
     provider_charge_id TEXT UNIQUE,
-    amount INTEGER NOT NULL CHECK (amount > 0),
+    amount_satang INTEGER NOT NULL CHECK (amount_satang > 0),
     currency TEXT NOT NULL CHECK (currency = 'THB'),
     status TEXT NOT NULL CHECK (status IN ('creating', 'indeterminate', 'pending', 'successful', 'failed', 'expired')),
     qr_code_url TEXT,
@@ -25,8 +32,9 @@ CREATE TABLE IF NOT EXISTS payment_attempts (
     UNIQUE (booking_id, attempt_number)
 );
 
-CREATE INDEX IF NOT EXISTS idx_payment_attempts_booking
-    ON payment_attempts(booking_id, attempt_number DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_payment_attempt_active_booking
+    ON payment_attempts(booking_id)
+    WHERE status IN ('creating', 'indeterminate', 'pending');
 
 CREATE INDEX IF NOT EXISTS idx_payment_attempts_customer
     ON payment_attempts(customer_id, created_at DESC);
