@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "taskId": "T-025",
   "contractVersion": "tirak-payments-v1",
-  "generatedAt": "2026-07-24T12:05:03.323Z",
+  "generatedAt": "2026-07-24T14:19:36.113Z",
   "environment": "staging",
   "authority": "T-024 approved authenticated read-only staging evidence only",
   "discoveryTransport": "Cloudflare REST API token through fixed read-only client",

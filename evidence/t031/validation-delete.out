@@ -1,0 +1,11 @@
+npm warn Unknown user config "allow-scripts". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+ ⛅️ wrangler 4.93.0 (update available 4.114.0)
+──────────────────────────────────────────────
+Resource location: remote 
+
+About to delete remote database DB 'tirak-t031-validation' (14e82ef4-0f31-4262-b0d5-705d88a97350).
+This action is irreversible and will permanently delete all data in the database.
+
+Deleting...
+Deleted 'tirak-t031-validation' successfully.

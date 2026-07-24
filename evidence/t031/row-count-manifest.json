@@ -1,0 +1,66 @@
+[
+  {
+    "results": [
+      {
+        "ai_consent_events": 0,
+        "analytics_events": 0,
+        "booking_chat_messages": 1,
+        "booking_chat_rooms": 1,
+        "bookings": 1,
+        "business_metrics": 0,
+        "categories": 0,
+        "chat_messages": 0,
+        "chat_rooms": 0,
+        "coin_transactions": 0,
+        "customer_profiles": 0,
+        "daily_metrics": 0,
+        "flagged_content": 0,
+        "hourly_metrics": 0,
+        "in_app_notifications": 0,
+        "manual_review_queue": 0,
+        "moderation_queue": 0,
+        "moderation_results": 0,
+        "muse_messages": 0,
+        "muse_preference_profiles": 0,
+        "muse_sessions": 0,
+        "notification_results": 0,
+        "payment_attempts": 4,
+        "payment_restitutions": 3,
+        "payment_webhook_events": 0,
+        "privacy_requests": 0,
+        "recommendation_items": 0,
+        "recommendation_runs": 0,
+        "referral_accounts": 0,
+        "referral_events": 0,
+        "regions": 0,
+        "reviews": 0,
+        "supplier_availability": 0,
+        "supplier_profiles": 0,
+        "supplier_services": 1,
+        "user_activity_summary": 0,
+        "user_devices": 0,
+        "user_sessions": 0,
+        "users": 3,
+        "d1_migrations": 4
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "APAC",
+      "served_by_colo": "SIN",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 6.7069
+      },
+      "duration": 6.7069,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 933888,
+      "rows_read": 18,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

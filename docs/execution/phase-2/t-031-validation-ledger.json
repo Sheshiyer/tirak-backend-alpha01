@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T-031",
+  "contractVersion": "tirak-payments-v1",
+  "environment": "staging-validation (disposable DB only)",
+  "executedAt": "2026-07-24",
+  "authority": "T-024 read-only staging evidence + owner 2026-07-24 approval: GATE 1 (one disposable D1 tirak-t031-validation + restore of verified T-030 post-apply export) + GATE 2 Option A (delete)",
+  "deliverable": "Independent migration and restore report",
+  "independenceDiscipline": {
+    "rule1VerifyBeforeUse": "sha256sum -c evidence/t030/checksums.sha256 -> 34/34 OK, exit 0, before any T-030 artifact was read or restored",
+    "rule2PrimaryExportOnly": "restored solely from evidence/t030/tirak-t030-rehearsal-post-20260724T113406Z.sql; no rehearsal DB located, resurrected, or consulted (all deleted under T-030 GATE 2)",
+    "rule3FreshProbes": "every probe (schema surface, FK, ledger, negatives, positives, row counts) re-executed by the validator against tirak-t031-validation; T-030 transcripts used only as cross-check baseline",
+    "rule4Continuity": "T-030 pre-staging fingerprint re-verified from T-030 evidence bundle (ledger + evidence md) == T-029 post-teardown fingerprint 3b57299a2a7cadc048243a18aeae8cc6d568b548eacf3edcfaa5ddbc24eef7cc, and matched by fresh Stage A discovery"
+  },
+  "stages": {
+    "0-preconditions": {
+      "status": "PASS",
+      "branchedFrom": "main @ d3fbd4d1224459763da2039a0e385128183ad21d (PR #20 T-030 merge commit; PR #20 confirmed MERGED, no branch-from-8f33c51 fallback needed)",
+      "baselineHash": "b6532c80e5eeb6b481c26f5ad12f58043f8ad77587ea503527f6cb94e47cf33f",
+      "hashDrift": false,
+      "contractManifestHash": "08acab5dd1f9b8d308d4944349129d9d032dc2a081517db0a2e33235f698b9c9",
+      "envFilePerms": "0600",
+      "t030ChecksumVerify": "34/34 OK (sha256sum -c evidence/t030/checksums.sha256, exit 0)"
+    },
+    "A-staging-capture-readonly": {
+      "status": "PASS",
+      "stagingUuid": "5132c8cc-8f23-4dd2-94d1-9d53edb92888",
+      "num_tables": 0,
+      "writes24h": 0,
+      "bookmark": "0000000d-00000000-000050b2-fe1302644a55f9d74a6a73f10eefbb4c",
+      "exportBytes": 32,
+      "stagingMutations": 0
+    },
+    "fingerprint-gate": {
+      "status": "MATCH_NO_DRIFT",
+      "expected": "3b57299a2a7cadc048243a18aeae8cc6d568b548eacf3edcfaa5ddbc24eef7cc",
+      "computed": "3b57299a2a7cadc048243a18aeae8cc6d568b548eacf3edcfaa5ddbc24eef7cc",
+      "note": "PR #20 added no migration files; fresh staging:preflight + staging:discover + staging:verify (strict, 30 acceptance refusals intact) all PASS"
+    },
+    "B-validation-target-and-restore": {
+      "status": "PASS",
+      "database": "tirak-t031-validation",
+      "uuid": "14e82ef4-0f31-4262-b0d5-705d88a97350",
+      "region": "APAC",
+      "preCreateAbsenceVerified": true,
+      "preRestoreState": "freshly created, num_tables 0",
+      "restoreCommand": "npx wrangler d1 execute tirak-t031-validation --remote --file evidence/t030/tirak-t030-rehearsal-post-20260724T113406Z.sql",
+      "restoreMode": "single-shot --file accepted; documented chunking fallback NOT needed",
+      "exportStatementLines": 179,
+      "restoreResult": "exit 0; rows_written 365; num_tables 40; 0 errors / 0 failed / 0 skipped statements",
+      "postRestoreInfo": "num_tables 40, database_size 933888"
+    },
+    "C-structural-verification": {
+      "status": "PASS",
+      "surfaceDiff": "14/14 contract objects exact structural match vs target-schema.sql (fresh restored dump, rehearsal/t031/live-surface-diff.mjs); 0 missing; 0 extra; verdict MATCH; exit 0",
+      "schemaObjectsDumped": 160,
+      "vitestMigrations": "29/29 PASS (5 files)",
+      "fkCheckRows": 0,
+      "verifyLineageExit": 0,
+      "ledgerRowsVerbatim": [
+        {"id": 1, "name": "canonical-baseline.sql", "applied_at": "2026-07-24 11:36:39"},
+        {"id": 2, "name": "008_omise_promptpay_payments.sql", "applied_at": "2026-07-24 11:36:56"},
+        {"id": 3, "name": "010_booking_chat_expansion.sql", "applied_at": "2026-07-24 11:36:57"},
+        {"id": 4, "name": "011_payment_restitutions.sql", "applied_at": "2026-07-24 11:36:57"}
+      ],
+      "quarantinedNamesPresent": false,
+      "appliedAtContinuity": "applied_at timestamps preserved from T-030 apply (11:36:39/56/57) — restore carried the ledger, not a re-apply"
+    },
+    "D-behavioral-verification": {
+      "status": "PASS",
+      "fixtureDiscovery": "fixtures re-read fresh from restored DB (booking t030_bk_1; room t030_br_1; users t030_u_customer/t030_u_supplier/t030_u_approver); T-030 fixture file not trusted",
+      "negativeProbes": {
+        "duplicateActiveRoom": "rejected: UNIQUE constraint failed: booking_chat_rooms.booking_id: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_UNIQUE) [code: 7500]",
+        "restitutedMissingEvidence": "rejected: CHECK constraint failed — lifecycle CHECK text includes (status = 'restituted' AND recipient_reference IS NOT NULL AND evidence_uri IS NOT NULL AND approver_user_id IS NOT NULL AND approved_at IS NOT NULL AND completed_at IS NOT NULL AND failed_at IS NULL)"
+      },
+      "positiveControls": "well-formed 'restituted' restitution (recipient_reference + evidence_uri + approver + approved_at + completed_at) accepted (changes 1); booking_chat_messages text insert on existing room accepted (changes 1)",
+      "cleanup": "both positive-control rows deleted (changes 1+1) before final manifest",
+      "finalFkCheckRows": 0,
+      "rowCountManifestVsT030Baseline": "EXACT MATCH across all 40 tables; nonzero only users 3, supplier_services 1, bookings 1, payment_attempts 4, booking_chat_rooms 1, booking_chat_messages 1, payment_restitutions 3, d1_migrations 4"
+    },
+    "E-teardown-gate2-optionA": {
+      "status": "PASS",
+      "deleted": "tirak-t031-validation",
+      "deleteExit": 0,
+      "absenceVerified": "npx wrangler d1 list post-delete: 0 matches for tirak-t031-validation",
+      "postTeardownFingerprint": "3b57299a2a7cadc048243a18aeae8cc6d568b548eacf3edcfaa5ddbc24eef7cc (unchanged)",
+      "stagingMutations": 0,
+      "writeTargets": "tirak-t031-validation only (disposable); zero writes to tirak-staging or any other database"
+    }
+  },
+  "abortTriggers": "none fired",
+  "acceptanceMapping": {
+    "foreignKeys": "PASS — fresh PRAGMA foreign_key_check 0 rows (pre- and post-probe); both enforcement spot negatives rejected with exact expected errors",
+    "indexes": "PASS — 14/14 contract objects exact DDL match on restored dump incl. all 9 contract indexes + uq_payment_attempt_active_booking; 0 missing, 0 extra",
+    "rowCounts": "PASS — restored manifest == T-030 post-verification manifest exactly (40 tables) after probe cleanup",
+    "ledger": "PASS — verify-lineage.mjs exit 0; exactly 4 canonical rows; no quarantined names",
+    "restoreProcedure": "PASS — T-026 chain (capture -> export -> disposable-restore -> verify -> teardown) re-executed independently end-to-end on the disposable DB only"
+  },
+  "residuals": [
+    "issue #30 title, ISA ledger, and branch-worktree manifest still carry stale '009' naming; reconcile at wave close",
+    "ISA ISC-149-155 ledger unchecked at T-031 kickoff; verify before wave close",
+    "full-scope token rotation pending separate authority",
+    "t-025 staging resource ledger generatedAt refreshed twice by T-031 discovery runs (same pattern T-030 committed in PR #20)"
+  ]
+}

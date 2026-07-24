@@ -1,0 +1,16 @@
+{
+  "uuid": "14e82ef4-0f31-4262-b0d5-705d88a97350",
+  "name": "tirak-t031-validation",
+  "created_at": "2026-07-24T14:03:31.136Z",
+  "num_tables": 40,
+  "running_in_region": "APAC",
+  "read_replication": {
+    "mode": "disabled"
+  },
+  "jurisdiction": null,
+  "database_size": 933888,
+  "read_queries_24h": 0,
+  "write_queries_24h": 0,
+  "rows_read_24h": 0,
+  "rows_written_24h": 0
+}

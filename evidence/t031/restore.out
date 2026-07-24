@@ -1,0 +1,53 @@
+npm warn Unknown user config "allow-scripts". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+ ⛅️ wrangler 4.114.0
+────────────────────
+Resource location: remote 
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1m⚠️ This process may take some time, during which your D1 database will be unavailable to serve queries.[0m
+
+
+🌀 Executing on remote database tirak-t031-validation (14e82ef4-0f31-4262-b0d5-705d88a97350):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+Note: if the execution fails to complete, your DB will return to its original state and you can safely retry.
+├ Checking if file needs uploading
+│
+├ 🌀 Uploading 14e82ef4-0f31-4262-b0d5-705d88a97350.83104355db2f21a6.sql
+│ 🌀 Uploading complete.
+│
+🌀 Starting import...
+🌀 Processed 180 queries.
+🚣 Executed 180 queries in 25.69ms (378 rows read, 365 rows written)
+   Database is currently at bookmark 00000000-00000015-000050b2-699796fcb2140121c09ddac7c8db3d6a.
+[
+  {
+    "results": [
+      {
+        "Total queries executed": 180,
+        "Rows read": 378,
+        "Rows written": 365,
+        "Database size (MB)": "0.93"
+      }
+    ],
+    "success": true,
+    "finalBookmark": "00000000-00000015-000050b2-699796fcb2140121c09ddac7c8db3d6a",
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "APAC",
+      "served_by_colo": "SIN",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 25.6869
+      },
+      "duration": 25.6869,
+      "changes": 21,
+      "last_row_id": 1,
+      "changed_db": true,
+      "size_after": 933888,
+      "rows_read": 378,
+      "rows_written": 365,
+      "num_tables": 40,
+      "total_attempts": 1
+    }
+  }
+]
