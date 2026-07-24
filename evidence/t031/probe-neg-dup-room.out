@@ -1,0 +1,17 @@
+npm warn Unknown user config "allow-scripts". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+ ⛅️ wrangler 4.93.0 (update available 4.114.0)
+──────────────────────────────────────────────
+Resource location: remote 
+
+🌀 Executing on remote database tirak-t031-validation (14e82ef4-0f31-4262-b0d5-705d88a97350):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+
+[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mA request to the Cloudflare API (/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/14e82ef4-0f31-4262-b0d5-705d88a97350/query) failed.[0m
+
+  UNIQUE constraint failed: booking_chat_rooms.booking_id: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_UNIQUE) [code: 7500]
+  
+  If you think this is a bug, please open an issue at: [4mhttps://github.com/cloudflare/workers-sdk/issues/new/choose[0m
+
+
+🪵  Logs were written to "/Users/sheshnarayaniyer/Library/Preferences/.wrangler/logs/wrangler-2026-07-24_14-12-54_705.log"

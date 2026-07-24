@@ -1,0 +1,13 @@
+npm warn Unknown user config "allow-scripts". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+ ⛅️ wrangler 4.114.0
+────────────────────
+✅ Successfully created DB 'tirak-t031-validation' in region APAC
+Created your new D1 database.
+
+To access your new D1 Database in your Worker, add the following snippet to your configuration file:
+[[d1_databases]]
+binding = "tirak_t031_validation"
+database_name = "tirak-t031-validation"
+database_id = "14e82ef4-0f31-4262-b0d5-705d88a97350"
+
