@@ -1,0 +1,16 @@
+{
+  "uuid": "5132c8cc-8f23-4dd2-94d1-9d53edb92888",
+  "name": "tirak-staging",
+  "created_at": "2026-07-21T08:31:52.401Z",
+  "num_tables": 0,
+  "running_in_region": "APAC",
+  "read_replication": {
+    "mode": "disabled"
+  },
+  "jurisdiction": null,
+  "database_size": 12288,
+  "read_queries_24h": 12,
+  "write_queries_24h": 0,
+  "rows_read_24h": 20,
+  "rows_written_24h": 0
+}

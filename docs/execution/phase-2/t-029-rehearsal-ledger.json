@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T-029",
+  "contractVersion": "tirak-payments-v1",
+  "environment": "staging-rehearsal",
+  "executedAt": "2026-07-23/24",
+  "authority": "T-024 read-only staging evidence + owner fingerprint re-confirmation (3b57299a) + GATE 1 pre-approval via runbook + GATE 2 Option A (delete)",
+  "stages": {
+    "0-preconditions": {
+      "status": "PASS",
+      "baselineHash": "b6532c80e5eeb6b481c26f5ad12f58043f8ad77587ea503527f6cb94e47cf33f",
+      "hashDrift": false
+    },
+    "A-recovery-point": {
+      "status": "PASS",
+      "stagingUuid": "5132c8cc-8f23-4dd2-94d1-9d53edb92888",
+      "num_tables": 0,
+      "bookmark": "00000008-00000000-000050b1-efb81c05bae12939dbcd04eb6c670355"
+    },
+    "fingerprint-gate": {
+      "status": "HUMAN_CONFIRMED",
+      "old": "52431d704ca2ea3dbf208785ea6ea09f60c9629a00ea37544ad49b30d04c7f10",
+      "new": "3b57299a2a7cadc048243a18aeae8cc6d568b548eacf3edcfaa5ddbc24eef7cc",
+      "cause": "local migration lineage changed by T-028 merge; remote staging verified unchanged"
+    },
+    "B-rehearsal": {
+      "status": "PASS",
+      "database": "tirak-t029-rehearsal",
+      "uuid": "aafab53c-2b83-402e-a9b7-01209ed8f894",
+      "region": "APAC",
+      "isolatedApplyRoots": true,
+      "quarantinedUnreachable": true
+    },
+    "C-apply": {
+      "status": "PASS",
+      "baseline": "160 commands",
+      "mig008": "7 commands",
+      "ledger": [
+        "canonical-baseline.sql",
+        "008_omise_promptpay_payments.sql"
+      ]
+    },
+    "D-verify": {
+      "status": "PASS",
+      "ddlExactMatch": [
+        "payment_attempts",
+        "payment_webhook_events",
+        "idx_payment_attempts_customer",
+        "idx_payment_attempts_charge",
+        "idx_payment_webhook_events_charge",
+        "uq_payment_attempt_active_booking"
+      ],
+      "fkViolations": 0,
+      "negativeProbe": "duplicate active attempt rejected (UNIQUE constraint failed: payment_attempts.booking_id)",
+      "positiveControl": "retry accepted after terminal",
+      "verifyLineageExit": 0,
+      "rowCounts": {
+        "users": 2,
+        "bookings": 1,
+        "payment_attempts": 2,
+        "payment_webhook_events": 0,
+        "d1_migrations": 2
+      }
+    },
+    "E-teardown": {
+      "status": "PASS",
+      "deleted": "tirak-t029-rehearsal",
+      "absenceVerified": true,
+      "postTeardownFingerprint": "3b57299a2a7cadc048243a18aeae8cc6d568b548eacf3edcfaa5ddbc24eef7cc",
+      "stagingMutations": 0
+    }
+  },
+  "residuals": [
+    "011_payment_restitutions has no explicit rehearsal task; recommend folding into T-030 scope",
+    "full-scope token rotation pending separate authority"
+  ]
+}

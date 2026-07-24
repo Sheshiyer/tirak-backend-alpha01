@@ -1,0 +1,779 @@
+[
+  {
+    "results": [
+      {
+        "type": "table",
+        "name": "ai_consent_events",
+        "sql": "CREATE TABLE ai_consent_events (\n    id TEXT PRIMARY KEY,\n    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,\n    session_id TEXT,\n    consent_type TEXT NOT NULL CHECK (consent_type IN ('age_gate', 'ai_personalization', 'profile_assist', 'recommendation_retention', 'privacy_terms')),\n    action TEXT NOT NULL CHECK (action IN ('granted', 'revoked', 'updated')),\n    policy_version TEXT NOT NULL,\n    birth_date_year INTEGER,\n    is_adult BOOLEAN,\n    metadata TEXT DEFAULT '{}',\n    ip_address TEXT,\n    user_agent TEXT,\n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "table",
+        "name": "analytics_events",
+        "sql": "CREATE TABLE analytics_events (\n    id TEXT PRIMARY KEY,\n    event_type TEXT NOT NULL,\n    user_id TEXT REFERENCES users(id),\n    session_id TEXT,\n    properties TEXT, \n    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,\n    ip_address TEXT,\n    user_agent TEXT\n)"
+      },
+      {
+        "type": "table",
+        "name": "bookings",
+        "sql": "CREATE TABLE bookings (\n    id TEXT PRIMARY KEY,\n    customer_id TEXT NOT NULL REFERENCES users(id),\n    supplier_id TEXT NOT NULL REFERENCES users(id),\n    service_id TEXT NOT NULL REFERENCES supplier_services(id),\n    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'completed', 'cancelled')),\n    scheduled_at DATETIME NOT NULL,\n    duration INTEGER NOT NULL, \n    total_amount REAL NOT NULL,\n    currency TEXT DEFAULT 'THB',\n    notes TEXT,\n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "table",
+        "name": "business_metrics",
+        "sql": "CREATE TABLE business_metrics (\n    date TEXT PRIMARY KEY, \n    bookings_created INTEGER NOT NULL DEFAULT 0,\n    revenue REAL NOT NULL DEFAULT 0,\n    chats_started INTEGER NOT NULL DEFAULT 0,\n    profile_views INTEGER NOT NULL DEFAULT 0,\n    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "table",
+        "name": "categories",
+        "sql": "CREATE TABLE categories (\n    id TEXT PRIMARY KEY,\n    name_en TEXT NOT NULL,\n    name_th TEXT NOT NULL,\n    description_en TEXT,\n    description_th TEXT,\n    icon_url TEXT,\n    is_active BOOLEAN DEFAULT TRUE,\n    sort_order INTEGER DEFAULT 0,\n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "table",
+        "name": "chat_messages",
+        "sql": "CREATE TABLE chat_messages (\n    id TEXT PRIMARY KEY,\n    room_id TEXT NOT NULL REFERENCES chat_rooms(id) ON DELETE CASCADE,\n    sender_id TEXT NOT NULL REFERENCES users(id),\n    message_type TEXT NOT NULL CHECK (message_type IN ('text', 'image', 'system')),\n    content TEXT,\n    image_url TEXT,\n    metadata TEXT, \n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "table",
+        "name": "chat_rooms",
+        "sql": "CREATE TABLE chat_rooms (\n    id TEXT PRIMARY KEY,\n    customer_id TEXT NOT NULL REFERENCES users(id),\n    supplier_id TEXT NOT NULL REFERENCES users(id),\n    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'closed', 'archived')),\n    last_message_at DATETIME,\n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    UNIQUE(customer_id, supplier_id)\n)"
+      },
+      {
+        "type": "table",
+        "name": "coin_transactions",
+        "sql": "CREATE TABLE coin_transactions (\n    id TEXT PRIMARY KEY,\n    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,\n    amount INTEGER NOT NULL,\n    transaction_type TEXT NOT NULL CHECK (transaction_type IN ('referral_bonus', 'redemption', 'admin_adjustment')),\n    reason TEXT NOT NULL,\n    related_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,\n    referral_event_id TEXT REFERENCES referral_events(id) ON DELETE SET NULL,\n    metadata TEXT,\n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "table",
+        "name": "customer_profiles",
+        "sql": "CREATE TABLE customer_profiles (\n    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,\n    display_name TEXT NOT NULL,\n    profile_image TEXT,\n    preferences TEXT, \n    loyalty_points INTEGER DEFAULT 0,\n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\n, bio TEXT)"
+      },
+      {
+        "type": "table",
+        "name": "d1_migrations",
+        "sql": "CREATE TABLE d1_migrations(\n\t\tid         INTEGER PRIMARY KEY AUTOINCREMENT,\n\t\tname       TEXT UNIQUE,\n\t\tapplied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "daily_metrics",
+        "sql": "CREATE TABLE daily_metrics (\n    id TEXT PRIMARY KEY, \n    metric TEXT NOT NULL,\n    value REAL NOT NULL,\n    dimensions TEXT NOT NULL, \n    date TEXT NOT NULL, \n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "table",
+        "name": "flagged_content",
+        "sql": "CREATE TABLE flagged_content (\n    id TEXT PRIMARY KEY,\n    content_id TEXT NOT NULL,\n    content_type TEXT NOT NULL DEFAULT 'message',\n    reasons TEXT NOT NULL, \n    flagged_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    resolved_at TEXT,\n    resolved_by TEXT,\n    resolution_action TEXT,\n    FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "hourly_metrics",
+        "sql": "CREATE TABLE hourly_metrics (\n    id TEXT PRIMARY KEY, \n    metric TEXT NOT NULL,\n    value REAL NOT NULL,\n    dimensions TEXT NOT NULL, \n    date_hour TEXT NOT NULL, \n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "index",
+        "name": "idx_ai_consent_events_session_id",
+        "sql": "CREATE INDEX idx_ai_consent_events_session_id ON ai_consent_events(session_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_ai_consent_events_type_created",
+        "sql": "CREATE INDEX idx_ai_consent_events_type_created ON ai_consent_events(consent_type, created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_ai_consent_events_user_id",
+        "sql": "CREATE INDEX idx_ai_consent_events_user_id ON ai_consent_events(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_analytics_events_event_type",
+        "sql": "CREATE INDEX idx_analytics_events_event_type ON analytics_events(event_type)"
+      },
+      {
+        "type": "index",
+        "name": "idx_analytics_events_session_id",
+        "sql": "CREATE INDEX idx_analytics_events_session_id ON analytics_events(session_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_analytics_events_timestamp",
+        "sql": "CREATE INDEX idx_analytics_events_timestamp ON analytics_events(timestamp)"
+      },
+      {
+        "type": "index",
+        "name": "idx_analytics_events_user_id",
+        "sql": "CREATE INDEX idx_analytics_events_user_id ON analytics_events(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_bookings_created_at",
+        "sql": "CREATE INDEX idx_bookings_created_at ON bookings(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_bookings_customer_id",
+        "sql": "CREATE INDEX idx_bookings_customer_id ON bookings(customer_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_bookings_scheduled_at",
+        "sql": "CREATE INDEX idx_bookings_scheduled_at ON bookings(scheduled_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_bookings_service_id",
+        "sql": "CREATE INDEX idx_bookings_service_id ON bookings(service_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_bookings_status",
+        "sql": "CREATE INDEX idx_bookings_status ON bookings(status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_bookings_supplier_id",
+        "sql": "CREATE INDEX idx_bookings_supplier_id ON bookings(supplier_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_bookings_supplier_status",
+        "sql": "CREATE INDEX idx_bookings_supplier_status ON bookings(supplier_id, status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_business_metrics_date",
+        "sql": "CREATE INDEX idx_business_metrics_date ON business_metrics(date)"
+      },
+      {
+        "type": "index",
+        "name": "idx_categories_is_active",
+        "sql": "CREATE INDEX idx_categories_is_active ON categories(is_active)"
+      },
+      {
+        "type": "index",
+        "name": "idx_categories_sort_order",
+        "sql": "CREATE INDEX idx_categories_sort_order ON categories(sort_order)"
+      },
+      {
+        "type": "index",
+        "name": "idx_chat_messages_created_at",
+        "sql": "CREATE INDEX idx_chat_messages_created_at ON chat_messages(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_chat_messages_message_type",
+        "sql": "CREATE INDEX idx_chat_messages_message_type ON chat_messages(message_type)"
+      },
+      {
+        "type": "index",
+        "name": "idx_chat_messages_room_id",
+        "sql": "CREATE INDEX idx_chat_messages_room_id ON chat_messages(room_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_chat_messages_room_time",
+        "sql": "CREATE INDEX idx_chat_messages_room_time ON chat_messages(room_id, created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_chat_messages_sender_id",
+        "sql": "CREATE INDEX idx_chat_messages_sender_id ON chat_messages(sender_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_chat_rooms_created_at",
+        "sql": "CREATE INDEX idx_chat_rooms_created_at ON chat_rooms(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_chat_rooms_customer_id",
+        "sql": "CREATE INDEX idx_chat_rooms_customer_id ON chat_rooms(customer_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_chat_rooms_last_message_at",
+        "sql": "CREATE INDEX idx_chat_rooms_last_message_at ON chat_rooms(last_message_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_chat_rooms_status",
+        "sql": "CREATE INDEX idx_chat_rooms_status ON chat_rooms(status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_chat_rooms_supplier_id",
+        "sql": "CREATE INDEX idx_chat_rooms_supplier_id ON chat_rooms(supplier_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_coin_transactions_user",
+        "sql": "CREATE INDEX idx_coin_transactions_user ON coin_transactions(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_daily_metrics_date",
+        "sql": "CREATE INDEX idx_daily_metrics_date ON daily_metrics(date)"
+      },
+      {
+        "type": "index",
+        "name": "idx_daily_metrics_metric",
+        "sql": "CREATE INDEX idx_daily_metrics_metric ON daily_metrics(metric)"
+      },
+      {
+        "type": "index",
+        "name": "idx_daily_metrics_metric_date",
+        "sql": "CREATE INDEX idx_daily_metrics_metric_date ON daily_metrics(metric, date)"
+      },
+      {
+        "type": "index",
+        "name": "idx_flagged_content_content_id",
+        "sql": "CREATE INDEX idx_flagged_content_content_id ON flagged_content(content_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_flagged_content_flagged_at",
+        "sql": "CREATE INDEX idx_flagged_content_flagged_at ON flagged_content(flagged_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_flagged_content_resolved_at",
+        "sql": "CREATE INDEX idx_flagged_content_resolved_at ON flagged_content(resolved_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_hourly_metrics_date_hour",
+        "sql": "CREATE INDEX idx_hourly_metrics_date_hour ON hourly_metrics(date_hour)"
+      },
+      {
+        "type": "index",
+        "name": "idx_hourly_metrics_metric",
+        "sql": "CREATE INDEX idx_hourly_metrics_metric ON hourly_metrics(metric)"
+      },
+      {
+        "type": "index",
+        "name": "idx_hourly_metrics_metric_date_hour",
+        "sql": "CREATE INDEX idx_hourly_metrics_metric_date_hour ON hourly_metrics(metric, date_hour)"
+      },
+      {
+        "type": "index",
+        "name": "idx_in_app_notifications_created_at",
+        "sql": "CREATE INDEX idx_in_app_notifications_created_at ON in_app_notifications(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_in_app_notifications_is_read",
+        "sql": "CREATE INDEX idx_in_app_notifications_is_read ON in_app_notifications(is_read)"
+      },
+      {
+        "type": "index",
+        "name": "idx_in_app_notifications_user_id",
+        "sql": "CREATE INDEX idx_in_app_notifications_user_id ON in_app_notifications(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_in_app_notifications_user_unread",
+        "sql": "CREATE INDEX idx_in_app_notifications_user_unread ON in_app_notifications(user_id, is_read) WHERE is_read = FALSE"
+      },
+      {
+        "type": "index",
+        "name": "idx_manual_review_queue_assigned_to",
+        "sql": "CREATE INDEX idx_manual_review_queue_assigned_to ON manual_review_queue(assigned_to)"
+      },
+      {
+        "type": "index",
+        "name": "idx_manual_review_queue_created_at",
+        "sql": "CREATE INDEX idx_manual_review_queue_created_at ON manual_review_queue(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_manual_review_queue_priority",
+        "sql": "CREATE INDEX idx_manual_review_queue_priority ON manual_review_queue(priority)"
+      },
+      {
+        "type": "index",
+        "name": "idx_manual_review_queue_status",
+        "sql": "CREATE INDEX idx_manual_review_queue_status ON manual_review_queue(status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_moderation_queue_content_type",
+        "sql": "CREATE INDEX idx_moderation_queue_content_type ON moderation_queue(content_type)"
+      },
+      {
+        "type": "index",
+        "name": "idx_moderation_queue_created_at",
+        "sql": "CREATE INDEX idx_moderation_queue_created_at ON moderation_queue(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_moderation_queue_moderator_id",
+        "sql": "CREATE INDEX idx_moderation_queue_moderator_id ON moderation_queue(moderator_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_moderation_queue_priority",
+        "sql": "CREATE INDEX idx_moderation_queue_priority ON moderation_queue(priority)"
+      },
+      {
+        "type": "index",
+        "name": "idx_moderation_queue_status",
+        "sql": "CREATE INDEX idx_moderation_queue_status ON moderation_queue(status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_moderation_queue_user_id",
+        "sql": "CREATE INDEX idx_moderation_queue_user_id ON moderation_queue(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_moderation_results_action",
+        "sql": "CREATE INDEX idx_moderation_results_action ON moderation_results(action)"
+      },
+      {
+        "type": "index",
+        "name": "idx_moderation_results_content_id",
+        "sql": "CREATE INDEX idx_moderation_results_content_id ON moderation_results(content_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_moderation_results_created_at",
+        "sql": "CREATE INDEX idx_moderation_results_created_at ON moderation_results(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_moderation_results_user_id",
+        "sql": "CREATE INDEX idx_moderation_results_user_id ON moderation_results(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_muse_messages_created_at",
+        "sql": "CREATE INDEX idx_muse_messages_created_at ON muse_messages(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_muse_messages_session_id",
+        "sql": "CREATE INDEX idx_muse_messages_session_id ON muse_messages(session_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_muse_preference_profiles_session_id",
+        "sql": "CREATE INDEX idx_muse_preference_profiles_session_id ON muse_preference_profiles(session_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_muse_preference_profiles_user_id",
+        "sql": "CREATE INDEX idx_muse_preference_profiles_user_id ON muse_preference_profiles(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_muse_sessions_anonymous_id",
+        "sql": "CREATE INDEX idx_muse_sessions_anonymous_id ON muse_sessions(anonymous_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_muse_sessions_status",
+        "sql": "CREATE INDEX idx_muse_sessions_status ON muse_sessions(status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_muse_sessions_user_id",
+        "sql": "CREATE INDEX idx_muse_sessions_user_id ON muse_sessions(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_notification_results_channel",
+        "sql": "CREATE INDEX idx_notification_results_channel ON notification_results(channel)"
+      },
+      {
+        "type": "index",
+        "name": "idx_notification_results_created_at",
+        "sql": "CREATE INDEX idx_notification_results_created_at ON notification_results(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_notification_results_notification_id",
+        "sql": "CREATE INDEX idx_notification_results_notification_id ON notification_results(notification_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_notification_results_status",
+        "sql": "CREATE INDEX idx_notification_results_status ON notification_results(status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_payment_attempts_charge",
+        "sql": "CREATE INDEX idx_payment_attempts_charge\n    ON payment_attempts(provider_charge_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_payment_attempts_customer",
+        "sql": "CREATE INDEX idx_payment_attempts_customer\n    ON payment_attempts(customer_id, created_at DESC)"
+      },
+      {
+        "type": "index",
+        "name": "idx_payment_webhook_events_charge",
+        "sql": "CREATE INDEX idx_payment_webhook_events_charge\n    ON payment_webhook_events(provider_charge_id, received_at DESC)"
+      },
+      {
+        "type": "index",
+        "name": "idx_privacy_requests_status",
+        "sql": "CREATE INDEX idx_privacy_requests_status ON privacy_requests(status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_privacy_requests_user_id",
+        "sql": "CREATE INDEX idx_privacy_requests_user_id ON privacy_requests(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_recommendation_items_rank",
+        "sql": "CREATE INDEX idx_recommendation_items_rank ON recommendation_items(run_id, rank)"
+      },
+      {
+        "type": "index",
+        "name": "idx_recommendation_items_run_id",
+        "sql": "CREATE INDEX idx_recommendation_items_run_id ON recommendation_items(run_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_recommendation_runs_session_id",
+        "sql": "CREATE INDEX idx_recommendation_runs_session_id ON recommendation_runs(session_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_recommendation_runs_user_id",
+        "sql": "CREATE INDEX idx_recommendation_runs_user_id ON recommendation_runs(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_referral_accounts_code",
+        "sql": "CREATE INDEX idx_referral_accounts_code ON referral_accounts(referral_code)"
+      },
+      {
+        "type": "index",
+        "name": "idx_referral_events_referred",
+        "sql": "CREATE INDEX idx_referral_events_referred ON referral_events(referred_user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_referral_events_referrer",
+        "sql": "CREATE INDEX idx_referral_events_referrer ON referral_events(referrer_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_regions_country_code",
+        "sql": "CREATE INDEX idx_regions_country_code ON regions(country_code)"
+      },
+      {
+        "type": "index",
+        "name": "idx_regions_is_active",
+        "sql": "CREATE INDEX idx_regions_is_active ON regions(is_active)"
+      },
+      {
+        "type": "index",
+        "name": "idx_regions_sort_order",
+        "sql": "CREATE INDEX idx_regions_sort_order ON regions(sort_order)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reviews_booking_id",
+        "sql": "CREATE INDEX idx_reviews_booking_id ON reviews(booking_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reviews_created_at",
+        "sql": "CREATE INDEX idx_reviews_created_at ON reviews(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reviews_is_public",
+        "sql": "CREATE INDEX idx_reviews_is_public ON reviews(is_public)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reviews_rating",
+        "sql": "CREATE INDEX idx_reviews_rating ON reviews(rating)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reviews_reviewee_id",
+        "sql": "CREATE INDEX idx_reviews_reviewee_id ON reviews(reviewee_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reviews_reviewee_public",
+        "sql": "CREATE INDEX idx_reviews_reviewee_public ON reviews(reviewee_id, is_public)"
+      },
+      {
+        "type": "index",
+        "name": "idx_reviews_reviewer_id",
+        "sql": "CREATE INDEX idx_reviews_reviewer_id ON reviews(reviewer_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_supplier_availability_day_of_week",
+        "sql": "CREATE INDEX idx_supplier_availability_day_of_week ON supplier_availability(day_of_week)"
+      },
+      {
+        "type": "index",
+        "name": "idx_supplier_availability_is_available",
+        "sql": "CREATE INDEX idx_supplier_availability_is_available ON supplier_availability(is_available)"
+      },
+      {
+        "type": "index",
+        "name": "idx_supplier_availability_supplier_id",
+        "sql": "CREATE INDEX idx_supplier_availability_supplier_id ON supplier_availability(supplier_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_supplier_profiles_created_at",
+        "sql": "CREATE INDEX idx_supplier_profiles_created_at ON supplier_profiles(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_supplier_profiles_rating_average",
+        "sql": "CREATE INDEX idx_supplier_profiles_rating_average ON supplier_profiles(rating_average)"
+      },
+      {
+        "type": "index",
+        "name": "idx_supplier_profiles_subscription_status",
+        "sql": "CREATE INDEX idx_supplier_profiles_subscription_status ON supplier_profiles(subscription_status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_supplier_profiles_verification_status",
+        "sql": "CREATE INDEX idx_supplier_profiles_verification_status ON supplier_profiles(verification_status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_supplier_services_is_active",
+        "sql": "CREATE INDEX idx_supplier_services_is_active ON supplier_services(is_active)"
+      },
+      {
+        "type": "index",
+        "name": "idx_supplier_services_price_max",
+        "sql": "CREATE INDEX idx_supplier_services_price_max ON supplier_services(price_max)"
+      },
+      {
+        "type": "index",
+        "name": "idx_supplier_services_price_min",
+        "sql": "CREATE INDEX idx_supplier_services_price_min ON supplier_services(price_min)"
+      },
+      {
+        "type": "index",
+        "name": "idx_supplier_services_supplier_id",
+        "sql": "CREATE INDEX idx_supplier_services_supplier_id ON supplier_services(supplier_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_suppliers_search",
+        "sql": "CREATE INDEX idx_suppliers_search ON supplier_profiles(verification_status, subscription_status, rating_average)"
+      },
+      {
+        "type": "index",
+        "name": "idx_user_activity_summary_last_activity",
+        "sql": "CREATE INDEX idx_user_activity_summary_last_activity ON user_activity_summary(last_activity)"
+      },
+      {
+        "type": "index",
+        "name": "idx_user_activity_summary_updated_at",
+        "sql": "CREATE INDEX idx_user_activity_summary_updated_at ON user_activity_summary(updated_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_user_devices_device_type",
+        "sql": "CREATE INDEX idx_user_devices_device_type ON user_devices(device_type)"
+      },
+      {
+        "type": "index",
+        "name": "idx_user_devices_is_active",
+        "sql": "CREATE INDEX idx_user_devices_is_active ON user_devices(is_active)"
+      },
+      {
+        "type": "index",
+        "name": "idx_user_devices_user_id",
+        "sql": "CREATE INDEX idx_user_devices_user_id ON user_devices(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_user_sessions_expires_at",
+        "sql": "CREATE INDEX idx_user_sessions_expires_at ON user_sessions(expires_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_user_sessions_last_active_at",
+        "sql": "CREATE INDEX idx_user_sessions_last_active_at ON user_sessions(last_active_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_user_sessions_user_id",
+        "sql": "CREATE INDEX idx_user_sessions_user_id ON user_sessions(user_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_users_created_at",
+        "sql": "CREATE INDEX idx_users_created_at ON users(created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_users_email",
+        "sql": "CREATE INDEX idx_users_email ON users(email)"
+      },
+      {
+        "type": "index",
+        "name": "idx_users_phone",
+        "sql": "CREATE INDEX idx_users_phone ON users(phone)"
+      },
+      {
+        "type": "index",
+        "name": "idx_users_status",
+        "sql": "CREATE INDEX idx_users_status ON users(status)"
+      },
+      {
+        "type": "index",
+        "name": "idx_users_user_type",
+        "sql": "CREATE INDEX idx_users_user_type ON users(user_type)"
+      },
+      {
+        "type": "table",
+        "name": "in_app_notifications",
+        "sql": "CREATE TABLE in_app_notifications (\n    id TEXT PRIMARY KEY,\n    user_id TEXT NOT NULL,\n    title TEXT NOT NULL,\n    message TEXT NOT NULL,\n    data TEXT, \n    priority TEXT NOT NULL CHECK (priority IN ('low', 'medium', 'high', 'urgent')),\n    is_read BOOLEAN NOT NULL DEFAULT FALSE,\n    read_at TEXT,\n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE\n)"
+      },
+      {
+        "type": "table",
+        "name": "manual_review_queue",
+        "sql": "CREATE TABLE manual_review_queue (\n    id TEXT PRIMARY KEY,\n    content_id TEXT NOT NULL,\n    user_id TEXT NOT NULL,\n    job_type TEXT NOT NULL,\n    ai_result TEXT, \n    priority TEXT NOT NULL CHECK (priority IN ('low', 'medium', 'high', 'urgent')),\n    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_review', 'completed', 'escalated')),\n    assigned_to TEXT,\n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    completed_at TEXT,\n    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,\n    FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL\n)"
+      },
+      {
+        "type": "table",
+        "name": "moderation_queue",
+        "sql": "CREATE TABLE moderation_queue (\n    id TEXT PRIMARY KEY,\n    content_type TEXT NOT NULL CHECK (content_type IN ('message', 'profile', 'review', 'image')),\n    content_id TEXT NOT NULL,\n    user_id TEXT NOT NULL REFERENCES users(id),\n    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),\n    priority TEXT DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),\n    flagged_reason TEXT,\n    moderator_id TEXT REFERENCES users(id),\n    moderator_notes TEXT,\n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    reviewed_at DATETIME\n)"
+      },
+      {
+        "type": "table",
+        "name": "moderation_results",
+        "sql": "CREATE TABLE moderation_results (\n    id TEXT PRIMARY KEY,\n    content_id TEXT NOT NULL,\n    user_id TEXT NOT NULL,\n    job_type TEXT NOT NULL CHECK (job_type IN ('text_analysis', 'image_analysis', 'profile_review', 'manual_review')),\n    action TEXT NOT NULL CHECK (action IN ('approve', 'flag', 'remove', 'escalate', 'suspend_user')),\n    confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),\n    reasons TEXT NOT NULL, \n    severity TEXT NOT NULL CHECK (severity IN ('low', 'medium', 'high', 'critical')),\n    ai_analysis TEXT, \n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE\n)"
+      },
+      {
+        "type": "table",
+        "name": "muse_messages",
+        "sql": "CREATE TABLE muse_messages (\n    id TEXT PRIMARY KEY,\n    session_id TEXT NOT NULL REFERENCES muse_sessions(id) ON DELETE CASCADE,\n    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,\n    sender TEXT NOT NULL CHECK (sender IN ('user', 'muse', 'system')),\n    message_type TEXT NOT NULL DEFAULT 'text' CHECK (message_type IN ('text', 'intent', 'recommendation', 'profile_assist', 'system')),\n    content TEXT,\n    metadata TEXT DEFAULT '{}',\n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "table",
+        "name": "muse_preference_profiles",
+        "sql": "CREATE TABLE muse_preference_profiles (\n    id TEXT PRIMARY KEY,\n    session_id TEXT NOT NULL REFERENCES muse_sessions(id) ON DELETE CASCADE,\n    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,\n    city_context TEXT,\n    travel_context TEXT,\n    intent_tags TEXT NOT NULL DEFAULT '[]',\n    attraction_qualities TEXT NOT NULL DEFAULT '[]',\n    experience_tags TEXT NOT NULL DEFAULT '[]',\n    language_preferences TEXT NOT NULL DEFAULT '[]',\n    safety_preferences TEXT NOT NULL DEFAULT '[]',\n    explanation TEXT,\n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "table",
+        "name": "muse_sessions",
+        "sql": "CREATE TABLE muse_sessions (\n    id TEXT PRIMARY KEY,\n    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,\n    anonymous_id TEXT,\n    user_role TEXT CHECK (user_role IN ('traveller', 'companion', 'admin')),\n    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'expired', 'revoked')),\n    entry_surface TEXT NOT NULL DEFAULT 'muse_home',\n    consent_snapshot TEXT DEFAULT '{}',\n    locale TEXT DEFAULT 'en',\n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    expires_at TEXT\n)"
+      },
+      {
+        "type": "table",
+        "name": "notification_results",
+        "sql": "CREATE TABLE notification_results (\n    id TEXT PRIMARY KEY,\n    notification_id TEXT NOT NULL,\n    channel TEXT NOT NULL CHECK (channel IN ('push', 'email', 'sms', 'in_app', 'all')),\n    status TEXT NOT NULL CHECK (status IN ('sent', 'failed', 'pending', 'skipped')),\n    delivered_at TEXT,\n    error TEXT,\n    external_id TEXT, \n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "table",
+        "name": "payment_attempts",
+        "sql": "CREATE TABLE payment_attempts (\n    id TEXT PRIMARY KEY,\n    booking_id TEXT NOT NULL REFERENCES bookings(id),\n    customer_id TEXT NOT NULL REFERENCES users(id),\n    provider TEXT NOT NULL CHECK (provider = 'omise'),\n    payment_method TEXT NOT NULL CHECK (payment_method = 'promptpay'),\n    idempotency_key TEXT NOT NULL UNIQUE,\n    attempt_number INTEGER NOT NULL CHECK (attempt_number > 0),\n    provider_charge_id TEXT UNIQUE,\n    amount_satang INTEGER NOT NULL CHECK (amount_satang > 0),\n    currency TEXT NOT NULL CHECK (currency = 'THB'),\n    status TEXT NOT NULL CHECK (status IN ('creating', 'indeterminate', 'pending', 'successful', 'failed', 'expired')),\n    qr_code_url TEXT,\n    expires_at TEXT,\n    last_checked_at TEXT,\n    indeterminate_at TEXT,\n    last_error_at TEXT,\n    last_error_code TEXT,\n    recovered_at TEXT,\n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    UNIQUE (booking_id, attempt_number)\n)"
+      },
+      {
+        "type": "table",
+        "name": "payment_webhook_events",
+        "sql": "CREATE TABLE payment_webhook_events (\n    replay_key TEXT PRIMARY KEY,\n    provider_event_id TEXT UNIQUE,\n    provider_charge_id TEXT NOT NULL,\n    signature_timestamp INTEGER NOT NULL,\n    status TEXT NOT NULL CHECK (status IN ('received', 'processed', 'ignored', 'failed')),\n    received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    processed_at TEXT\n)"
+      },
+      {
+        "type": "table",
+        "name": "privacy_requests",
+        "sql": "CREATE TABLE privacy_requests (\n    id TEXT PRIMARY KEY,\n    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,\n    session_id TEXT REFERENCES muse_sessions(id) ON DELETE SET NULL,\n    request_type TEXT NOT NULL CHECK (request_type IN ('export', 'delete', 'revoke_ai', 'correct_profile')),\n    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_review', 'completed', 'rejected')),\n    requested_payload TEXT DEFAULT '{}',\n    operator_notes TEXT,\n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    completed_at TEXT\n)"
+      },
+      {
+        "type": "table",
+        "name": "recommendation_items",
+        "sql": "CREATE TABLE recommendation_items (\n    id TEXT PRIMARY KEY,\n    run_id TEXT NOT NULL REFERENCES recommendation_runs(id) ON DELETE CASCADE,\n    item_type TEXT NOT NULL CHECK (item_type IN ('companion', 'experience', 'city', 'safety_note', 'next_step')),\n    item_id TEXT,\n    rank INTEGER NOT NULL,\n    fit_score REAL,\n    reason_codes TEXT NOT NULL DEFAULT '[]',\n    explanation TEXT,\n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "table",
+        "name": "recommendation_runs",
+        "sql": "CREATE TABLE recommendation_runs (\n    id TEXT PRIMARY KEY,\n    session_id TEXT NOT NULL REFERENCES muse_sessions(id) ON DELETE CASCADE,\n    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,\n    preference_profile_id TEXT REFERENCES muse_preference_profiles(id) ON DELETE SET NULL,\n    engine_version TEXT NOT NULL,\n    engine_mode TEXT NOT NULL DEFAULT 'deterministic' CHECK (engine_mode IN ('deterministic', 'ai_assisted', 'manual')),\n    input_summary TEXT,\n    safety_filters TEXT NOT NULL DEFAULT '[]',\n    status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('queued', 'completed', 'failed', 'redacted')),\n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "table",
+        "name": "referral_accounts",
+        "sql": "CREATE TABLE referral_accounts (\n    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,\n    referral_code TEXT UNIQUE NOT NULL,\n    referred_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,\n    coin_balance INTEGER NOT NULL DEFAULT 0,\n    total_earned INTEGER NOT NULL DEFAULT 0,\n    total_redeemed INTEGER NOT NULL DEFAULT 0,\n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "table",
+        "name": "referral_events",
+        "sql": "CREATE TABLE referral_events (\n    id TEXT PRIMARY KEY,\n    referrer_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,\n    referred_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,\n    referral_code TEXT NOT NULL,\n    status TEXT NOT NULL DEFAULT 'awarded' CHECK (status IN ('pending', 'awarded', 'reversed')),\n    coins_awarded INTEGER NOT NULL DEFAULT 100,\n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    completed_at TEXT,\n    UNIQUE(referred_user_id)\n)"
+      },
+      {
+        "type": "table",
+        "name": "regions",
+        "sql": "CREATE TABLE regions (\n    id TEXT PRIMARY KEY,\n    name_en TEXT NOT NULL,\n    name_th TEXT NOT NULL,\n    country_code TEXT DEFAULT 'TH',\n    is_active BOOLEAN DEFAULT TRUE,\n    sort_order INTEGER DEFAULT 0,\n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "table",
+        "name": "reviews",
+        "sql": "CREATE TABLE reviews (\n    id TEXT PRIMARY KEY,\n    booking_id TEXT NOT NULL REFERENCES bookings(id),\n    reviewer_id TEXT NOT NULL REFERENCES users(id),\n    reviewee_id TEXT NOT NULL REFERENCES users(id),\n    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),\n    comment TEXT,\n    is_public BOOLEAN DEFAULT TRUE,\n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    UNIQUE(booking_id, reviewer_id)\n)"
+      },
+      {
+        "type": "table",
+        "name": "supplier_availability",
+        "sql": "CREATE TABLE supplier_availability (\n    id TEXT PRIMARY KEY,\n    supplier_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,\n    day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 0 AND 6), \n    start_time TEXT NOT NULL, \n    end_time TEXT NOT NULL, \n    is_available BOOLEAN DEFAULT TRUE,\n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    UNIQUE(supplier_id, day_of_week)\n)"
+      },
+      {
+        "type": "table",
+        "name": "supplier_profiles",
+        "sql": "CREATE TABLE supplier_profiles (\n    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,\n    display_name TEXT NOT NULL,\n    bio TEXT,\n    profile_images TEXT, \n    categories TEXT, \n    regions TEXT, \n    spoken_languages TEXT, \n    rating_average REAL DEFAULT 0.0,\n    rating_count INTEGER DEFAULT 0,\n    verification_status TEXT DEFAULT 'pending' CHECK (verification_status IN ('pending', 'verified', 'rejected')),\n    subscription_status TEXT DEFAULT 'inactive' CHECK (subscription_status IN ('active', 'inactive', 'expired')),\n    subscription_tier TEXT DEFAULT 'basic' CHECK (subscription_tier IN ('basic', 'premium', 'enterprise')),\n    subscription_expires_at DATETIME,\n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\n, first_name TEXT, last_name TEXT, cover_photo TEXT, location TEXT, social_links TEXT DEFAULT '{}', date_of_birth TEXT, gender TEXT CHECK (gender IN ('male', 'female', 'other')), certifications TEXT DEFAULT '[]', experience_stats TEXT DEFAULT '{}')"
+      },
+      {
+        "type": "table",
+        "name": "supplier_services",
+        "sql": "CREATE TABLE supplier_services (\n    id TEXT PRIMARY KEY,\n    supplier_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,\n    title TEXT NOT NULL,\n    description TEXT,\n    price_min REAL NOT NULL,\n    price_max REAL NOT NULL,\n    currency TEXT DEFAULT 'THB',\n    duration_hours INTEGER NOT NULL,\n    is_active BOOLEAN DEFAULT TRUE,\n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "index",
+        "name": "uq_payment_attempt_active_booking",
+        "sql": "CREATE UNIQUE INDEX uq_payment_attempt_active_booking\n    ON payment_attempts(booking_id)\n    WHERE status IN ('creating', 'indeterminate', 'pending')"
+      },
+      {
+        "type": "table",
+        "name": "user_activity_summary",
+        "sql": "CREATE TABLE user_activity_summary (\n    user_id TEXT PRIMARY KEY,\n    last_activity TEXT NOT NULL,\n    daily_events INTEGER NOT NULL DEFAULT 0,\n    session_count INTEGER NOT NULL DEFAULT 0,\n    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE\n)"
+      },
+      {
+        "type": "table",
+        "name": "user_devices",
+        "sql": "CREATE TABLE user_devices (\n    id TEXT PRIMARY KEY,\n    user_id TEXT NOT NULL,\n    device_type TEXT NOT NULL CHECK (device_type IN ('ios', 'android', 'web')),\n    push_tokens TEXT, \n    device_info TEXT, \n    is_active BOOLEAN NOT NULL DEFAULT TRUE,\n    last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE\n)"
+      },
+      {
+        "type": "table",
+        "name": "user_sessions",
+        "sql": "CREATE TABLE user_sessions (\n    id TEXT PRIMARY KEY,\n    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,\n    refresh_token_hash TEXT NOT NULL,\n    device_id TEXT,\n    ip_address TEXT,\n    user_agent TEXT,\n    expires_at DATETIME NOT NULL,\n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    last_active_at DATETIME DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "type": "table",
+        "name": "users",
+        "sql": "CREATE TABLE users (\n    id TEXT PRIMARY KEY,\n    email TEXT UNIQUE NOT NULL,\n    phone TEXT UNIQUE NOT NULL,\n    password_hash TEXT NOT NULL,\n    user_type TEXT NOT NULL CHECK (user_type IN ('customer', 'supplier', 'admin')),\n    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('active', 'suspended', 'pending')),\n    email_verified BOOLEAN DEFAULT FALSE,\n    phone_verified BOOLEAN DEFAULT FALSE,\n    preferred_language TEXT DEFAULT 'en' CHECK (preferred_language IN ('en', 'th')),\n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    last_login_at DATETIME\n)"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "APAC",
+      "served_by_colo": "SIN",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.7011
+      },
+      "duration": 0.7011,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 876544,
+      "rows_read": 352,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]
