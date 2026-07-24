@@ -1,0 +1,15 @@
+=== WRONG-TARGET DOUBLE-VERIFICATION ===
+EXPECTED: database_name=tirak-staging database_id=5132c8cc-8f23-4dd2-94d1-9d53edb92888 account=2c0c96c68f0ee73b6d980054557bca5b
+--- CONFIG: rehearsal/w22/wrangler.baseline.toml
+account_id = "2c0c96c68f0ee73b6d980054557bca5b"
+database_name = "tirak-staging"
+database_id = "5132c8cc-8f23-4dd2-94d1-9d53edb92888"
+migrations_dir = "./migrations-baseline"
+--- CONFIG: rehearsal/w22/wrangler.lineage.toml
+account_id = "2c0c96c68f0ee73b6d980054557bca5b"
+database_name = "tirak-staging"
+database_id = "5132c8cc-8f23-4dd2-94d1-9d53edb92888"
+migrations_dir = "./migrations"
+--- REMOTE RESOLUTION (d1 info by name -> uuid) ---
+resolved name: tirak-staging
+resolved uuid: 5132c8cc-8f23-4dd2-94d1-9d53edb92888

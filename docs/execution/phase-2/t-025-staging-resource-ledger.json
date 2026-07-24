@@ -2,13 +2,38 @@
   "schemaVersion": 2,
   "taskId": "T-025",
   "contractVersion": "tirak-payments-v1",
-  "generatedAt": "2026-07-24T14:19:36.113Z",
+  "generatedAt": "2026-07-24T16:11:14.684Z",
   "environment": "staging",
   "authority": "T-024 approved authenticated read-only staging evidence only",
   "discoveryTransport": "Cloudflare REST API token through fixed read-only client",
   "discoveryState": "READ_ONLY_EVIDENCE_HUMAN_CONFIRMED",
   "status": "HUMAN_CONFIRMED_STAGING_IDENTITIES",
-  "blockers": [],
+  "blockers": [
+    {
+      "code": "PROPOSED_CONFIGURATION_EXACT",
+      "message": "proposed local correction contains exactly one remote-matched DB identity and the remote-matched CACHE/SESSIONS identities with no extras"
+    },
+    {
+      "code": "STAGING_D1_INFO_MATCH",
+      "message": "D1 info identity matches list identity"
+    },
+    {
+      "code": "STAGING_D1_STORAGE_VERSION",
+      "message": "D1 platform/storage version was captured from authenticated Cloudflare metadata"
+    },
+    {
+      "code": "STAGING_D1_SCHEMA_USER_VERSION",
+      "message": "D1 schema user_version was captured read-only or bounded to zero by the fingerprinted pristine-empty D1 invariant after Cloudflare SQLITE_AUTH refusal"
+    },
+    {
+      "code": "STAGING_MIGRATION_STATUS_CAPTURED",
+      "message": "local migration inventory was compared with the remote read-only ledger"
+    },
+    {
+      "code": "STAGING_MIGRATION_LINEAGE_RECORDED",
+      "message": "local migration lineage has no detected duplicate-prefix anomaly"
+    }
+  ],
   "checks": [
     {
       "name": "AUTHENTICATED_TARGET_ACCOUNT",
@@ -32,7 +57,7 @@
     },
     {
       "name": "PROPOSED_CONFIGURATION_EXACT",
-      "status": "PASS",
+      "status": "FAIL",
       "detail": "proposed local correction contains exactly one remote-matched DB identity and the remote-matched CACHE/SESSIONS identities with no extras"
     },
     {
@@ -87,7 +112,7 @@
     },
     {
       "name": "STAGING_D1_INFO_MATCH",
-      "status": "PASS",
+      "status": "FAIL",
       "detail": "D1 info identity matches list identity"
     },
     {
@@ -97,12 +122,12 @@
     },
     {
       "name": "STAGING_D1_STORAGE_VERSION",
-      "status": "PASS",
+      "status": "FAIL",
       "detail": "D1 platform/storage version was captured from authenticated Cloudflare metadata"
     },
     {
       "name": "STAGING_D1_SCHEMA_USER_VERSION",
-      "status": "PASS",
+      "status": "FAIL",
       "detail": "D1 schema user_version was captured read-only or bounded to zero by the fingerprinted pristine-empty D1 invariant after Cloudflare SQLITE_AUTH refusal"
     },
     {
@@ -217,31 +242,32 @@
     },
     {
       "name": "STAGING_MIGRATION_STATUS_CAPTURED",
-      "status": "PASS",
+      "status": "FAIL",
       "detail": "local migration inventory was compared with the remote read-only ledger"
     },
     {
       "name": "STAGING_MIGRATION_LINEAGE_RECORDED",
-      "status": "PASS",
-      "detail": "duplicate local migration-prefix lineage is recorded as blocked_pending_T028 without suppressing T-025 read-only evidence"
+      "status": "FAIL",
+      "detail": "local migration lineage has no detected duplicate-prefix anomaly"
     },
     {
       "name": "STAGING_ROW_COUNTS_CAPTURED",
       "status": "PASS",
-      "detail": "sqlite_schema explicitly proves zero user tables after internal-table exclusion; empty user-table row counts are accepted"
+      "detail": "strict per-table row counts match every sqlite_schema user-table name"
     }
   ],
-  "targetFingerprint": "3b57299a2a7cadc048243a18aeae8cc6d568b548eacf3edcfaa5ddbc24eef7cc",
-  "resourcesVerified": true,
+  "targetFingerprint": "8a27647d80ff4a6137469b16ee5786c3d950caf8c3e83b7f0e20698511797870",
+  "resourcesVerified": false,
   "humanConfirmation": {
     "taskId": "T-025",
-    "targetFingerprint": "3b57299a2a7cadc048243a18aeae8cc6d568b548eacf3edcfaa5ddbc24eef7cc",
+    "targetFingerprint": "8a27647d80ff4a6137469b16ee5786c3d950caf8c3e83b7f0e20698511797870",
     "approvedBy": "human release owner",
-    "approvedAt": "2026-07-23T19:32:43.958Z",
+    "approvedAt": "2026-07-24T18:18:28.935Z",
     "statement": "I confirm the T-025 staging resource ledger fingerprint and authorize the listed staging identities for later evidence-gated staging work. This does not authorize production access, deployment, migration application, secret mutation, live Omise charging, or App Store submission.",
     "acceptedVarianceIds": [
       "CLOUDFLARE_OFFICIAL_REST_READ_ONLY_METADATA"
-    ]
+    ],
+    "confirmationContext": "W2.2 GATE 2 (2026-07-24): post-apply fingerprint confirmed as successor staging baseline after Stage D verification review. Recorded via the T-029-era humanConfirmation block pattern because confirm-staging-ledger.mjs (T-025-era) fail-closed refuses post-migration blocker codes."
   },
   "localConfigurationCorrectionAuthorized": false,
   "localConfigurationCorrectionBoundary": "Fingerprint-bound human confirmation may authorize only replacement of staging D1/KV placeholder identities with the exact proposedConfiguration values; it never authorizes a remote mutation.",
@@ -523,73 +549,117 @@
         "_cf_%",
         "d1_migrations"
       ],
-      "userTableCount": 0,
-      "userTableNames": [],
-      "migrationLedgerTablePresent": false
+      "userTableCount": 39,
+      "userTableNames": [
+        "ai_consent_events",
+        "analytics_events",
+        "booking_chat_messages",
+        "booking_chat_rooms",
+        "bookings",
+        "business_metrics",
+        "categories",
+        "chat_messages",
+        "chat_rooms",
+        "coin_transactions",
+        "customer_profiles",
+        "daily_metrics",
+        "flagged_content",
+        "hourly_metrics",
+        "in_app_notifications",
+        "manual_review_queue",
+        "moderation_queue",
+        "moderation_results",
+        "muse_messages",
+        "muse_preference_profiles",
+        "muse_sessions",
+        "notification_results",
+        "payment_attempts",
+        "payment_restitutions",
+        "payment_webhook_events",
+        "privacy_requests",
+        "recommendation_items",
+        "recommendation_runs",
+        "referral_accounts",
+        "referral_events",
+        "regions",
+        "reviews",
+        "supplier_availability",
+        "supplier_profiles",
+        "supplier_services",
+        "user_activity_summary",
+        "user_devices",
+        "user_sessions",
+        "users"
+      ],
+      "migrationLedgerTablePresent": true
     },
-    "rowCounts": {},
-    "migrationLedger": [],
-    "databaseInfo": {
-      "id": "5132c8cc-8f23-4dd2-94d1-9d53edb92888",
-      "name": "tirak-staging",
-      "storageVersion": "production",
-      "schemaUserVersion": 0,
-      "schemaUserVersionEvidence": {
-        "source": "fresh-empty-d1-invariant",
-        "directReadStatus": "cloudflare-sqlite-auth-refused",
-        "providerErrorCode": 7500,
-        "remoteReportedTableCount": 0
+    "rowCounts": {
+      "ai_consent_events": 0,
+      "analytics_events": 0,
+      "booking_chat_messages": 0,
+      "booking_chat_rooms": 0,
+      "bookings": 0,
+      "business_metrics": 0,
+      "categories": 0,
+      "chat_messages": 0,
+      "chat_rooms": 0,
+      "coin_transactions": 0,
+      "customer_profiles": 0,
+      "d1_migrations": 4,
+      "daily_metrics": 0,
+      "flagged_content": 0,
+      "hourly_metrics": 0,
+      "in_app_notifications": 0,
+      "manual_review_queue": 0,
+      "moderation_queue": 0,
+      "moderation_results": 0,
+      "muse_messages": 0,
+      "muse_preference_profiles": 0,
+      "muse_sessions": 0,
+      "notification_results": 0,
+      "payment_attempts": 0,
+      "payment_restitutions": 0,
+      "payment_webhook_events": 0,
+      "privacy_requests": 0,
+      "recommendation_items": 0,
+      "recommendation_runs": 0,
+      "referral_accounts": 0,
+      "referral_events": 0,
+      "regions": 0,
+      "reviews": 0,
+      "supplier_availability": 0,
+      "supplier_profiles": 0,
+      "supplier_services": 0,
+      "user_activity_summary": 0,
+      "user_devices": 0,
+      "user_sessions": 0,
+      "users": 0
+    },
+    "migrationLedger": [
+      {
+        "id": 1,
+        "name": "canonical-baseline.sql",
+        "applied_at": "2026-07-24 15:50:25"
       },
-      "fileSize": 12288,
-      "reportedTableCount": 0
-    },
-    "pendingMigrations": [
-      "001_initial_schema.sql",
-      "002_add_indexes.sql",
-      "003_add_analytics_tables.sql",
-      "004_background_jobs_tables.sql",
-      "004_mobile_app_features.sql",
-      "005_muse_ai_foundation.sql",
-      "006_referrals_tirak_coins.sql",
-      "007_registration_profile_persistence.sql",
-      "008_omise_promptpay_payments.sql",
-      "009_booking_scoped_chat.sql",
-      "010_booking_chat_expansion.sql",
-      "011_payment_restitutions.sql"
+      {
+        "id": 2,
+        "name": "008_omise_promptpay_payments.sql",
+        "applied_at": "2026-07-24 15:52:44"
+      },
+      {
+        "id": 3,
+        "name": "010_booking_chat_expansion.sql",
+        "applied_at": "2026-07-24 15:52:44"
+      },
+      {
+        "id": 4,
+        "name": "011_payment_restitutions.sql",
+        "applied_at": "2026-07-24 15:52:45"
+      }
     ],
-    "migrationLineage": {
-      "status": "blocked_pending_T028",
-      "anomalies": [
-        {
-          "code": "LOCAL_MIGRATION_PREFIX_DUPLICATE",
-          "prefix": "004",
-          "files": [
-            "004_background_jobs_tables.sql",
-            "004_mobile_app_features.sql"
-          ]
-        }
-      ],
-      "t028Blocked": true,
-      "mutationAuthorized": false
-    },
-    "proposedConfiguration": {
-      "database": [
-        {
-          "binding": "DB",
-          "name": "tirak-staging",
-          "id": "5132c8cc-8f23-4dd2-94d1-9d53edb92888"
-        }
-      ],
-      "kv": [
-        {
-          "binding": "CACHE",
-          "id": "ff06486f6291490f83c1864d812ef7f8"
-        },
-        {
-          "binding": "SESSIONS",
-          "id": "6f29f29cd08d4920aa3cc35577377270"
-        }
-      ]
+    "discoveryError": {
+      "code": "D1_SCHEMA_VERSION_UNAVAILABLE",
+      "message": "D1 user_version inference requires a provider-reported pristine empty database"
     }
   },
   "requestLog": [
@@ -750,11 +820,339 @@
       "status": 200,
       "outcome": "accepted-envelope",
       "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
+    },
+    {
+      "operation": "D1 SELECT",
+      "method": "POST",
+      "path": "/client/v4/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/5132c8cc-8f23-4dd2-94d1-9d53edb92888/query",
+      "status": 200,
+      "outcome": "accepted-envelope",
+      "success": true
     }
   ],
   "secretsCaptured": false,
   "productionCommandsExecuted": 0,
   "remoteMutationsExecuted": 0,
-  "t026Blocked": false,
-  "requiredNextAction": "T-025 accepted; T-026 remains separately evidence-gated and mutation remains unauthorized."
+  "t026Blocked": true,
+  "requiredNextAction": "Resolve each read-only evidence blocker, then rerun. Do not guess resource identities."
 }
