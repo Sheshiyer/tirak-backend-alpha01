@@ -6,8 +6,8 @@
   "environment": "staging",
   "authority": "T-024 approved authenticated read-only staging evidence only",
   "discoveryTransport": "Cloudflare REST API token through fixed read-only client",
-  "discoveryState": "READ_ONLY_EVIDENCE_CAPTURED_WITH_ACCEPTANCE_BLOCKERS",
-  "status": "PENDING_HUMAN_CONFIRMATION",
+  "discoveryState": "READ_ONLY_EVIDENCE_HUMAN_CONFIRMED",
+  "status": "HUMAN_CONFIRMED_STAGING_IDENTITIES",
   "blockers": [
     {
       "code": "PROPOSED_CONFIGURATION_EXACT",
@@ -258,7 +258,17 @@
   ],
   "targetFingerprint": "8a27647d80ff4a6137469b16ee5786c3d950caf8c3e83b7f0e20698511797870",
   "resourcesVerified": false,
-  "humanConfirmation": null,
+  "humanConfirmation": {
+    "taskId": "T-025",
+    "targetFingerprint": "8a27647d80ff4a6137469b16ee5786c3d950caf8c3e83b7f0e20698511797870",
+    "approvedBy": "human release owner",
+    "approvedAt": "2026-07-24T18:18:28.935Z",
+    "statement": "I confirm the T-025 staging resource ledger fingerprint and authorize the listed staging identities for later evidence-gated staging work. This does not authorize production access, deployment, migration application, secret mutation, live Omise charging, or App Store submission.",
+    "acceptedVarianceIds": [
+      "CLOUDFLARE_OFFICIAL_REST_READ_ONLY_METADATA"
+    ],
+    "confirmationContext": "W2.2 GATE 2 (2026-07-24): post-apply fingerprint confirmed as successor staging baseline after Stage D verification review. Recorded via the T-029-era humanConfirmation block pattern because confirm-staging-ledger.mjs (T-025-era) fail-closed refuses post-migration blocker codes."
+  },
   "localConfigurationCorrectionAuthorized": false,
   "localConfigurationCorrectionBoundary": "Fingerprint-bound human confirmation may authorize only replacement of staging D1/KV placeholder identities with the exact proposedConfiguration values; it never authorizes a remote mutation.",
   "mutationAllowed": false,
