@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T-030",
+  "contractVersion": "tirak-payments-v1",
+  "environment": "staging-rehearsal",
+  "executedAt": "2026-07-24",
+  "authority": "T-024 read-only staging evidence + owner 2026-07-24 approval: GATE 1 (one disposable D1 + baseline/008/010/011 apply) + GATE 2 Option A (delete) + 011 scope amendment",
+  "renumberingNote": "issue #30 title '009' is stale; 009_booking_scoped_chat.sql is quarantined; rehearsed lineage is 010 + 011 per approved 2026-07-24 amendment",
+  "stages": {
+    "0-preconditions": {
+      "status": "PASS",
+      "branchedFrom": "main @ a095da7 (PR #19 merge)",
+      "baselineHash": "b6532c80e5eeb6b481c26f5ad12f58043f8ad77587ea503527f6cb94e47cf33f",
+      "hashDrift": false,
+      "contractManifestHash": "08acab5dd1f9b8d308d4944349129d9d032dc2a081517db0a2e33235f698b9c9"
+    },
+    "A-recovery-point": {
+      "status": "PASS",
+      "stagingUuid": "5132c8cc-8f23-4dd2-94d1-9d53edb92888",
+      "num_tables": 0,
+      "writes24h": 0,
+      "bookmark": "0000000a-00000000-000050b2-ab38e099af81f6209d5e69c5194c217f"
+    },
+    "fingerprint-gate": {
+      "status": "MATCH_NO_DRIFT",
+      "expected": "3b57299a2a7cadc048243a18aeae8cc6d568b548eacf3edcfaa5ddbc24eef7cc",
+      "computed": "3b57299a2a7cadc048243a18aeae8cc6d568b548eacf3edcfaa5ddbc24eef7cc",
+      "note": "PR #19 added no migration files; no lineage shift, no re-confirmation round needed"
+    },
+    "B-rehearsal": {
+      "status": "PASS",
+      "database": "tirak-t030-rehearsal",
+      "uuid": "e24d1fa5-12dd-4057-ac6f-d934f6b95335",
+      "region": "APAC",
+      "preCreateAbsenceVerified": true,
+      "isolatedApplyRoots": true,
+      "quarantinedUnreachable": true
+    },
+    "C-apply": {
+      "status": "PASS",
+      "baseline": "160 commands",
+      "mig008": "7 commands",
+      "mig010": "7 commands",
+      "mig011": "4 commands",
+      "ledger": [
+        "canonical-baseline.sql",
+        "008_omise_promptpay_payments.sql",
+        "010_booking_chat_expansion.sql",
+        "011_payment_restitutions.sql"
+      ]
+    },
+    "D-verify": {
+      "status": "PASS",
+      "surfaceDiff": "14/14 contract objects exact structural match vs target-schema.sql (live dump); 0 missing; 0 extra",
+      "vitestMigrations": "29/29 PASS",
+      "ddlExactMatch": [
+        "payment_attempts",
+        "payment_webhook_events",
+        "idx_payment_attempts_customer",
+        "idx_payment_attempts_charge",
+        "idx_payment_webhook_events_charge",
+        "uq_payment_attempt_active_booking",
+        "booking_chat_rooms",
+        "booking_chat_messages",
+        "idx_booking_chat_rooms_customer",
+        "idx_booking_chat_rooms_supplier",
+        "idx_booking_chat_messages_room_time",
+        "payment_restitutions",
+        "idx_payment_restitutions_booking",
+        "idx_payment_restitutions_customer"
+      ],
+      "fkViolations": 0,
+      "fkViolationsAfterFixtures": 0,
+      "legacyPreservation": "chat_rooms/chat_messages DDL matches canonical baseline (tables + 10 indexes); 0 rows pre-fixture; 0 rows post-cleanup; nothing copied",
+      "dualWorker": "legacy writes valid (old Worker); booking_chat_* writes valid with legacy counts unchanged (new Worker)",
+      "uniquenessProbe": "second room for same booking rejected (UNIQUE constraint failed: booking_chat_rooms.booking_id)",
+      "restitutionProbes": {
+        "dupPaymentAttemptId": "rejected (UNIQUE constraint failed: payment_restitutions.payment_attempt_id)",
+        "dupProviderChargeId": "rejected (UNIQUE constraint failed: payment_restitutions.provider_charge_id)",
+        "restitutedMissingEvidence": "rejected (CHECK constraint failed)",
+        "pendingWithCompletedAt": "rejected (CHECK constraint failed)",
+        "positiveControls": "restitution_pending / restituted / restitution_failed all accepted with complete fields"
+      },
+      "verifyLineageExit": 0,
+      "rowCounts": {
+        "users": 3,
+        "supplier_services": 1,
+        "bookings": 1,
+        "payment_attempts": 4,
+        "booking_chat_rooms": 1,
+        "booking_chat_messages": 1,
+        "payment_restitutions": 3,
+        "chat_rooms": 0,
+        "chat_messages": 0,
+        "d1_migrations": 4,
+        "allOtherTables": 0
+      }
+    },
+    "E-teardown": {
+      "status": "PASS",
+      "deleted": "tirak-t030-rehearsal",
+      "absenceVerified": true,
+      "postTeardownFingerprint": "3b57299a2a7cadc048243a18aeae8cc6d568b548eacf3edcfaa5ddbc24eef7cc",
+      "stagingMutations": 0
+    }
+  },
+  "residuals": [
+    "issue #30 title, ISA ledger, and branch-worktree manifest still carry stale '009' naming; reconcile at wave close",
+    "ISA ISC-153-155 ledger unchecked at T-030 kickoff; verify before wave close",
+    "full-scope token rotation pending separate authority"
+  ]
+}

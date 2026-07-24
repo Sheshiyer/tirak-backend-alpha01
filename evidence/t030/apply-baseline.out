@@ -1,0 +1,22 @@
+
+ ⛅️ wrangler 4.93.0 (update available 4.114.0)
+──────────────────────────────────────────────
+Resource location: remote 
+
+Migrations to be applied:
+┌────────────────────────┐
+│ name                   │
+├────────────────────────┤
+│ canonical-baseline.sql │
+└────────────────────────┘
+? About to apply 1 migration(s)
+Your database may not be available to serve requests during the migration, continue?
+🤖 Using fallback value in non-interactive context: yes
+🌀 Executing on remote database tirak-t030-rehearsal (e24d1fa5-12dd-4057-ac6f-d934f6b95335):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 160 commands in 40.41ms
+┌────────────────────────┬────────┐
+│ name                   │ status │
+├────────────────────────┼────────┤
+│ canonical-baseline.sql │ ✅     │
+└────────────────────────┴────────┘

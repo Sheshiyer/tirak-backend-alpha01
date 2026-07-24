@@ -1,0 +1,48 @@
+{
+  "probe": "legacy-ddl-preservation",
+  "tables": {
+    "chat_rooms": {
+      "present_live": true,
+      "present_baseline": true,
+      "ddl_matches_baseline": true
+    },
+    "chat_messages": {
+      "present_live": true,
+      "present_baseline": true,
+      "ddl_matches_baseline": true
+    }
+  },
+  "indexes": {
+    "idx_chat_messages_created_at": {
+      "ddl_matches_baseline": true
+    },
+    "idx_chat_messages_message_type": {
+      "ddl_matches_baseline": true
+    },
+    "idx_chat_messages_room_id": {
+      "ddl_matches_baseline": true
+    },
+    "idx_chat_messages_room_time": {
+      "ddl_matches_baseline": true
+    },
+    "idx_chat_messages_sender_id": {
+      "ddl_matches_baseline": true
+    },
+    "idx_chat_rooms_created_at": {
+      "ddl_matches_baseline": true
+    },
+    "idx_chat_rooms_customer_id": {
+      "ddl_matches_baseline": true
+    },
+    "idx_chat_rooms_last_message_at": {
+      "ddl_matches_baseline": true
+    },
+    "idx_chat_rooms_status": {
+      "ddl_matches_baseline": true
+    },
+    "idx_chat_rooms_supplier_id": {
+      "ddl_matches_baseline": true
+    }
+  },
+  "verdict": "PASS"
+}

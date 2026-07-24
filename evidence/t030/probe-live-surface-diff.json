@@ -1,0 +1,8 @@
+{
+  "probe": "live-surface-diff",
+  "expectedObjects": 14,
+  "missingInLiveDump": [],
+  "extraDomainObjectsInLiveDump": [],
+  "diffProblems": [],
+  "verdict": "MATCH"
+}

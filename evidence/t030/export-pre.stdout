@@ -1,0 +1,15 @@
+
+ ⛅️ wrangler 4.93.0 (update available 4.114.0)
+──────────────────────────────────────────────
+Resource location: remote 
+
+? ⚠️ This process may take some time, during which your D1 database will be unavailable to serve queries.
+  Ok to proceed?
+🤖 Using fallback value in non-interactive context: yes
+🌀 Executing on remote database tirak-staging (5132c8cc-8f23-4dd2-94d1-9d53edb92888):
+├ Creating export
+│
+You can also download your export from the following URL manually. This link will be valid for one hour: [REDACTED: presigned D1 export URL, valid 1h at capture time]
+├ Downloading SQL to evidence/t030/tirak-staging-pre-20260724T113406Z.sql
+│
+🌀 Downloaded to evidence/t030/tirak-staging-pre-20260724T113406Z.sql successfully!

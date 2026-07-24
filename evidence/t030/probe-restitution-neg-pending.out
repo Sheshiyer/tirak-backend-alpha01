@@ -1,0 +1,15 @@
+
+{
+  "error": {
+    "text": "A request to the Cloudflare API (/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/e24d1fa5-12dd-4057-ac6f-d934f6b95335/query) failed.",
+    "notes": [
+      {
+        "text": "CHECK constraint failed: (status = 'restitution_pending' AND completed_at IS NULL AND failed_at IS NULL)\n      OR\n      (status = 'restituted' AND recipient_reference IS NOT NULL AND evidence_uri IS NOT NULL AND approver_user_id IS NOT NULL AND approved_at IS NOT NULL AND completed_at IS NOT NULL AND failed_at IS NULL)\n      OR\n      (status = 'restitution_failed' AND evidence_uri IS NOT NULL AND approver_user_id IS NOT NULL AND approved_at IS NOT NULL AND failed_at IS NOT NULL AND failure_reason IS NOT NULL AND completed_at IS NULL): SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_CHECK) [code: 7500]"
+      }
+    ],
+    "kind": "error",
+    "name": "APIError",
+    "code": 7500,
+    "accountTag": "2c0c96c68f0ee73b6d980054557bca5b"
+  }
+}

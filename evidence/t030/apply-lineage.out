@@ -1,0 +1,54 @@
+
+ ⛅️ wrangler 4.93.0 (update available 4.114.0)
+──────────────────────────────────────────────
+Resource location: remote 
+
+Migrations to be applied:
+┌──────────────────────────────────┐
+│ name                             │
+├──────────────────────────────────┤
+│ 008_omise_promptpay_payments.sql │
+├──────────────────────────────────┤
+│ 010_booking_chat_expansion.sql   │
+├──────────────────────────────────┤
+│ 011_payment_restitutions.sql     │
+└──────────────────────────────────┘
+? About to apply 3 migration(s)
+Your database may not be available to serve requests during the migration, continue?
+🤖 Using fallback value in non-interactive context: yes
+🌀 Executing on remote database tirak-t030-rehearsal (e24d1fa5-12dd-4057-ac6f-d934f6b95335):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 7 commands in 1.51ms
+┌──────────────────────────────────┬────────┐
+│ name                             │ status │
+├──────────────────────────────────┼────────┤
+│ 008_omise_promptpay_payments.sql │ ✅     │
+├──────────────────────────────────┼────────┤
+│ 010_booking_chat_expansion.sql   │ 🕒️    │
+├──────────────────────────────────┼────────┤
+│ 011_payment_restitutions.sql     │ 🕒️    │
+└──────────────────────────────────┴────────┘
+🌀 Executing on remote database tirak-t030-rehearsal (e24d1fa5-12dd-4057-ac6f-d934f6b95335):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 7 commands in 9.38ms
+┌──────────────────────────────────┬────────┐
+│ name                             │ status │
+├──────────────────────────────────┼────────┤
+│ 008_omise_promptpay_payments.sql │ ✅     │
+├──────────────────────────────────┼────────┤
+│ 010_booking_chat_expansion.sql   │ ✅     │
+├──────────────────────────────────┼────────┤
+│ 011_payment_restitutions.sql     │ 🕒️    │
+└──────────────────────────────────┴────────┘
+🌀 Executing on remote database tirak-t030-rehearsal (e24d1fa5-12dd-4057-ac6f-d934f6b95335):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 4 commands in 1.08ms
+┌──────────────────────────────────┬────────┐
+│ name                             │ status │
+├──────────────────────────────────┼────────┤
+│ 008_omise_promptpay_payments.sql │ ✅     │
+├──────────────────────────────────┼────────┤
+│ 010_booking_chat_expansion.sql   │ ✅     │
+├──────────────────────────────────┼────────┤
+│ 011_payment_restitutions.sql     │ ✅     │
+└──────────────────────────────────┴────────┘

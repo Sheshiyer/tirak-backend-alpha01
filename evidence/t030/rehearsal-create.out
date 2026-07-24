@@ -1,0 +1,12 @@
+
+ ⛅️ wrangler 4.93.0 (update available 4.114.0)
+──────────────────────────────────────────────
+✅ Successfully created DB 'tirak-t030-rehearsal' in region APAC
+Created your new D1 database.
+
+To access your new D1 Database in your Worker, add the following snippet to your configuration file:
+[[d1_databases]]
+binding = "tirak_t030_rehearsal"
+database_name = "tirak-t030-rehearsal"
+database_id = "e24d1fa5-12dd-4057-ac6f-d934f6b95335"
+
