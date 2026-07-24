@@ -141,10 +141,14 @@
     "breakGlass": "not triggered"
   },
   "publication": {
-    "pushed": false,
-    "prOpened": false,
-    "issueComment": false,
-    "reason": "GATE 2 not yet approved"
+    "pushed": true,
+    "branch": "codex/tirak-omise/w2.2/staging-migration-application",
+    "prOpened": true,
+    "prUrl": "https://github.com/Sheshiyer/tirak-backend-alpha01/pull/23",
+    "prMergedByExecutor": false,
+    "prNote": "human release owner closes the PR",
+    "issueComment": true,
+    "issueCommentUrl": "https://github.com/Sheshiyer/tirak-mobile-app-v2/issues/81#issuecomment-5073101890"
   },
   "stagingFinalState": {
     "numTables": 40,
