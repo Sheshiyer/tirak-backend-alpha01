@@ -1,0 +1,105 @@
+[
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "APAC",
+      "served_by_colo": "SIN",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 1.2844
+      },
+      "duration": 1.2844,
+      "changes": 1,
+      "last_row_id": 1,
+      "changed_db": true,
+      "size_after": 937984,
+      "rows_read": 1,
+      "rows_written": 6,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "APAC",
+      "served_by_colo": "SIN",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.2356
+      },
+      "duration": 0.2356,
+      "changes": 1,
+      "last_row_id": 2,
+      "changed_db": true,
+      "size_after": 937984,
+      "rows_read": 1,
+      "rows_written": 6,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "APAC",
+      "served_by_colo": "SIN",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.2014
+      },
+      "duration": 0.2014,
+      "changes": 1,
+      "last_row_id": 3,
+      "changed_db": true,
+      "size_after": 937984,
+      "rows_read": 1,
+      "rows_written": 6,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [
+      {
+        "id": "t030_rt_done",
+        "status": "restituted",
+        "payment_attempt_id": "t030_pa_2",
+        "provider_charge_id": "chrg_t030_2"
+      },
+      {
+        "id": "t030_rt_failed",
+        "status": "restitution_failed",
+        "payment_attempt_id": "t030_pa_3",
+        "provider_charge_id": "chrg_t030_3"
+      },
+      {
+        "id": "t030_rt_pending",
+        "status": "restitution_pending",
+        "payment_attempt_id": "t030_pa_1",
+        "provider_charge_id": "chrg_t030_1"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "APAC",
+      "served_by_colo": "SIN",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.1569
+      },
+      "duration": 0.1569,
+      "changes": 0,
+      "last_row_id": 3,
+      "changed_db": false,
+      "size_after": 937984,
+      "rows_read": 3,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

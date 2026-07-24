@@ -1,0 +1,7 @@
+name = "tirak-t030-rehearsal"
+account_id = "2c0c96c68f0ee73b6d980054557bca5b"
+[[d1_databases]]
+binding = "DB"
+database_name = "tirak-t030-rehearsal"
+database_id = "e24d1fa5-12dd-4057-ac6f-d934f6b95335"
+migrations_dir = "./migrations"

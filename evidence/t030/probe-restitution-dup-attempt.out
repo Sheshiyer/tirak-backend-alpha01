@@ -1,0 +1,15 @@
+
+{
+  "error": {
+    "text": "A request to the Cloudflare API (/accounts/2c0c96c68f0ee73b6d980054557bca5b/d1/database/e24d1fa5-12dd-4057-ac6f-d934f6b95335/query) failed.",
+    "notes": [
+      {
+        "text": "UNIQUE constraint failed: payment_restitutions.payment_attempt_id: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_UNIQUE) [code: 7500]"
+      }
+    ],
+    "kind": "error",
+    "name": "APIError",
+    "code": 7500,
+    "accountTag": "2c0c96c68f0ee73b6d980054557bca5b"
+  }
+}
