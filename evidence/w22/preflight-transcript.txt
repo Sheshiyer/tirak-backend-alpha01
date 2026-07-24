@@ -1,0 +1,16 @@
+npm warn Unknown user config "allow-scripts". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> tirak-backend@1.0.0 staging:preflight
+> node scripts/staging/preflight-cloudflare-token.mjs
+
+{
+  "status": "PASS",
+  "environment": "staging",
+  "verificationType": "account-token",
+  "permissionRisk": "write-capable-or-broad",
+  "pinnedAccountInTokenScope": true,
+  "pinnedAccountVerified": true,
+  "requestsExecuted": 4,
+  "remoteMutationsExecuted": 0,
+  "secretsCaptured": false
+}

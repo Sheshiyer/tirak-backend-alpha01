@@ -1,0 +1,21 @@
+npm warn Unknown user config "allow-scripts". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+▲ [WARNING] Cannot find base config file "astro/tsconfigs/strict" [tsconfig.json]
+
+    ../../../../../tsconfig.json:2:13:
+      2 │   "extends": "astro/tsconfigs/strict"
+        ╵              ~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+ RUN  v3.2.4 /Volumes/madara/2026/twc-vault/01-Projects/thoughtseed/Tirak/Backend/tirak-backend-alpha01
+
+ ✓ tests/migrations/quarantine-guard.test.ts (4 tests) 4ms
+ ✓ tests/migrations/schema-surface.test.ts (9 tests) 30ms
+ ✓ tests/migrations/idempotency.test.ts (3 tests) 51ms
+ ✓ tests/migrations/legacy-chat.test.ts (4 tests) 59ms
+ ✓ tests/migrations/integrity-negative.test.ts (9 tests) 108ms
+
+ Test Files  5 passed (5)
+      Tests  29 passed (29)
+   Start at  21:30:18
+   Duration  445ms (transform 96ms, setup 147ms, collect 151ms, tests 252ms, environment 1ms, prepare 303ms)
+

@@ -1,0 +1,7 @@
+name = "tirak-w22-staging-apply"
+account_id = "2c0c96c68f0ee73b6d980054557bca5b"
+[[d1_databases]]
+binding = "DB"
+database_name = "tirak-staging"
+database_id = "5132c8cc-8f23-4dd2-94d1-9d53edb92888"
+migrations_dir = "./migrations-baseline"

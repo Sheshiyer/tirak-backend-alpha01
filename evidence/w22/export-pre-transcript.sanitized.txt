@@ -1,0 +1,16 @@
+npm warn Unknown user config "allow-scripts". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+ ⛅️ wrangler 4.93.0
+───────────────────
+Resource location: remote 
+
+? ⚠️ This process may take some time, during which your D1 database will be unavailable to serve queries.
+  Ok to proceed?
+🤖 Using fallback value in non-interactive context: yes
+🌀 Executing on remote database tirak-staging (5132c8cc-8f23-4dd2-94d1-9d53edb92888):
+├ Creating export
+│
+You can also download your export from the following URL manually. This link will be valid for one hour: <REDACTED-SIGNED-URL>
+├ Downloading SQL to evidence/w22/tirak-staging-pre-20260724T153831Z.sql
+│
+🌀 Downloaded to evidence/w22/tirak-staging-pre-20260724T153831Z.sql successfully!

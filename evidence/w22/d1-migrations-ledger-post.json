@@ -1,0 +1,44 @@
+[
+  {
+    "results": [
+      {
+        "id": 1,
+        "name": "canonical-baseline.sql",
+        "applied_at": "2026-07-24 15:50:25"
+      },
+      {
+        "id": 2,
+        "name": "008_omise_promptpay_payments.sql",
+        "applied_at": "2026-07-24 15:52:44"
+      },
+      {
+        "id": 3,
+        "name": "010_booking_chat_expansion.sql",
+        "applied_at": "2026-07-24 15:52:44"
+      },
+      {
+        "id": 4,
+        "name": "011_payment_restitutions.sql",
+        "applied_at": "2026-07-24 15:52:45"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "APAC",
+      "served_by_colo": "SIN",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.3914
+      },
+      "duration": 0.3914,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 937984,
+      "rows_read": 4,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

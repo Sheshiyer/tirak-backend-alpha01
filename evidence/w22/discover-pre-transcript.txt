@@ -1,0 +1,16 @@
+npm warn Unknown user config "allow-scripts". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> tirak-backend@1.0.0 staging:discover
+> node scripts/staging/collect-staging-ledger.mjs
+
+{
+  "status": "HUMAN_CONFIRMED_STAGING_IDENTITIES",
+  "discoveryState": "READ_ONLY_EVIDENCE_HUMAN_CONFIRMED",
+  "blockerCodes": [],
+  "targetFingerprint": "3b57299a2a7cadc048243a18aeae8cc6d568b548eacf3edcfaa5ddbc24eef7cc",
+  "requestsExecuted": 16,
+  "productionCommandsExecuted": 0,
+  "remoteMutationsExecuted": 0,
+  "secretsCaptured": false,
+  "output": "/Volumes/madara/2026/twc-vault/01-Projects/thoughtseed/Tirak/Backend/tirak-backend-alpha01/docs/execution/phase-2/t-025-staging-resource-ledger.json"
+}

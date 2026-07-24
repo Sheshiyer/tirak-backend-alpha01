@@ -1,0 +1,77 @@
+{
+  "taskId": "W2.2-staging-migration-application",
+  "status": "STAGES_0_TO_D_COMPLETE_PENDING_GATE_2",
+  "executedAt": "2026-07-24",
+  "branch": "codex/tirak-omise/w2.2/staging-migration-application",
+  "baseCommit": "0ec636853d3402e5b44a90129f7ad22918a5b320",
+  "authority": {
+    "entryTicket": "T-032 signed GO (2026-07-24)",
+    "gate1": "APPROVED 2026-07-24 by human release owner, including §6.4 variance adjudication (structural-only post-apply verification; behavioral subset carried as proven by T-030/T-031)",
+    "gate2": "NOT APPROVED — Stage E publication not performed"
+  },
+  "target": {
+    "database": "tirak-staging",
+    "uuid": "5132c8cc-8f23-4dd2-94d1-9d53edb92888",
+    "account": "2c0c96c68f0ee73b6d980054557bca5b"
+  },
+  "stages": {
+    "stage0": {
+      "verdict": "PASS",
+      "baselineRegeneratedSha256": "b6532c80e5eeb6b481c26f5ad12f58043f8ad77587ea503527f6cb94e47cf33f",
+      "baselineHashMatch": true,
+      "envFileMode": "0600",
+      "notes": ["prior t-025 ledger restored to mode 0600 (owner-only invariant)"]
+    },
+    "stageA": {
+      "verdict": "PASS",
+      "preApplyFingerprint": "3b57299a2a7cadc048243a18aeae8cc6d568b548eacf3edcfaa5ddbc24eef7cc",
+      "fingerprintMatch": true,
+      "pristineNumTables": 0,
+      "timeTravelBookmark": "00000010-00000000-000050b2-3f8947f94d947d0f4981843872d6a7ab",
+      "exportFile": "evidence/w22/tirak-staging-pre-20260724T153831Z.sql"
+    },
+    "stageB": {
+      "verdict": "PASS",
+      "isolatedRoots": ["rehearsal/w22/migrations-baseline", "rehearsal/w22/migrations"],
+      "configs": ["rehearsal/w22/wrangler.baseline.toml", "rehearsal/w22/wrangler.lineage.toml"],
+      "resolvedUuidVerified": "5132c8cc-8f23-4dd2-94d1-9d53edb92888",
+      "quarantinedAbsent": ["004_mobile_app_features.sql", "009_booking_scoped_chat.sql"]
+    },
+    "stageC": {
+      "verdict": "PASS",
+      "applyCommands": [
+        {"root": "baseline", "migrations": ["canonical-baseline.sql"], "commandsExecuted": 160, "exit": 0},
+        {"root": "lineage", "migrations": ["008_omise_promptpay_payments.sql", "010_booking_chat_expansion.sql", "011_payment_restitutions.sql"], "commandsExecuted": [7, 7, 4], "exit": 0}
+      ]
+    },
+    "stageD": {
+      "verdict": "PASS",
+      "surfaceDiff": {"verdict": "MATCH", "expectedObjects": 14, "missing": 0, "extra": 0, "diffProblems": 0},
+      "vitestMigrations": {"files": 5, "tests": 29, "passed": 29},
+      "foreignKeyCheckRows": 0,
+      "ledgerRows": [
+        {"id": 1, "name": "canonical-baseline.sql", "applied_at": "2026-07-24 15:50:25"},
+        {"id": 2, "name": "008_omise_promptpay_payments.sql", "applied_at": "2026-07-24 15:52:44"},
+        {"id": 3, "name": "010_booking_chat_expansion.sql", "applied_at": "2026-07-24 15:52:44"},
+        {"id": 4, "name": "011_payment_restitutions.sql", "applied_at": "2026-07-24 15:52:45"}
+      ],
+      "verifyLineageExit": 0,
+      "rowCountManifest": {"userTablesChecked": 39, "nonZeroTables": 0, "d1MigrationsRows": 4, "verdict": "CLEAN"},
+      "postApplyFingerprint": "8a27647d80ff4a6137469b16ee5786c3d950caf8c3e83b7f0e20698511797870",
+      "postApplyFingerprintState": "PENDING_HUMAN_CONFIRMATION at GATE 2 (expected change — staging now has schema)"
+    }
+  },
+  "abortTriggersFired": [],
+  "incidents": [
+    "wrangler d1 execute --file refused SQLITE_AUTH 7500 on the full row-count query; root cause: internal _cf_KV table is authorizer-protected; row counts completed read-only via --command batches over 39 user tables"
+  ],
+  "rollback": {"invoked": false, "breakGlass": "not triggered"},
+  "publication": {"pushed": false, "prOpened": false, "issueComment": false, "reason": "GATE 2 not yet approved"},
+  "stagingFinalState": {
+    "numTables": 40,
+    "userTablesAllZeroRows": true,
+    "ledgerRows": 4,
+    "fkViolations": 0,
+    "contractObjectsExact": "14/14"
+  }
+}

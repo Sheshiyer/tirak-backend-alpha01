@@ -1,0 +1,55 @@
+npm warn Unknown user config "allow-scripts". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+ ⛅️ wrangler 4.93.0 (update available 4.114.0)
+──────────────────────────────────────────────
+Resource location: remote 
+
+Migrations to be applied:
+┌──────────────────────────────────┐
+│ name                             │
+├──────────────────────────────────┤
+│ 008_omise_promptpay_payments.sql │
+├──────────────────────────────────┤
+│ 010_booking_chat_expansion.sql   │
+├──────────────────────────────────┤
+│ 011_payment_restitutions.sql     │
+└──────────────────────────────────┘
+? About to apply 3 migration(s)
+Your database may not be available to serve requests during the migration, continue?
+🤖 Using fallback value in non-interactive context: yes
+🌀 Executing on remote database tirak-staging (5132c8cc-8f23-4dd2-94d1-9d53edb92888):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 7 commands in 1.84ms
+┌──────────────────────────────────┬────────┐
+│ name                             │ status │
+├──────────────────────────────────┼────────┤
+│ 008_omise_promptpay_payments.sql │ ✅     │
+├──────────────────────────────────┼────────┤
+│ 010_booking_chat_expansion.sql   │ 🕒️    │
+├──────────────────────────────────┼────────┤
+│ 011_payment_restitutions.sql     │ 🕒️    │
+└──────────────────────────────────┴────────┘
+🌀 Executing on remote database tirak-staging (5132c8cc-8f23-4dd2-94d1-9d53edb92888):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 7 commands in 4.46ms
+┌──────────────────────────────────┬────────┐
+│ name                             │ status │
+├──────────────────────────────────┼────────┤
+│ 008_omise_promptpay_payments.sql │ ✅     │
+├──────────────────────────────────┼────────┤
+│ 010_booking_chat_expansion.sql   │ ✅     │
+├──────────────────────────────────┼────────┤
+│ 011_payment_restitutions.sql     │ 🕒️    │
+└──────────────────────────────────┴────────┘
+🌀 Executing on remote database tirak-staging (5132c8cc-8f23-4dd2-94d1-9d53edb92888):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 4 commands in 0.96ms
+┌──────────────────────────────────┬────────┐
+│ name                             │ status │
+├──────────────────────────────────┼────────┤
+│ 008_omise_promptpay_payments.sql │ ✅     │
+├──────────────────────────────────┼────────┤
+│ 010_booking_chat_expansion.sql   │ ✅     │
+├──────────────────────────────────┼────────┤
+│ 011_payment_restitutions.sql     │ ✅     │
+└──────────────────────────────────┴────────┘
