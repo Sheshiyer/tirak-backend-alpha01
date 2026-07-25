@@ -35,6 +35,7 @@ export interface Env {
   OMISE_WEBHOOK_SECRET?: string;
   PAYMENT_MODE?: string;
   PROMPTPAY_ENABLED?: string;
+  PAYMENT_CONFIG_KV?: KVNamespace;
   ENVIRONMENT: string;
   FRONTEND_URLS: string;
   EMAIL?: {

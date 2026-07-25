@@ -128,3 +128,100 @@ export function paymentRuntimePolicy(input: PaymentRuntimeInput): PaymentRuntime
     reason,
   };
 }
+
+/**
+ * T-033 kill-switch override store. A named human release owner writes this
+ * key (through scripts/payments/set-payment-mode.mjs) into the PAYMENT_CONFIG_KV
+ * namespace to change the effective payment mode without a code deployment.
+ * The deploy-time [vars] floor stays `disabled`/`false`; the override is the
+ * only audited path that can open creation, and any malformed value closes it.
+ */
+export const PAYMENT_MODE_OVERRIDE_KEY = 'PAYMENT_MODE_OVERRIDE';
+
+export interface PaymentModeOverride {
+  paymentMode?: unknown;
+  promptPayEnabled?: unknown;
+  operator?: string;
+  reason?: string;
+  approvedAt?: string;
+  previousMode?: string;
+  previousPromptPayEnabled?: boolean;
+}
+
+/** Minimal structural view of the config namespace (unbound KV is tolerated). */
+export interface PaymentConfigKVLike {
+  get(key: string): Promise<unknown>;
+}
+
+export type PaymentPolicyEnvironment = PaymentRuntimeInput & {
+  PAYMENT_CONFIG_KV?: PaymentConfigKVLike;
+};
+
+function invalidOverridePolicy(input: PaymentRuntimeInput): PaymentRuntimePolicy {
+  const base = paymentRuntimePolicy(input);
+  return { ...base, createEnabled: false, reason: 'invalid_mode_override' };
+}
+
+/**
+ * Resolve the effective runtime policy: read the audited KV override (when the
+ * namespace is bound), then apply the same fail-closed ladder as
+ * `paymentRuntimePolicy` to the effective (override ?? static floor) values.
+ *
+ * Fail-closed rules:
+ * - missing/unbound namespace or absent key -> static floor, no override;
+ * - unreadable namespace, malformed JSON, non-object JSON, or invalid values
+ *   -> creation closed with reason `invalid_mode_override`;
+ * - a `live` override outside production is closed by the unchanged ladder
+ *   (`live_mode_forbidden_outside_production`).
+ *
+ * Settlement (webhook/status/recover) never depends on this resolution; those
+ * routes keep working while creation is disabled.
+ */
+export async function resolvePaymentRuntimePolicy(
+  env: PaymentPolicyEnvironment,
+): Promise<PaymentRuntimePolicy> {
+  const kv = env.PAYMENT_CONFIG_KV;
+  if (!kv || typeof kv.get !== 'function') {
+    return paymentRuntimePolicy(env);
+  }
+
+  let raw: unknown;
+  try {
+    raw = await kv.get(PAYMENT_MODE_OVERRIDE_KEY);
+  } catch {
+    // A bound but unreadable store cannot prove the kill-switch state.
+    return invalidOverridePolicy(env);
+  }
+  if (raw === null || raw === undefined || raw === '') {
+    return paymentRuntimePolicy(env);
+  }
+
+  let override: PaymentModeOverride;
+  try {
+    override = JSON.parse(String(raw)) as PaymentModeOverride;
+  } catch {
+    return invalidOverridePolicy(env);
+  }
+  if (!override || typeof override !== 'object' || Array.isArray(override)) {
+    return invalidOverridePolicy(env);
+  }
+
+  const effective: PaymentRuntimeInput = { ...env };
+  if (override.paymentMode !== undefined) {
+    if (
+      typeof override.paymentMode !== 'string'
+      || !['disabled', 'test', 'live'].includes(override.paymentMode)
+    ) {
+      return invalidOverridePolicy(env);
+    }
+    effective.PAYMENT_MODE = override.paymentMode;
+  }
+  if (override.promptPayEnabled !== undefined) {
+    if (typeof override.promptPayEnabled !== 'boolean') {
+      return invalidOverridePolicy(env);
+    }
+    effective.PROMPTPAY_ENABLED = override.promptPayEnabled ? 'true' : 'false';
+  }
+
+  return paymentRuntimePolicy(effective);
+}
