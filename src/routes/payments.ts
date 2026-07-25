@@ -6,8 +6,8 @@ import { createRateLimit } from '../middleware/rateLimit';
 import { jsonSuccess, jsonError } from '../utils/response';
 import {
   TIRAK_PAYMENTS_CONTRACT_VERSION,
-  paymentRuntimePolicy,
   publicPaymentStatus,
+  resolvePaymentRuntimePolicy,
   type PaymentAttemptStatus,
 } from '../contracts/payment';
 import {
@@ -308,7 +308,7 @@ payments.use('*', createRateLimit('payment'));
  */
 payments.post('/charges', zValidator('json', promptPayBookingSchema), async (c) => {
   const secretKey = c.env.OMISE_SECRET_KEY;
-  const runtime = paymentRuntimePolicy(c.env);
+  const runtime = await resolvePaymentRuntimePolicy(c.env);
   if (!runtime.createEnabled || !secretKey) {
     return jsonError(c, 'PAYMENT_CREATION_DISABLED', `PromptPay charge creation is closed: ${runtime.reason || 'missing_secret'}`, 503);
   }

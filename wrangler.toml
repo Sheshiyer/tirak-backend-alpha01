@@ -56,6 +56,16 @@ id = "29c134656fca4bada93e1c3b5313b3fa"
 binding = "SESSIONS"
 id = "486126fb5afb41feb30458231bde3a96"
 
+# T-033 payment environment-mode kill-switch override store.
+# TODO(T-033): this namespace is not provisioned yet; the all-zero id is an
+# inert stand-in. The Worker tolerates an unbound namespace and an absent
+# PAYMENT_MODE_OVERRIDE key (static [vars] floor applies). The human release
+# owner provisions the real namespace and replaces this id before any deploy
+# that relies on the audited override path.
+[[kv_namespaces]]
+binding = "PAYMENT_CONFIG_KV"
+id = "00000000000000000000000000000000"
+
 [[env.staging.kv_namespaces]]
 binding = "CACHE"
 id = "ff06486f6291490f83c1864d812ef7f8"
@@ -64,6 +74,15 @@ id = "ff06486f6291490f83c1864d812ef7f8"
 binding = "SESSIONS"
 id = "6f29f29cd08d4920aa3cc35577377270"
 
+# T-033 payment environment-mode kill-switch override store.
+# TODO(T-033): not provisioned yet; the all-zero id is an inert stand-in.
+# The T-025 staging ledger records only CACHE/SESSIONS, so adding the real
+# namespace later requires a human-approved ledger amendment before
+# staging:discover will accept the new KV topology.
+[[env.staging.kv_namespaces]]
+binding = "PAYMENT_CONFIG_KV"
+id = "00000000000000000000000000000000"
+
 [[env.production.kv_namespaces]]
 binding = "CACHE"
 id = "26bb0a8431db448daef5be2f050a3898"
@@ -71,6 +90,14 @@ id = "26bb0a8431db448daef5be2f050a3898"
 [[env.production.kv_namespaces]]
 binding = "SESSIONS"
 id = "c4f5ac76aa6043aaa8566f6b70e59204"
+
+# T-033 payment environment-mode kill-switch override store.
+# TODO(T-033): not provisioned yet; the all-zero id is an inert stand-in.
+# Production mode changes happen only through the audited human release owner
+# action (scripts/payments/set-payment-mode.mjs), never through a deploy.
+[[env.production.kv_namespaces]]
+binding = "PAYMENT_CONFIG_KV"
+id = "00000000000000000000000000000000"
 
 # Queue bindings
 [[queues.producers]]
