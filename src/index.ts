@@ -4,6 +4,7 @@ import { jwt } from 'hono/jwt';
 import { authRoutes } from './routes/auth';
 import { userRoutes } from './routes/users';
 import { supplierRoutes } from './routes/suppliers';
+import { supplierOnboardingRoutes } from './routes/supplierOnboarding';
 import { customerRoutes } from './routes/customers';
 import { uploadRoutes } from './routes/uploads';
 import { publicRoutes } from './routes/public';
@@ -118,6 +119,7 @@ app.route('/api/auth', authRoutes);
 
 // Public routes (no authentication required)
 app.route('/api/public', publicRoutes);
+app.route('/api/supplier-onboarding', supplierOnboardingRoutes);
 
 // Protected routes (JWT required)
 app.route('/api/users', userRoutes);
