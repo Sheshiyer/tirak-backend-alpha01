@@ -9,6 +9,7 @@ import { moderationRoutes } from './moderation';
 import { analyticsRoutes } from './analytics';
 import { subscriptionRoutes } from './subscriptions';
 import { operationRoutes } from './operations';
+import { adminSupplierOnboardingRoutes } from './supplierOnboarding';
 import type { Env, Variables } from '../../index';
 
 const admin = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -46,5 +47,6 @@ admin.route('/moderation', moderationRoutes);
 admin.route('/analytics', analyticsRoutes);
 admin.route('/subscriptions', subscriptionRoutes);
 admin.route('/operations', operationRoutes);
+admin.route('/supplier-onboarding', adminSupplierOnboardingRoutes);
 
 export { admin as adminRoutes };
