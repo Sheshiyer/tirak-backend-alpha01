@@ -449,6 +449,11 @@ auth.post('/reset-password', zValidator('json', passwordResetSchema), async (c) 
       'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ).bind(passwordHash, userId).run();
 
+    // Activate invite-created accounts on first password set
+    await c.env.DB.prepare(
+      "UPDATE users SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'"
+    ).bind(userId).run();
+
     // Delete reset token
     await c.env.CACHE.delete(`reset:${token}`);
 

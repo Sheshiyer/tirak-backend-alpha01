@@ -145,6 +145,43 @@ describe('Auth Routes', () => {
     expect(data.data.sent).toBe(true);
   });
 
+  it('activates a pending invite account on successful password reset', async () => {
+    const executed: { query: string; params: unknown[] }[] = [];
+    const futureExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    testEnv.CACHE.get = async (key: string) =>
+      key.startsWith('reset:')
+        ? JSON.stringify({ userId: 'pending-user-1', expiresAt: futureExpiry })
+        : null;
+    testEnv.CACHE.delete = async () => undefined;
+    testEnv.DB.prepare = (query: string) => ({
+      bind: (...params: unknown[]) => ({
+        run: async () => {
+          executed.push({ query, params });
+          return { success: true, meta: { changes: 1 } };
+        },
+        first: async () => null,
+        all: async () => ({ results: [] }),
+      }),
+    });
+
+    const request = createMockRequest('http://localhost/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token: 'invite-token-1', newPassword: 'NewSecurePass123!' }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    const response = await app.request(request, undefined, testEnv);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.success).toBe(true);
+    const activation = executed.find(
+      (e) => e.query.includes("SET status = 'active'") && e.query.includes("status = 'pending'")
+    );
+    expect(activation).toBeDefined();
+    expect(activation!.params[0]).toBe('pending-user-1');
+  });
+
   it('logs out idempotently', async () => {
     const request = createMockRequest('http://localhost/auth/logout', {
       method: 'POST',
