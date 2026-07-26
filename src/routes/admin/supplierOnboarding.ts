@@ -152,6 +152,7 @@ adminSupplierOnboarding.post('/:id/approve', async (c) => {
     const userId = crypto.randomUUID();
     const now = new Date().toISOString();
     const trialExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const phoneToUse = app.phone || '';
 
     // Create pending supplier user (bypass createUser which forces active)
     await c.env.DB.prepare(`
@@ -160,7 +161,7 @@ adminSupplierOnboarding.post('/:id/approve', async (c) => {
         email_verified, phone_verified, preferred_language,
         created_at, updated_at
       ) VALUES (?, ?, ?, ?, 'supplier', 'pending', 0, 0, 'en', ?, ?)
-    `).bind(userId, app.email, '', passwordHash, now, now).run();
+    `    ).bind(userId, app.email, phoneToUse, passwordHash, now, now).run();
 
     // Create supplier profile with basic 30-day trial
     await c.env.DB.prepare(`
