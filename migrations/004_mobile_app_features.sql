@@ -1,13 +1,13 @@
 -- Migration 004: Mobile App Features
 -- Add tables and columns for mobile app functionality
 
--- Create bookings table
+-- Create bookings table (repaired: supplier_id + scheduled_at for canonical mobile schema)
 CREATE TABLE IF NOT EXISTS bookings (
     id TEXT PRIMARY KEY,
     customer_id TEXT NOT NULL,
-    companion_id TEXT NOT NULL,
+    supplier_id TEXT NOT NULL,
     service_id TEXT,
-    date TEXT NOT NULL,
+    scheduled_at TEXT NOT NULL,
     start_time TEXT NOT NULL,
     end_time TEXT NOT NULL,
     duration INTEGER NOT NULL,
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS bookings (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (customer_id) REFERENCES users(id),
-    FOREIGN KEY (companion_id) REFERENCES users(id),
+    FOREIGN KEY (supplier_id) REFERENCES users(id),
     FOREIGN KEY (service_id) REFERENCES supplier_services(id),
     FOREIGN KEY (payment_method_id) REFERENCES payment_methods(id)
 );
@@ -36,12 +36,12 @@ CREATE TABLE IF NOT EXISTS booking_timeline (
     FOREIGN KEY (booking_id) REFERENCES bookings(id)
 );
 
--- Create reviews table
+-- Create reviews table (repaired: reviewer_id/reviewee_id)
 CREATE TABLE IF NOT EXISTS reviews (
     id TEXT PRIMARY KEY,
     booking_id TEXT NOT NULL,
-    companion_id TEXT NOT NULL,
-    customer_id TEXT NOT NULL,
+    reviewer_id TEXT NOT NULL,
+    reviewee_id TEXT NOT NULL,
     rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
     comment TEXT,
     categories TEXT, -- JSON object with category ratings
@@ -49,9 +49,9 @@ CREATE TABLE IF NOT EXISTS reviews (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (booking_id) REFERENCES bookings(id),
-    FOREIGN KEY (companion_id) REFERENCES users(id),
-    FOREIGN KEY (customer_id) REFERENCES users(id),
-    UNIQUE(booking_id, customer_id)
+    FOREIGN KEY (reviewer_id) REFERENCES users(id),
+    FOREIGN KEY (reviewee_id) REFERENCES users(id),
+    UNIQUE(booking_id, reviewer_id)
 );
 
 -- Create payment methods table
@@ -84,14 +84,14 @@ CREATE TABLE IF NOT EXISTS notifications (
 -- Add notification preferences column to users table
 ALTER TABLE users ADD COLUMN notification_preferences TEXT DEFAULT '{}';
 
--- Create indexes for better performance
+-- Create indexes for better performance (repaired names)
 CREATE INDEX IF NOT EXISTS idx_bookings_customer_id ON bookings(customer_id);
-CREATE INDEX IF NOT EXISTS idx_bookings_companion_id ON bookings(companion_id);
-CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date);
+CREATE INDEX IF NOT EXISTS idx_bookings_supplier_id ON bookings(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_scheduled_at ON bookings(scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status);
 CREATE INDEX IF NOT EXISTS idx_booking_timeline_booking_id ON booking_timeline(booking_id);
-CREATE INDEX IF NOT EXISTS idx_reviews_companion_id ON reviews(companion_id);
-CREATE INDEX IF NOT EXISTS idx_reviews_customer_id ON reviews(customer_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_reviewer_id ON reviews(reviewer_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_reviewee_id ON reviews(reviewee_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_rating ON reviews(rating);
 CREATE INDEX IF NOT EXISTS idx_payment_methods_user_id ON payment_methods(user_id);
 CREATE INDEX IF NOT EXISTS idx_payment_methods_is_default ON payment_methods(is_default);
@@ -99,9 +99,9 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
 
--- Update supplier_profiles table to add missing columns
-ALTER TABLE supplier_profiles ADD COLUMN rating_average REAL DEFAULT 0;
-ALTER TABLE supplier_profiles ADD COLUMN rating_count INTEGER DEFAULT 0;
+-- (repaired) rating_average/rating_count moved to canonical earlier migration; skip duplicates here to avoid apply errors on fresh DBs
+-- ALTER TABLE supplier_profiles ADD COLUMN rating_average REAL DEFAULT 0;
+-- ALTER TABLE supplier_profiles ADD COLUMN rating_count INTEGER DEFAULT 0;
 
 -- Update customer_profiles table to add missing columns
 ALTER TABLE customer_profiles ADD COLUMN date_of_birth TEXT;
@@ -150,7 +150,7 @@ CREATE TABLE IF NOT EXISTS system_config (
 
 -- Add indexes for supplier tables
 CREATE INDEX IF NOT EXISTS idx_supplier_services_supplier_id ON supplier_services(supplier_id);
-CREATE INDEX IF NOT EXISTS idx_supplier_services_category_id ON supplier_services(category_id);
+-- (repaired) removed duplicate/stale idx_supplier_services_category_id (defined elsewhere or not needed)
 CREATE INDEX IF NOT EXISTS idx_supplier_services_is_active ON supplier_services(is_active);
 CREATE INDEX IF NOT EXISTS idx_supplier_availability_supplier_id ON supplier_availability(supplier_id);
 CREATE INDEX IF NOT EXISTS idx_supplier_availability_day_of_week ON supplier_availability(day_of_week);

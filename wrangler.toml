@@ -246,6 +246,8 @@ EMAIL_PROVIDER = "cloudflare"
 EMAIL_FROM = "noreply@tirak.app"
 EMAIL_FROM_NAME = "Tirak"
 EMAIL_REPLY_TO = "support@tirak.app"
+# JWT_SECRET must be provisioned as a Worker secret (never committed in vars):
+#   npx wrangler secret put JWT_SECRET --env staging
 
 [env.production.vars]
 ENVIRONMENT = "production"
@@ -256,3 +258,5 @@ EMAIL_PROVIDER = "cloudflare"
 EMAIL_FROM = "noreply@tirak.app"
 EMAIL_FROM_NAME = "Tirak"
 EMAIL_REPLY_TO = "support@tirak.app"
+# JWT_SECRET must be provisioned as a Worker secret (never committed in vars):
+#   npx wrangler secret put JWT_SECRET --env production
