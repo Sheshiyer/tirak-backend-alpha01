@@ -10,6 +10,7 @@ A comprehensive backend API for Tirak's guided-experience marketplace, built wit
 - **Search & Discovery**: Advanced supplier search with filtering
 - **Analytics**: Event tracking and business intelligence
 - **Moderation**: Automated content moderation with manual review
+- **Supplier Onboarding Review** (new): Public submit + admin review/approve (creates supplier user + profile + temp creds + reset token + optional email + notif) / reject with reason. Full review columns + status workflow. Integrates D1 + KV + Email.
 - **Multi-language**: Support for English and Thai
 - **Global Scale**: Deployed on Cloudflare's global network
 
