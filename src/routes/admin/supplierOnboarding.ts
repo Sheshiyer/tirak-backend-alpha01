@@ -2,17 +2,14 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { validatePagination } from '../../middleware/validation';
+import { jsonPaginated, jsonError, createPagination, jsonSuccess } from '../../utils/response';
+import { createEmailConfig, sendEmail, renderBasicEmail } from '../../utils/communication';
 import { hashPassword } from '../../utils/auth';
-import { sendEmail, createEmailConfig, renderBasicEmail } from '../../utils/communication';
-import { jsonSuccess, jsonPaginated, jsonError, createPagination } from '../../utils/response';
 import type { Env, Variables } from '../../index';
 
 const adminSupplierOnboarding = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-const rejectSchema = z.object({
-  reason: z.string().trim().max(500).optional(),
-});
-
+// List (existing, lightly enhanced to include new review columns when present)
 adminSupplierOnboarding.get('/', validatePagination(), async (c) => {
   const { page, limit } = c.get('validatedQuery');
   const status = c.req.query('status');
@@ -36,7 +33,8 @@ adminSupplierOnboarding.get('/', validatePagination(), async (c) => {
     const offset = (page - 1) * limit;
     const rows = await c.env.DB.prepare(`
       SELECT id, business_name, contact_name, email, phone, location, bio,
-             brochure_urls, categories, mode, status, created_at
+             brochure_urls, categories, mode, status, created_at,
+             reviewed_at, rejection_reason, approved_user_id
       FROM supplier_onboarding_applications
       ${where}
       ORDER BY created_at DESC
@@ -58,6 +56,9 @@ adminSupplierOnboarding.get('/', validatePagination(), async (c) => {
       mode: row.mode,
       status: row.status,
       createdAt: row.created_at,
+      reviewedAt: row.reviewed_at || undefined,
+      rejectionReason: row.rejection_reason || undefined,
+      approvedUserId: row.approved_user_id || undefined,
     }));
 
     return jsonPaginated(c, items, createPagination(page, limit, total), 'Supplier onboarding applications.');
@@ -67,205 +68,201 @@ adminSupplierOnboarding.get('/', validatePagination(), async (c) => {
   }
 });
 
+// Detail
 adminSupplierOnboarding.get('/:id', async (c) => {
-  const applicationId = c.req.param('id');
-
+  const id = c.req.param('id');
   try {
     const row = await c.env.DB.prepare(`
       SELECT id, business_name, contact_name, email, phone, location, bio,
-             brochure_urls, categories, mode, status, rejection_reason,
-             reviewed_user_id, reviewed_at, created_at
+             brochure_urls, categories, mode, status, created_at,
+             reviewed_at, rejection_reason, approved_user_id
       FROM supplier_onboarding_applications
       WHERE id = ?
-    `)
-      .bind(applicationId)
-      .first();
+    `).bind(id).first();
 
     if (!row) {
-      return jsonError(c, 'APPLICATION_NOT_FOUND', 'Application not found.', 404);
+      return jsonError(c, 'NOT_FOUND', 'Application not found', 404);
     }
 
-    const record = row as Record<string, unknown>;
+    const item = {
+      id: row.id,
+      businessName: row.business_name,
+      contactName: row.contact_name,
+      email: row.email,
+      phone: row.phone,
+      location: row.location,
+      bio: row.bio,
+      brochureUrls: JSON.parse((row.brochure_urls as string) || '[]'),
+      categories: JSON.parse((row.categories as string) || '[]'),
+      mode: row.mode,
+      status: row.status,
+      createdAt: row.created_at,
+      reviewedAt: row.reviewed_at || undefined,
+      rejectionReason: row.rejection_reason || undefined,
+      approvedUserId: row.approved_user_id || undefined,
+    };
 
-    return jsonSuccess(c, {
-      id: record.id,
-      businessName: record.business_name,
-      contactName: record.contact_name,
-      email: record.email,
-      phone: record.phone,
-      location: record.location,
-      bio: record.bio,
-      brochureUrls: JSON.parse((record.brochure_urls as string) || '[]'),
-      categories: JSON.parse((record.categories as string) || '[]'),
-      mode: record.mode,
-      status: record.status,
-      rejectionReason: record.rejection_reason,
-      reviewedUserId: record.reviewed_user_id,
-      reviewedAt: record.reviewed_at,
-      createdAt: record.created_at,
-    }, 'Supplier onboarding application.');
+    return jsonSuccess(c, item, 'Application detail.');
   } catch (error) {
-    console.error('Failed to load supplier onboarding application:', error);
-    return jsonError(c, 'ONBOARDING_LOAD_FAILED', 'Could not load the application.', 500);
+    console.error('Failed to get supplier onboarding application:', error);
+    return jsonError(c, 'ONBOARDING_DETAIL_FAILED', 'Could not load application.', 500);
   }
 });
 
+const rejectSchema = z.object({
+  reason: z.string().trim().min(3).max(500).optional(),
+});
+
+// Approve
 adminSupplierOnboarding.post('/:id/approve', async (c) => {
-  const applicationId = c.req.param('id');
-  const adminUserId = c.get('userId');
+  const id = c.req.param('id');
+  const adminUserId = c.get('userId') as string | undefined;
 
   try {
-    const row = await c.env.DB.prepare(
-      'SELECT * FROM supplier_onboarding_applications WHERE id = ?'
-    )
-      .bind(applicationId)
-      .first();
+    // Load application
+    const app = await c.env.DB.prepare(`
+      SELECT id, email, business_name, contact_name, status
+      FROM supplier_onboarding_applications
+      WHERE id = ?
+    `).bind(id).first<{ id: string; email: string; business_name: string; contact_name: string; status: string }>();
 
-    if (!row) {
-      return jsonError(c, 'APPLICATION_NOT_FOUND', 'Application not found.', 404);
+    if (!app) {
+      return jsonError(c, 'NOT_FOUND', 'Application not found', 404);
+    }
+    if (app.status !== 'pending') {
+      return jsonError(c, 'ALREADY_REVIEWED', 'Application has already been reviewed', 409);
     }
 
-    const application = row as Record<string, unknown>;
-
-    if (application.status !== 'pending') {
-      return jsonError(c, 'ALREADY_REVIEWED', 'This application has already been reviewed.', 409);
-    }
-
-    const existingUser = await c.env.DB.prepare(
-      'SELECT id FROM users WHERE email = ?'
-    )
-      .bind(application.email as string)
-      .first();
-
+    // Check duplicate email
+    const existingUser = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(app.email).first();
     if (existingUser) {
-      return jsonError(c, 'EMAIL_EXISTS', 'A user with this email already exists.', 409);
+      return jsonError(c, 'EMAIL_EXISTS', 'A user with this email already exists', 409);
     }
 
-    const tempPassword = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+    // Generate 12-char temporary password
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+    let tempPassword = '';
+    const array = new Uint8Array(12);
+    crypto.getRandomValues(array);
+    for (let i = 0; i < 12; i++) {
+      tempPassword += chars[(array[i] ?? 0) % chars.length];
+    }
+
     const passwordHash = await hashPassword(tempPassword);
     const userId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const trialExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
+    // Create pending supplier user (bypass createUser which forces active)
     await c.env.DB.prepare(`
       INSERT INTO users (
         id, email, phone, password_hash, user_type, status,
         email_verified, phone_verified, preferred_language,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 'supplier', 'pending', 1, 0, 'en', datetime('now'), datetime('now'))
-    `)
-      .bind(userId, application.email as string, application.phone as string, passwordHash)
-      .run();
+      ) VALUES (?, ?, ?, ?, 'supplier', 'pending', 0, 0, 'en', ?, ?)
+    `).bind(userId, app.email, '', passwordHash, now, now).run();
 
-    const applicationCategories = JSON.parse((application.categories as string) || '[]') as { name?: string }[];
-    const categoryNames = applicationCategories
-      .map((category) => category?.name)
-      .filter((name): name is string => typeof name === 'string');
-
+    // Create supplier profile with basic 30-day trial
     await c.env.DB.prepare(`
       INSERT INTO supplier_profiles (
-        user_id, display_name, bio, location, categories,
-        verification_status, subscription_status, subscription_tier,
-        subscription_expires_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, 'pending', 'active', 'basic', datetime('now', '+30 days'), datetime('now'), datetime('now'))
-    `)
-      .bind(
-        userId,
-        application.business_name as string,
-        (application.bio as string | null) ?? null,
-        application.location as string,
-        JSON.stringify(categoryNames)
-      )
-      .run();
+        user_id, display_name, first_name, last_name, bio, location,
+        profile_images, cover_photo, social_links, categories, regions, spoken_languages,
+        certifications, experience_stats, verification_status, subscription_status,
+        subscription_tier, subscription_expires_at,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, '[]', NULL, '{}', '[]', '[]', '[]', '[]', '{}', 'pending', 'active', 'basic', ?, ?, ?)
+    `).bind(
+      userId,
+      app.contact_name || app.business_name,
+      app.contact_name?.split(' ')[0] || app.business_name,
+      app.contact_name?.split(' ').slice(1).join(' ') || '',
+      null,
+      null,
+      trialExpires,
+      now,
+      now
+    ).run();
 
-    const inviteToken = crypto.randomUUID();
-    await c.env.CACHE.put(
-      `reset:${inviteToken}`,
-      JSON.stringify({ userId, expiresAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString() })
-    );
-
-    const inviteLink = `https://tirak.app/auth/new?token=${encodeURIComponent(inviteToken)}`;
-    const emailConfig = createEmailConfig(c.env);
-    const emailResult = await sendEmail(
-      emailConfig,
-      application.email as string,
-      'Welcome to Tirak — your supplier account is ready',
-      renderBasicEmail(
-        'Welcome to Tirak',
-        `Hi ${application.business_name as string}, your supplier account is ready.\nTemporary password: ${tempPassword}\nUse the button below to set your own password. This link expires in 24 hours.`,
-        { label: 'Set your password', url: inviteLink }
-      )
-    );
-    const emailSent = emailResult.status === 'sent';
-
+    // Update application as approved
     await c.env.DB.prepare(`
       UPDATE supplier_onboarding_applications
-      SET status = 'approved', reviewed_user_id = ?, approved_user_id = ?,
-          reviewed_at = datetime('now'), updated_at = datetime('now')
+      SET status = 'approved', reviewed_at = ?, approved_user_id = ?
       WHERE id = ?
-    `)
-      .bind(adminUserId, userId, applicationId)
-      .run();
+    `).bind(now, adminUserId || null, id).run();
 
-    await c.env.DB.prepare(`
-      INSERT INTO notifications (id, user_id, type, title, message, data, read, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, FALSE, ?)
-    `)
-      .bind(
-        crypto.randomUUID(),
-        userId,
-        'supplier_application_approved',
-        'Application approved',
-        'Welcome to Tirak! Your supplier application has been approved.',
-        JSON.stringify({ applicationId, reviewedBy: adminUserId }),
-        new Date().toISOString()
-      )
-      .run();
+    // Create reset token (24h) for the "set password" flow (reuses existing KV pattern)
+    const resetToken = crypto.randomUUID();
+    await c.env.CACHE.put(
+      `reset:${resetToken}`,
+      JSON.stringify({ email: app.email, userId, purpose: 'supplier-onboarding' }),
+      { expirationTtl: 86400 }
+    );
+
+    // Send email (best effort)
+    let emailSent = false;
+    try {
+      const emailConfig = createEmailConfig(c.env);
+      const subject = 'Your Tirak supplier account has been approved';
+      const body = `Welcome to Tirak!\n\nYour application for ${app.business_name} has been approved.\n\nTemporary password (shown once): ${tempPassword}\n\nUse this link to set your permanent password (expires in 24 hours):\nhttps://tirak.app/auth/new?token=${encodeURIComponent(resetToken)}\n\nOr open in the app: tirak://auth/new?token=${encodeURIComponent(resetToken)}`;
+      await sendEmail(emailConfig, app.email, subject, body);
+      emailSent = true;
+    } catch (e) {
+      console.warn('Failed to send supplier onboarding credentials email (will show temp password in UI):', e);
+    }
+
+    // Create in-app notification for the new supplier
+    try {
+      const notifId = crypto.randomUUID();
+      await c.env.DB.prepare(`
+        INSERT INTO notifications (id, user_id, type, title, message, data, read, created_at, updated_at)
+        VALUES (?, ?, 'supplier_approved', 'Application Approved', 'Your supplier application has been approved. Check your email for login credentials.', ?, 0, ?, ?)
+      `).bind(notifId, userId, JSON.stringify({ applicationId: id }), now, now).run();
+    } catch (e) {
+      console.warn('Failed to create supplier approval notification:', e);
+    }
 
     return jsonSuccess(c, {
-      applicationId,
+      applicationId: id,
       userId,
-      email: application.email,
+      email: app.email,
       tempPassword,
       emailSent,
-    }, 'Application approved.');
+    }, 'Supplier approved. Credentials generated.');
   } catch (error) {
-    console.error('Supplier onboarding approval failed:', error);
-    return jsonError(c, 'ONBOARDING_APPROVAL_FAILED', 'Could not approve the application.', 500);
+    console.error('Approve supplier onboarding failed:', error);
+    return jsonError(c, 'APPROVE_FAILED', 'Could not approve application.', 500);
   }
 });
 
+// Reject
 adminSupplierOnboarding.post('/:id/reject', zValidator('json', rejectSchema), async (c) => {
-  const applicationId = c.req.param('id');
-  const adminUserId = c.get('userId');
+  const id = c.req.param('id');
   const { reason } = c.req.valid('json');
+  const adminUserId = c.get('userId') as string | undefined;
 
   try {
-    const row = await c.env.DB.prepare(
-      'SELECT id, status FROM supplier_onboarding_applications WHERE id = ?'
-    )
-      .bind(applicationId)
-      .first();
+    const app = await c.env.DB.prepare(`
+      SELECT id, status FROM supplier_onboarding_applications WHERE id = ?
+    `).bind(id).first<{ id: string; status: string }>();
 
-    if (!row) {
-      return jsonError(c, 'APPLICATION_NOT_FOUND', 'Application not found.', 404);
+    if (!app) {
+      return jsonError(c, 'NOT_FOUND', 'Application not found', 404);
+    }
+    if (app.status !== 'pending') {
+      return jsonError(c, 'ALREADY_REVIEWED', 'Application has already been reviewed', 409);
     }
 
-    if ((row as Record<string, unknown>).status !== 'pending') {
-      return jsonError(c, 'ALREADY_REVIEWED', 'This application has already been reviewed.', 409);
-    }
-
+    const now = new Date().toISOString();
     await c.env.DB.prepare(`
       UPDATE supplier_onboarding_applications
-      SET status = 'rejected', rejection_reason = ?, reviewed_user_id = ?,
-          reviewed_at = datetime('now'), updated_at = datetime('now')
+      SET status = 'rejected', reviewed_at = ?, rejection_reason = ?, approved_user_id = ?
       WHERE id = ?
-    `)
-      .bind(reason ?? null, adminUserId, applicationId)
-      .run();
+    `).bind(now, reason || null, adminUserId || null, id).run();
 
-    return jsonSuccess(c, { applicationId }, 'Application rejected.');
+    return jsonSuccess(c, { applicationId: id }, 'Application rejected.');
   } catch (error) {
-    console.error('Supplier onboarding rejection failed:', error);
-    return jsonError(c, 'ONBOARDING_REJECTION_FAILED', 'Could not reject the application.', 500);
+    console.error('Reject supplier onboarding failed:', error);
+    return jsonError(c, 'REJECT_FAILED', 'Could not reject application.', 500);
   }
 });
 

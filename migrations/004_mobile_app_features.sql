@@ -1,11 +1,30 @@
 -- Migration 004: Mobile App Features
 -- Add tables and columns for mobile app functionality
 
--- bookings: canonical definition lives in 001/schema.sql (supplier_id,
--- scheduled_at). The original 004 draft predated that rename and defined a
--- drifted companion_id table plus companion_id/date indexes that abort fresh
--- bootstraps ("no such column: companion_id"). Removed; the canonical indexes
--- below cover the same access paths.
+-- Create bookings table (repaired: supplier_id + scheduled_at for canonical mobile schema)
+CREATE TABLE IF NOT EXISTS bookings (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    supplier_id TEXT NOT NULL,
+    service_id TEXT,
+    scheduled_at TEXT NOT NULL,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    duration INTEGER NOT NULL,
+    location TEXT,
+    special_requests TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'in_progress', 'completed', 'cancelled')),
+    total_amount REAL NOT NULL,
+    service_fee REAL NOT NULL DEFAULT 0,
+    payment_method_id TEXT,
+    payment_status TEXT NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending', 'processing', 'completed', 'failed', 'refunded')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES users(id),
+    FOREIGN KEY (supplier_id) REFERENCES users(id),
+    FOREIGN KEY (service_id) REFERENCES supplier_services(id),
+    FOREIGN KEY (payment_method_id) REFERENCES payment_methods(id)
+);
 
 -- Create booking timeline table
 CREATE TABLE IF NOT EXISTS booking_timeline (
@@ -17,9 +36,23 @@ CREATE TABLE IF NOT EXISTS booking_timeline (
     FOREIGN KEY (booking_id) REFERENCES bookings(id)
 );
 
--- reviews: canonical definition lives in 001/schema.sql (reviewer_id,
--- reviewee_id). The original 004 companion_id draft was removed for the same
--- reason as bookings above.
+-- Create reviews table (repaired: reviewer_id/reviewee_id)
+CREATE TABLE IF NOT EXISTS reviews (
+    id TEXT PRIMARY KEY,
+    booking_id TEXT NOT NULL,
+    reviewer_id TEXT NOT NULL,
+    reviewee_id TEXT NOT NULL,
+    rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+    comment TEXT,
+    categories TEXT, -- JSON object with category ratings
+    verified BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (booking_id) REFERENCES bookings(id),
+    FOREIGN KEY (reviewer_id) REFERENCES users(id),
+    FOREIGN KEY (reviewee_id) REFERENCES users(id),
+    UNIQUE(booking_id, reviewer_id)
+);
 
 -- Create payment methods table
 CREATE TABLE IF NOT EXISTS payment_methods (
@@ -51,7 +84,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 -- Add notification preferences column to users table
 ALTER TABLE users ADD COLUMN notification_preferences TEXT DEFAULT '{}';
 
--- Create indexes for better performance
+-- Create indexes for better performance (repaired names)
 CREATE INDEX IF NOT EXISTS idx_bookings_customer_id ON bookings(customer_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_supplier_id ON bookings(supplier_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_scheduled_at ON bookings(scheduled_at);
@@ -66,9 +99,9 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
 
--- supplier_profiles rating columns: already present in 001 (rating_average,
--- rating_count). The duplicate ALTERs were removed; they abort fresh chains
--- with "duplicate column name".
+-- (repaired) rating_average/rating_count moved to canonical earlier migration; skip duplicates here to avoid apply errors on fresh DBs
+-- ALTER TABLE supplier_profiles ADD COLUMN rating_average REAL DEFAULT 0;
+-- ALTER TABLE supplier_profiles ADD COLUMN rating_count INTEGER DEFAULT 0;
 
 -- Update customer_profiles table to add missing columns
 ALTER TABLE customer_profiles ADD COLUMN date_of_birth TEXT;
@@ -117,6 +150,7 @@ CREATE TABLE IF NOT EXISTS system_config (
 
 -- Add indexes for supplier tables
 CREATE INDEX IF NOT EXISTS idx_supplier_services_supplier_id ON supplier_services(supplier_id);
+-- (repaired) removed duplicate/stale idx_supplier_services_category_id (defined elsewhere or not needed)
 CREATE INDEX IF NOT EXISTS idx_supplier_services_is_active ON supplier_services(is_active);
 CREATE INDEX IF NOT EXISTS idx_supplier_availability_supplier_id ON supplier_availability(supplier_id);
 CREATE INDEX IF NOT EXISTS idx_supplier_availability_day_of_week ON supplier_availability(day_of_week);
