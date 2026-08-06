@@ -1,6 +1,6 @@
 schema_version: 1
 packet_status: draft-held
-project_id: tirak-backend-alpha01
+project_id: tirak.backend.tirak-backend-alpha01
 identity_status: pending-teamforge-verification
 portfolio: thoughtseed
 repository: tirak-backend-alpha01
