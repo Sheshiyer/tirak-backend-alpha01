@@ -121,10 +121,10 @@ adminSupplierOnboarding.post('/:id/approve', async (c) => {
   try {
     // Load application
     const app = await c.env.DB.prepare(`
-      SELECT id, email, business_name, contact_name, status
+      SELECT id, email, business_name, contact_name, phone, status
       FROM supplier_onboarding_applications
       WHERE id = ?
-    `).bind(id).first<{ id: string; email: string; business_name: string; contact_name: string; status: string }>();
+    `).bind(id).first<{ id: string; email: string; business_name: string; contact_name: string; phone?: string; status: string }>();
 
     if (!app) {
       return jsonError(c, 'NOT_FOUND', 'Application not found', 404);

@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T-036",
+  "status": "PREDEPLOY_MUTATIONS_COMPLETE",
+  "capturedAt": "2026-08-01T12:51:19Z",
+  "authorization": {
+    "acceptedAt": "2026-08-01T12:46:45Z",
+    "statementSha256": "9d009feb692173ae7acbb62440b02e6a380fa894f24f68a49d0432e79440084a",
+    "credentialClass": "owner-accepted existing full-scope token",
+    "authorizedOperations": [
+      "create exactly one staging KV namespace",
+      "generate and provision one staging-only JWT_SECRET",
+      "directly deploy the staging Worker without D1 migrations while payment flags remain disabled",
+      "attach the api-staging.tirak.app Worker Custom Domain"
+    ],
+    "excludedOperations": [
+      "production mutation",
+      "live Omise activity",
+      "payment enablement",
+      "webhook registration",
+      "payouts",
+      "subscriptions",
+      "digital unlocks",
+      "App Store submission"
+    ]
+  },
+  "target": {
+    "accountId": "2c0c96c68f0ee73b6d980054557bca5b",
+    "worker": "tirak-backend-staging",
+    "backendSourceSnapshot": "8d8148d9af19c7a477795b212ddb667a5bac9ab1"
+  },
+  "preState": {
+    "paymentConfigKvMatchCount": 0,
+    "stagingSecretNames": [
+      "OMISE_SECRET_KEY",
+      "OMISE_WEBHOOK_SECRET"
+    ],
+    "stagingDeploymentId": "4eb22d13-358f-4cd9-80c5-fea0f863d6e4",
+    "stagingVersionId": "d51b0c58-9718-4125-ba35-c76d5dcd6815",
+    "stagingDnsRecordCount": 0,
+    "stagingWorkerRouteCount": 0,
+    "stagingCustomDomainCount": 0,
+    "workersDevEnabled": false,
+    "previewUrlsEnabled": false
+  },
+  "mutations": [
+    {
+      "operation": "create-kv-namespace",
+      "title": "tirak-payment-config-staging",
+      "httpStatus": 200,
+      "curlExit": 0,
+      "readBackCount": 1,
+      "namespaceId": "e929e0361e5346af8956bd47cdd2168d"
+    },
+    {
+      "operation": "provision-worker-secret",
+      "secretName": "JWT_SECRET",
+      "commandShape": "wrangler secret put JWT_SECRET --env staging",
+      "commandExit": 0,
+      "secretValueCaptured": false,
+      "deploymentId": "7c07e870-09cd-442a-a82a-0fa4a9f0b6e4",
+      "versionId": "bb8a3970-b45c-4a4f-b9cc-c500538ca85b"
+    }
+  ],
+  "postState": {
+    "paymentConfigKv": {
+      "title": "tirak-payment-config-staging",
+      "id": "e929e0361e5346af8956bd47cdd2168d",
+      "unique": true
+    },
+    "stagingSecretNames": [
+      "JWT_SECRET",
+      "OMISE_SECRET_KEY",
+      "OMISE_WEBHOOK_SECRET"
+    ],
+    "nonSecretBindingsUnchangedByJwtProvisioning": true,
+    "environment": "staging",
+    "paymentMode": "disabled",
+    "promptPayEnabled": "false"
+  },
+  "productionPreState": {
+    "deploymentId": "33b764fc-5fac-4732-a4b0-5dfc122d6c5a",
+    "versionId": "2222520b-d5b2-420a-8b41-364c7e8cbb38",
+    "secretNames": [
+      "JWT_SECRET"
+    ]
+  },
+  "invariants": {
+    "d1CommandsExecuted": 0,
+    "productionMutationsExecuted": 0,
+    "liveOmiseMutationsExecuted": 0,
+    "paymentEnableMutationsExecuted": 0,
+    "webhookMutationsExecuted": 0,
+    "customDomainMutationsExecuted": 0,
+    "secretValuesRecorded": false
+  },
+  "evidenceSha256": {
+    "account": "54392ea3880a7e7d66c21bab8ecb746d85d8796fb34992c5628564cfccfc5438",
+    "kvBefore": "ebe1531720596c4bae26f6db665c3aa89e2a10b84e8351ddd866c8a1f94d1d95",
+    "kvCreate": "7e7c93665a8bca0448b22afbcca1d0b71e943745c51b3fe72745fe334542e649",
+    "kvAfter": "15eb514e8d10fbb496705543889f4d1b80eb6d2eab3f9c15d1f301b50c6074b6",
+    "secretsBefore": "856d8fb819fa14662590ed00d02c97f688a512fb9b7f6e58096a90c1e2e18e75",
+    "secretsAfterJwt": "b876477bc2e24584009e47a9820969602aa07c3760f2b17e5c59c466e484f410",
+    "deploymentsBefore": "05185cf4e971cbdc9e29d87b4eec336dcce2fa0c4f54737358cdd38d6a6cd954",
+    "deploymentsAfterJwt": "916924228f1a67eeb7ddab093ad2d9b113e684c0b58111d27dc0bb48b73f893b",
+    "productionDeploymentsBefore": "a00a1166de115727d30cbe9ee34460efb2580d0ad8299cdc1bb523124740ed0e",
+    "productionSecretsBefore": "4afd4df8b6ada38f385e60292b53704e18e2b81bd356911e2cc3f013453334d9",
+    "apiStagingDnsBefore": "b23d9fe12ff42a7e9744312e1ce52fa5904b75ee910cbd99ec166dc5417291f9",
+    "workerRoutesBefore": "c4d375cfbfea596f71080a0da436c33b0b3ebadbc8731f50967b6c0ff8674f26",
+    "workerDomainsBefore": "b3e19a091cb8118f69c53d3e67350a053e3b33e0f5d536ec4e619046ee8efc34",
+    "stagingSubdomainBefore": "afc952f09a0356ba28ec692c285148868da48770602aefc1cc3b7505c1e48dcd"
+  }
+}
