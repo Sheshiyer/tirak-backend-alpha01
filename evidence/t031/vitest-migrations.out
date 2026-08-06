@@ -6,7 +6,7 @@ npm warn Unknown user config "allow-scripts". This will stop working in the next
         ╵              ~~~~~~~~~~~~~~~~~~~~~~~~
 
 
- RUN  v3.2.4 /Volumes/madara/2026/twc-vault/01-Projects/thoughtseed/Tirak/Backend/tirak-backend-alpha01
+ RUN  v3.2.4 /Volumes/madara/2026/Projects/thoughtseed/tirak/backend/tirak-backend-alpha01
 
  ✓ tests/migrations/quarantine-guard.test.ts (4 tests) 9ms
  ✓ tests/migrations/schema-surface.test.ts (9 tests) 27ms
