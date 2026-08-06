@@ -1,0 +1,29 @@
+schema_version: 1
+packet_status: draft-held
+project_id: tirak-backend-alpha01
+identity_status: pending-teamforge-verification
+portfolio: thoughtseed
+repository: tirak-backend-alpha01
+github_repository: Sheshiyer/tirak-backend-alpha01
+knowledge_ref: 60-client-ecosystem/tirak/project-brief.md
+governance:
+  default_interactive_client: codex
+  approval_profile: founder-gated
+routing:
+  authority: temperance-omniroute
+  deployment_profile: tirak-backend-alpha01
+  verification_state: unverified
+  credential_scope_ref: thoughtseed-founder-local-config
+  plan_lane: te-plan
+  review_lane: te-review
+commands:
+  setup: npm install
+  test: npm run test
+  verify: npm run test
+context:
+  - PROJECT.md
+  - AGENTS.md
+  - CLAUDE.md
+  - .project/CONTEXT.md
+  - .project/project.yaml
+  - .project/HANDOFF.md
