@@ -10,6 +10,7 @@ import { analyticsRoutes } from './analytics';
 import { subscriptionRoutes } from './subscriptions';
 import { operationRoutes } from './operations';
 import { adminSupplierOnboardingRoutes } from './supplierOnboarding';
+import { adminPaymentRoutes } from './payments';
 import type { Env, Variables } from '../../index';
 
 const admin = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -31,7 +32,8 @@ admin.get('/', (c) => {
       moderation: '/api/admin/moderation',
       analytics: '/api/admin/analytics',
       subscriptions: '/api/admin/subscriptions',
-      operations: '/api/admin/operations'
+      operations: '/api/admin/operations',
+      payments: '/api/admin/payments'
     },
     adminUser: {
       id: c.get('userId'),
@@ -48,5 +50,6 @@ admin.route('/analytics', analyticsRoutes);
 admin.route('/subscriptions', subscriptionRoutes);
 admin.route('/operations', operationRoutes);
 admin.route('/supplier-onboarding', adminSupplierOnboardingRoutes);
+admin.route('/payments', adminPaymentRoutes);
 
 export { admin as adminRoutes };

@@ -52,3 +52,4 @@ new_sqlite_classes = ["ChatRoom", "NotificationService"]
 ENVIRONMENT = "staging"
 PAYMENT_MODE = "disabled"
 PROMPTPAY_ENABLED = "false"
+PAYMENT_PRODUCTION_POLICY_WRITES_ENABLED = "false"

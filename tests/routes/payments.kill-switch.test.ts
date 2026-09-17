@@ -3,6 +3,11 @@ import { Hono } from 'hono';
 import { paymentRoutes } from '@/routes/payments';
 import { generateJWT } from '@/utils/auth';
 import { createMockRequest, createTestEnv, createTestUser } from '@tests/setup';
+import {
+  PAYMENT_PROVIDER_POLICY_KEY,
+  PAYMENT_PROVIDER_POLICY_SCHEMA_VERSION,
+} from '@/payments/provider-policy';
+import { PAYMENT_MODE_OVERRIDE_KEY } from '@/contracts/payment';
 
 type Row = Record<string, unknown>;
 
@@ -67,6 +72,7 @@ describe('T-033 payment kill-switch routes', () => {
   let attempt: Row | null;
   let retryCount: number;
   let kvStore: string | null;
+  let providerPolicyStore: string | null;
   let kvThrows: boolean;
   let statements: Array<{ query: string; params: unknown[] }>;
 
@@ -76,11 +82,26 @@ describe('T-033 payment kill-switch routes', () => {
     env.OMISE_SECRET_KEY = 'skey_test_server_only';
     env.OMISE_WEBHOOK_SECRET = btoa('webhook_test_secret');
     kvStore = null;
+    providerPolicyStore = JSON.stringify({
+      schemaVersion: PAYMENT_PROVIDER_POLICY_SCHEMA_VERSION,
+      policy: {
+        provider: 'omise',
+        environment: 'test',
+        mode: 'test',
+        enabled: true,
+        supportedMethods: ['promptpay'],
+        revision: 1,
+        updatedAt: '2026-09-17T00:00:00.000Z',
+      },
+      auditTrail: [],
+    });
     kvThrows = false;
     env.PAYMENT_CONFIG_KV = {
-      get: async (_key: string) => {
+      get: async (key: string) => {
         if (kvThrows) throw new Error('namespace unavailable');
-        return kvStore;
+        if (key === PAYMENT_MODE_OVERRIDE_KEY) return kvStore;
+        if (key === PAYMENT_PROVIDER_POLICY_KEY) return providerPolicyStore;
+        return null;
       },
       put: async (_key: string, _value: string) => undefined,
       delete: async (_key: string) => undefined,
@@ -156,6 +177,53 @@ describe('T-033 payment kill-switch routes', () => {
     expect(payload.error).toBe('PAYMENT_CREATION_DISABLED');
     expect(payload.message).toContain('payment_mode_disabled');
     expect(omiseFetch).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the modular provider policy is absent', async () => {
+    providerPolicyStore = null;
+    const omiseFetch = vi.fn();
+    vi.stubGlobal('fetch', omiseFetch);
+
+    const response = await postPromptPay();
+    const payload = await response.json() as any;
+
+    expect(response.status).toBe(503);
+    expect(payload.message).toContain('provider_policy_absent');
+    expect(omiseFetch).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the modular provider policy is disabled', async () => {
+    const document = JSON.parse(providerPolicyStore!);
+    document.policy.enabled = false;
+    providerPolicyStore = JSON.stringify(document);
+    const omiseFetch = vi.fn();
+    vi.stubGlobal('fetch', omiseFetch);
+
+    const response = await postPromptPay();
+    const payload = await response.json() as any;
+
+    expect(response.status).toBe(503);
+    expect(payload.message).toContain('provider_policy_disabled');
+    expect(omiseFetch).not.toHaveBeenCalled();
+
+    attempt = {
+      id: 'attempt-provider-policy-disabled',
+      booking_id: bookingId,
+      customer_id: userId,
+      provider_charge_id: 'chrg_promptpay_1',
+      amount_satang: 100000,
+      currency: 'THB',
+      status: 'pending',
+      qr_code_url: null,
+    };
+    omiseFetch.mockResolvedValueOnce(jsonResponse({ ...pendingCharge, status: 'successful', paid: true }));
+    const settlement = await app.request(createMockRequest(
+      'http://localhost/payments/charges/chrg_promptpay_1',
+      { headers: { Authorization: authHeader } },
+    ), undefined, env);
+    expect(settlement.status).toBe(200);
+    expect(((await settlement.json()) as any).data.paymentStatus).toBe('paid');
+    expect(omiseFetch).toHaveBeenCalledTimes(1);
   });
 
   it('refuses creation when PROMPTPAY_ENABLED is false while settlement secrets remain', async () => {
