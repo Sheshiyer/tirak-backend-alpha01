@@ -13,13 +13,11 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
-          cache: npm
-      - run: sudo apt-get update && sudo apt-get install --yes sqlite3
-      - run: npm ci
-      - run: npm run release:verify
+          bun-version: 1.3.5
+      - run: bun install --frozen-lockfile
+      - run: bun run release:verify
 
 # T-021 prepares this workflow locally. No workflow is published or executed
 # on GitHub until T-024 records separate human authorization.

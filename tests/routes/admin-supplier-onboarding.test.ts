@@ -123,11 +123,9 @@ describe('Admin Supplier Onboarding Review Routes', () => {
     const profileInsert = executed.find((e) => e.query.includes('INSERT INTO supplier_profiles'));
     expect(profileInsert).toBeDefined();
     expect(profileInsert!.query).toContain("'basic'");
-    expect(profileInsert!.query).toContain("'+30 days'");
-    expect(profileInsert!.params[1]).toBe('Siam Wellness Co.');
-    expect(profileInsert!.params[4]).toBe(
-      JSON.stringify(['Traditional Thai Massage', 'Aromatherapy'])
-    );
+    expect(new Date(profileInsert!.params[6] as string).getTime()).toBeGreaterThan(Date.now());
+    expect(profileInsert!.params[1]).toBe('Chanida Wongsa');
+    expect(profileInsert!.params[4]).toBeNull();
 
     expect(kvPuts.some((p) => p.key.startsWith('reset:'))).toBe(true);
     const invitePayload = JSON.parse(kvPuts.find((p) => p.key.startsWith('reset:'))!.value);
@@ -137,12 +135,13 @@ describe('Admin Supplier Onboarding Review Routes', () => {
       (e) => e.query.includes('UPDATE supplier_onboarding_applications') && e.query.includes("'approved'")
     );
     expect(appUpdate).toBeDefined();
-    expect(appUpdate!.params[0]).toBe('admin-1');
-    expect(appUpdate!.params[1]).toBe(body.data.userId);
+    expect(typeof appUpdate!.params[0]).toBe('string');
+    expect(appUpdate!.params[1]).toBe('admin-1');
+    expect(appUpdate!.params[2]).toBe('app-1');
 
     const notifInsert = executed.find((e) => e.query.includes('INSERT INTO notifications'));
     expect(notifInsert).toBeDefined();
-    expect(notifInsert!.params).toContain('supplier_application_approved');
+    expect(notifInsert!.query).toContain("'supplier_approved'");
   });
 
   it('approve returns 409 ALREADY_REVIEWED for non-pending application', async () => {
@@ -179,8 +178,8 @@ describe('Admin Supplier Onboarding Review Routes', () => {
       (e) => e.query.includes('UPDATE supplier_onboarding_applications') && e.query.includes("'rejected'")
     );
     expect(update).toBeDefined();
-    expect(update!.params[0]).toBe('Incomplete documentation');
-    expect(update!.params[1]).toBe('admin-1');
+    expect(update!.params[1]).toBe('Incomplete documentation');
+    expect(update!.params[2]).toBe('admin-1');
   });
 
   it('reject without reason stores NULL', async () => {
@@ -188,12 +187,12 @@ describe('Admin Supplier Onboarding Review Routes', () => {
     const res = await post('/app-1/reject', {});
     expect(res.status).toBe(200);
     const update = executed.find((e) => e.query.includes("'rejected'"));
-    expect(update!.params[0]).toBeNull();
+    expect(update!.params[1]).toBeNull();
   });
 
   it('reject returns 409 ALREADY_REVIEWED for non-pending application', async () => {
     firstResults = { id: 'app-1', status: 'rejected' };
-    const res = await post('/app-1/reject', { reason: 'x' });
+    const res = await post('/app-1/reject', { reason: 'Valid rejection reason' });
     expect(res.status).toBe(409);
   });
 

@@ -20,6 +20,10 @@ import {
   webhookReplayKey,
   type OmiseCharge,
 } from '../services/omise';
+import {
+  readStoredPaymentProviderPolicy,
+  resolvePaymentProviderPolicy,
+} from '../payments/provider-policy';
 import type { Env, Variables } from '../index';
 
 const payments = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -309,8 +313,17 @@ payments.use('*', createRateLimit('payment'));
 payments.post('/charges', zValidator('json', promptPayBookingSchema), async (c) => {
   const secretKey = c.env.OMISE_SECRET_KEY;
   const runtime = await resolvePaymentRuntimePolicy(c.env);
-  if (!runtime.createEnabled || !secretKey) {
-    return jsonError(c, 'PAYMENT_CREATION_DISABLED', `PromptPay charge creation is closed: ${runtime.reason || 'missing_secret'}`, 503);
+  const providerPolicyState = await readStoredPaymentProviderPolicy(c.env.PAYMENT_CONFIG_KV);
+  const providerPolicy = providerPolicyState.invalid
+    ? { enabled: false, reason: 'provider_policy_invalid' as const }
+    : resolvePaymentProviderPolicy(providerPolicyState.document?.policy, 'promptpay', c.env);
+  if (!runtime.createEnabled || !providerPolicy.enabled || !secretKey) {
+    return jsonError(
+      c,
+      'PAYMENT_CREATION_DISABLED',
+      `PromptPay charge creation is closed: ${runtime.reason || providerPolicy.reason || 'missing_secret'}`,
+      503,
+    );
   }
 
   const customerId = c.get('userId');

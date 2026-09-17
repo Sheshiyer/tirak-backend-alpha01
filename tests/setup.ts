@@ -1,6 +1,10 @@
 import { beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { unstable_dev } from 'wrangler';
 import type { UnstableDevWorker } from 'wrangler';
+import {
+  PAYMENT_PROVIDER_POLICY_KEY,
+  PAYMENT_PROVIDER_POLICY_SCHEMA_VERSION,
+} from '@/payments/provider-policy';
 
 // Global test environment setup
 declare global {
@@ -63,6 +67,24 @@ export const createTestEnv = () => ({
   ENVIRONMENT: 'test',
   PAYMENT_MODE: 'test',
   PROMPTPAY_ENABLED: 'true',
+  PAYMENT_CONFIG_KV: {
+    get: async (key: string) => key === PAYMENT_PROVIDER_POLICY_KEY
+      ? JSON.stringify({
+        schemaVersion: PAYMENT_PROVIDER_POLICY_SCHEMA_VERSION,
+        policy: {
+          provider: 'omise',
+          environment: 'test',
+          mode: 'test',
+          enabled: true,
+          supportedMethods: ['promptpay'],
+          revision: 1,
+          updatedAt: '2026-09-17T00:00:00.000Z',
+        },
+        auditTrail: [],
+      })
+      : null,
+    put: async (_key: string, _value: string) => undefined,
+  },
   FRONTEND_URLS: 'http://localhost:3000,http://localhost:3001',
 });
 
