@@ -242,7 +242,8 @@ PAYMENT_MODE = "disabled"
 PROMPTPAY_ENABLED = "false"
 PAYMENT_PRODUCTION_POLICY_WRITES_ENABLED = "false"
 FRONTEND_URLS = "http://localhost:3000,http://localhost:5173,http://localhost:8080"
-JWT_SECRET = "dev-jwt-secret-change-in-production"
+# JWT_SECRET is a Worker secret for the default Worker too. Local development
+# supplies it through .dev.vars; never deploy a checked-in signing key.
 EMAIL_PROVIDER = "cloudflare"
 EMAIL_FROM = "noreply@tirak.app"
 EMAIL_FROM_NAME = "Tirak"

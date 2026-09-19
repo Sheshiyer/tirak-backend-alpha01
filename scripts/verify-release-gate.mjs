@@ -50,6 +50,7 @@ try {
   const negatives = JSON.parse(run('node', ['scripts/release-negative-matrix.mjs']));
 
   const currentConfig = readFileSync('wrangler.toml', 'utf8');
+  assert(!/^\s*JWT_SECRET\s*=/m.test(currentConfig), 'JWT_SECRET must be a Worker secret, not a Wrangler var');
   const placeholderConfig = currentConfig.replace(
     /(\[\[env\.staging\.d1_databases\]\][\s\S]*?database_id\s*=\s*")[^"]+(")/,
     '$1placeholder-staging-db-id$2',
