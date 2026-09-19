@@ -55,3 +55,21 @@ sign-in and exact data-target reconciliation are still required.
 - No commit, push, deployment, remote migration, credential or provider-policy
   change was performed. Select the actual Worker/D1 target before any release;
   do not use blanket migration/deploy wrappers.
+
+## Authorized backend promotion — 2026-09-19
+
+The app's current default `tirak-backend` Worker and `tirak-development` D1
+were selected to preserve its existing users. A restricted backup was exported
+and restored successfully before applying only `015_account_trust.sql` to that
+D1. The schema, migration ledger, unchanged user/booking counts, and zero
+foreign-key violations were read back. Source commit `c7d10eb` removed the
+checked-in JWT placeholder and added a release-gate check; 407 tests, the local
+account-trust probe, and GitHub CI passed.
+
+Worker version `6dcb5ac9-3501-4e9d-816c-e77d43c0ddac` is deployed at 100%
+to the app's existing URL. Its JWT binding is `secret_text`; the old signing
+key is rejected. The three payment controls are disabled. Health/public smoke
+checks and protected-route denial checks passed. The private backup receipt is
+held outside Git. No payment/provider activation, production OTA, or device
+test occurred. See `docs/execution/release-court-feedback-20260919.md` for
+exact boundaries and remaining acceptance gates.

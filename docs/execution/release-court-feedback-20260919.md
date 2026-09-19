@@ -1,6 +1,6 @@
 # Court feedback source-release integration
 
-Date: 2026-09-19. Status: source published for review; live deployment held.
+Date: 2026-09-19. Status: default backend deployed; device and full product release held.
 
 Published source: commit `0971aba9face6e38dd407a059bc405bc515ca56d`,
 [draft PR #29](https://github.com/Sheshiyer/tirak-backend-alpha01/pull/29).
@@ -102,5 +102,54 @@ from private local state to obtain a passing result:
 Reconcile these operational validator inputs/fixtures in a separately scoped
 release-preflight task before relying on them for staging readiness.
 
-No deployment, remote database migration or payment/provider activation is
-performed by this source release.
+The initial source publication performed no deployment, remote database
+migration or payment/provider activation. The subsequent authorized backend
+promotion is recorded below.
+
+## Live default-Worker promotion — 2026-09-19
+
+The mobile preview and production environment records target
+`https://tirak-backend.tirak-court.workers.dev`. To retain the existing users,
+the selected target was the **default** `tirak-backend` Worker and its existing
+`tirak-development` D1 (`60443346-c480-4975-962e-bd4daf4a37a8`). The
+separate named production Worker/D1 was not switched or modified. This is a
+backend deployment to the app's current endpoint, not a claim that the wider
+product release or physical-device verification is complete.
+
+- Scoped `tirak` Wrangler authentication succeeded. A restricted local D1 SQL
+  export was made before mutation and restored into disposable SQLite: 28 users,
+  five bookings, and no foreign-key violations. Its hash and location are held
+  in a private, owner-only release receipt outside Git.
+- The current D1 already had booking-chat migration 010 tables and both
+  customer-profile compatibility columns. An isolated Wrangler migration
+  configuration listed only `015_account_trust.sql`; applying it added and
+  recorded the four account/consent/socket-ticket tables. No historical,
+  payment, or compatibility migration was replayed. The 28 users and five
+  bookings remained after migration.
+- The default Worker's checked-in JWT placeholder was removed in source commit
+  `c7d10eb`; the release gate now rejects a plaintext `JWT_SECRET` in
+  `wrangler.toml`. `bun run release:verify` passed all 407 tests and the local
+  account-trust Hono/SQLite probe passed. GitHub `backend-release` CI passed.
+- Source commit `c7d10eb` was deployed with a fresh `JWT_SECRET` in the same
+  Wrangler upload. Active Worker version
+  `6dcb5ac9-3501-4e9d-816c-e77d43c0ddac` is at 100% traffic. Live
+  bindings read back as the selected D1, `JWT_SECRET: secret_text`, and
+  `PAYMENT_MODE=disabled`, `PROMPTPAY_ENABLED=false`, and
+  `PAYMENT_PRODUCTION_POLICY_WRITES_ENABLED=false`. The prior `RESEND_API_KEY`
+  secret remained bound. The temporary secret upload file was removed.
+- `/health`, public stats, and public categories returned HTTP 200. Missing
+  authentication on account-verification, consent, and chat routes returned
+  HTTP 401; malformed registration returned HTTP 400. A token signed with the
+  former placeholder was rejected as invalid, while a token signed with the
+  new secret advanced to the expected nonexistent-user denial. No customer
+  account or payment mutation was used for smoke tests.
+
+**Remaining:** The default Worker still reports `ENVIRONMENT=development` and
+uses development-named storage and queues; this preserves the app's current
+data target but does not normalize production topology. Existing sessions may
+need to sign in again after JWT rotation. Older Worker versions contain the
+exposed key and are unsafe rollback targets. A controlled authenticated
+account/consent/chat journey, real-inbox mail delivery, approved legal copy,
+vendor inventory, admin publication, Android device verification, and
+production OTA/store rollout remain separate gates. Do not present the new
+client-facing flows as fully verified until those checks pass.
