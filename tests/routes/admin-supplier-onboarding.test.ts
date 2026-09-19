@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Hono } from 'hono';
 import { adminSupplierOnboardingRoutes } from '@/routes/admin/supplierOnboarding';
 import { createTestEnv } from '@tests/setup';
@@ -30,6 +30,8 @@ describe('Admin Supplier Onboarding Review Routes', () => {
   let executed: { query: string; params: unknown[] }[];
   let firstResults: Record<string, unknown> | null;
   let kvPuts: { key: string; value: string }[];
+
+  afterEach(() => vi.unstubAllGlobals());
 
   beforeEach(() => {
     executed = [];
@@ -112,7 +114,7 @@ describe('Admin Supplier Onboarding Review Routes', () => {
     expect(body.data.email).toBe('chanida@example.com');
     expect(typeof body.data.tempPassword).toBe('string');
     expect(body.data.tempPassword.length).toBe(12);
-    expect(typeof body.data.emailSent).toBe('boolean');
+    expect(body.data.emailSent).toBe(false);
 
     const userInsert = executed.find((e) => e.query.includes('INSERT INTO users'));
     expect(userInsert).toBeDefined();
@@ -123,11 +125,9 @@ describe('Admin Supplier Onboarding Review Routes', () => {
     const profileInsert = executed.find((e) => e.query.includes('INSERT INTO supplier_profiles'));
     expect(profileInsert).toBeDefined();
     expect(profileInsert!.query).toContain("'basic'");
-    expect(profileInsert!.query).toContain("'+30 days'");
-    expect(profileInsert!.params[1]).toBe('Siam Wellness Co.');
-    expect(profileInsert!.params[4]).toBe(
-      JSON.stringify(['Traditional Thai Massage', 'Aromatherapy'])
-    );
+    expect(new Date(profileInsert!.params[6] as string).getTime()).toBeGreaterThan(Date.now());
+    expect(profileInsert!.params[1]).toBe('Chanida Wongsa');
+    expect(profileInsert!.params[4]).toBeNull();
 
     expect(kvPuts.some((p) => p.key.startsWith('reset:'))).toBe(true);
     const invitePayload = JSON.parse(kvPuts.find((p) => p.key.startsWith('reset:'))!.value);
@@ -137,12 +137,36 @@ describe('Admin Supplier Onboarding Review Routes', () => {
       (e) => e.query.includes('UPDATE supplier_onboarding_applications') && e.query.includes("'approved'")
     );
     expect(appUpdate).toBeDefined();
-    expect(appUpdate!.params[0]).toBe('admin-1');
-    expect(appUpdate!.params[1]).toBe(body.data.userId);
+    expect(typeof appUpdate!.params[0]).toBe('string');
+    expect(appUpdate!.params[1]).toBe('admin-1');
+    expect(appUpdate!.params[2]).toBe('app-1');
 
     const notifInsert = executed.find((e) => e.query.includes('INSERT INTO notifications'));
     expect(notifInsert).toBeDefined();
-    expect(notifInsert!.params).toContain('supplier_application_approved');
+    expect(notifInsert!.query).toContain("'supplier_approved'");
+    expect(notifInsert!.params[2]).toContain('Contact support');
+  });
+
+  it.each([202, 403])('approval reports emailSent based on SendGrid HTTP %s', async (status) => {
+    const responses: (Record<string, unknown> | null)[] = [pendingApplication, null];
+    testEnv.DB.prepare = (query: string) => ({
+      bind: (...params: unknown[]) => ({
+        run: async () => { executed.push({ query, params }); return { success: true, meta: { changes: 1 } }; },
+        first: async () => responses.shift() ?? null,
+        all: async () => ({ results: [] }),
+      }),
+    });
+    testEnv.EMAIL_PROVIDER = 'sendgrid';
+    testEnv.SENDGRID_API_KEY = 'test-sendgrid-key';
+    testEnv.SENDGRID_FROM_EMAIL = 'noreply@example.test';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status })));
+    const res = await post('/app-1/approve');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.emailSent).toBe(status === 202);
+    expect(body.data.tempPassword).toHaveLength(12);
+    const notification = executed.find((entry) => entry.query.includes('INSERT INTO notifications'));
+    expect(notification!.params[2]).toContain(status === 202 ? 'Check your email' : 'Contact support');
   });
 
   it('approve returns 409 ALREADY_REVIEWED for non-pending application', async () => {
@@ -179,8 +203,8 @@ describe('Admin Supplier Onboarding Review Routes', () => {
       (e) => e.query.includes('UPDATE supplier_onboarding_applications') && e.query.includes("'rejected'")
     );
     expect(update).toBeDefined();
-    expect(update!.params[0]).toBe('Incomplete documentation');
-    expect(update!.params[1]).toBe('admin-1');
+    expect(update!.params[1]).toBe('Incomplete documentation');
+    expect(update!.params[2]).toBe('admin-1');
   });
 
   it('reject without reason stores NULL', async () => {
@@ -188,12 +212,12 @@ describe('Admin Supplier Onboarding Review Routes', () => {
     const res = await post('/app-1/reject', {});
     expect(res.status).toBe(200);
     const update = executed.find((e) => e.query.includes("'rejected'"));
-    expect(update!.params[0]).toBeNull();
+    expect(update!.params[1]).toBeNull();
   });
 
   it('reject returns 409 ALREADY_REVIEWED for non-pending application', async () => {
     firstResults = { id: 'app-1', status: 'rejected' };
-    const res = await post('/app-1/reject', { reason: 'x' });
+    const res = await post('/app-1/reject', { reason: 'Valid rejection reason' });
     expect(res.status).toBe(409);
   });
 

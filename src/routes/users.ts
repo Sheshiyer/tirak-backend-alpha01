@@ -14,6 +14,7 @@ import {
 import { uploadFile, generateFileKey, validateImageFile } from '../utils/storage';
 import { jsonSuccess, jsonError } from '../utils/response';
 import type { Env, Variables } from '../index';
+import { getAccountConsents, saveAccountConsents } from '../services/account-consents';
 
 const users = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -22,6 +23,26 @@ users.use('*', authMiddleware);
 
 // Apply rate limiting
 users.use('*', createRateLimit('general'));
+
+users.get('/me/consents', async (c) => {
+  try {
+    return jsonSuccess(c, await getAccountConsents(c.env.DB, c.get('userId') as string), 'Preferences retrieved');
+  } catch {
+    return jsonError(c, 'Preferences unavailable', 'Your privacy preferences could not be loaded.', 503);
+  }
+});
+
+users.put('/me/consents', zValidator('json', z.object({
+  marketingOptIn: z.boolean(), analyticsOptIn: z.boolean(),
+}).strict()), async (c) => {
+  try {
+    const userId = c.get('userId') as string;
+    await saveAccountConsents(c.env.DB, userId, c.req.valid('json'));
+    return jsonSuccess(c, await getAccountConsents(c.env.DB, userId), 'Preferences saved');
+  } catch {
+    return jsonError(c, 'Preferences not saved', 'Please try saving your preferences again.', 503);
+  }
+});
 
 const parseJsonObject = (value: unknown, fallback: Record<string, any> = {}) => {
   if (!value) return fallback;

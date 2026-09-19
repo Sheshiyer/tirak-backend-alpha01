@@ -41,11 +41,18 @@ export class ChatRoom {
   private userPresence: Map<string, UserPresence> = new Map();
   private typingUsers: Map<string, TypingIndicator> = new Map();
   private env: Env;
-  private roomId: string;
+  private roomId: string | null = null;
 
   constructor(private state: DurableObjectState, env: Env) {
     this.env = env;
-    this.roomId = this.state.id.toString();
+  }
+
+  // The authenticated router supplies the logical room ID. A Durable Object ID
+  // is not a database room ID, and one instance must never switch rooms.
+  private bindRoom(roomId: string): boolean {
+    if (!roomId || (this.roomId && this.roomId !== roomId)) return false;
+    this.roomId = roomId;
+    return true;
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -75,15 +82,18 @@ export class ChatRoom {
       return new Response('Expected Upgrade: websocket', { status: 426 });
     }
 
-    const { 0: client, 1: server } = new WebSocketPair();
-    
     // The authenticated route injects the verified user ID before forwarding.
     const url = new URL(request.url);
     const userId = url.searchParams.get('userId');
+    const roomId = url.searchParams.get('roomId');
     
-    if (!userId) {
+    if (!userId || !roomId) {
       return new Response('Missing authenticated user ID', { status: 401 });
     }
+    if (!this.bindRoom(roomId)) {
+      return new Response('Chat room mismatch', { status: 409 });
+    }
+    const { 0: client, 1: server } = new WebSocketPair();
     
     // Store the connection
     this.sessions.set(userId, server);
@@ -163,6 +173,13 @@ export class ChatRoom {
     };
     const { roomId, senderId, recipientId, messageType, content, mediaUrl, replyTo } = body;
 
+    if (typeof roomId !== 'string' || !roomId || !senderId || !recipientId || senderId === recipientId) {
+      return new Response(JSON.stringify({ error: 'Valid room and participants are required' }), { status: 400 });
+    }
+    if (!this.bindRoom(roomId)) {
+      return new Response(JSON.stringify({ error: 'Chat room mismatch' }), { status: 409 });
+    }
+
     try {
       const messageId = crypto.randomUUID();
       const timestamp = new Date().toISOString();
@@ -170,7 +187,7 @@ export class ChatRoom {
       // Create message with mobile app format
       const message: ChatMessage = {
         id: messageId,
-        roomId: roomId || this.roomId,
+        roomId,
         senderId,
         recipientId,
         content: content || '',
@@ -193,20 +210,22 @@ export class ChatRoom {
 
       // Mark as delivered if recipient is online
       if (this.sessions.has(recipientId)) {
-        message.status = 'delivered';
-        message.deliveredAt = timestamp;
-        await this.updateMessageStatus(messageId, 'delivered', timestamp);
-
-        // Send delivery confirmation to sender
-        this.sendToUser(senderId, {
-          type: 'message_status_update',
-          data: {
-            messageId,
-            status: 'delivered',
-            timestamp
-          },
-          timestamp
-        });
+        try {
+          const updated = await this.updateMessageStatus(messageId, 'delivered', timestamp, recipientId);
+          if (updated) {
+            message.status = 'delivered';
+            message.deliveredAt = timestamp;
+            this.sendToUser(senderId, {
+              type: 'message_status_update',
+              data: { messageId, status: 'delivered', timestamp },
+              timestamp
+            });
+          }
+        } catch {
+          // The message is already committed and broadcast. A receipt outage
+          // must not turn a successful send into a retryable send failure.
+          console.warn('Message saved; delivery receipt could not be recorded.');
+        }
       }
 
       return new Response(JSON.stringify({
@@ -274,12 +293,26 @@ export class ChatRoom {
       messageId: string;
       status: 'delivered' | 'read';
       userId: string;
+      roomId?: string;
     };
     const { messageId, status, userId } = body;
 
+    if (!messageId || typeof messageId !== 'string' || !userId || (status !== 'read' && status !== 'delivered')) {
+      return new Response(JSON.stringify({ error: 'Invalid receipt request' }), { status: 400 });
+    }
+    if (body.roomId && !this.bindRoom(body.roomId)) {
+      return new Response(JSON.stringify({ error: 'Chat room mismatch' }), { status: 409 });
+    }
+    if (!this.roomId) {
+      return new Response(JSON.stringify({ error: 'A trusted chat room is required' }), { status: 400 });
+    }
+
     try {
       const timestamp = new Date().toISOString();
-      await this.updateMessageStatus(messageId, status, timestamp);
+      const updated = await this.updateMessageStatus(messageId, status, timestamp, userId);
+      if (!updated) {
+        return new Response(JSON.stringify({ error: 'Message not found or receipt not permitted' }), { status: 404 });
+      }
 
       // Broadcast status update to sender
       this.broadcastEvent({
@@ -381,8 +414,8 @@ export class ChatRoom {
 
   private async saveMessageToDatabase(message: ChatMessage): Promise<void> {
     try {
-      await this.env.DB.prepare(`
-        INSERT INTO chat_messages (
+      await this.env.DB.batch([this.env.DB.prepare(`
+        INSERT INTO booking_chat_messages (
           id, room_id, sender_id, content, message_type,
           image_url, metadata, reply_to_id, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -396,25 +429,32 @@ export class ChatRoom {
         null,
         message.replyTo || null,
         message.timestamp
-      ).run();
+      ), this.env.DB.prepare(`UPDATE booking_chat_rooms
+        SET last_message_at = ?, updated_at = ? WHERE id = ?`)
+        .bind(message.timestamp, message.timestamp, message.roomId)]);
     } catch (error) {
       console.error('Failed to save message to database:', error);
       throw error;
     }
   }
 
-  private async updateMessageStatus(messageId: string, status: 'delivered' | 'read', timestamp: string): Promise<void> {
-    try {
-      const statusField = status === 'delivered' ? 'delivered_at' : 'read_at';
-      await this.env.DB.prepare(`
-        UPDATE chat_messages
-        SET ${statusField} = ?
-        WHERE id = ?
-      `).bind(timestamp, messageId).run();
-    } catch (error) {
-      console.error('Failed to update message status:', error);
-      throw error;
-    }
+  private async updateMessageStatus(messageId: string, status: 'delivered' | 'read', timestamp: string, recipientId: string): Promise<boolean> {
+    if (!this.roomId) return false;
+    const statusField = status === 'delivered' ? 'delivered_at' : 'read_at';
+    const result = await this.env.DB.prepare(`
+        UPDATE booking_chat_messages
+        SET ${statusField} = COALESCE(${statusField}, ?)
+        WHERE id = ? AND room_id = ? AND sender_id <> ?
+          AND EXISTS (
+            SELECT 1 FROM booking_chat_rooms cr
+            WHERE cr.id = booking_chat_messages.room_id
+              AND (
+                (cr.customer_id = ? AND cr.supplier_id = booking_chat_messages.sender_id)
+                OR (cr.supplier_id = ? AND cr.customer_id = booking_chat_messages.sender_id)
+              )
+          )
+      `).bind(timestamp, messageId, this.roomId, recipientId, recipientId, recipientId).run();
+    return result.success && Number(result.meta.changes) > 0;
   }
 
   private async handleWebSocketMessage(userId: string, data: any): Promise<void> {
@@ -448,8 +488,16 @@ export class ChatRoom {
         break;
 
       case 'message_read':
-        if (data.messageId) {
-          await this.updateMessageStatus(data.messageId, 'read', timestamp);
+        if (typeof data.messageId === 'string' && data.messageId) {
+          const updated = await this.updateMessageStatus(data.messageId, 'read', timestamp, userId);
+          if (!updated) {
+            this.sendToUser(userId, {
+              type: 'error',
+              data: { message: 'Message not found or receipt not permitted' },
+              timestamp
+            });
+            break;
+          }
           this.broadcastEvent({
             type: 'message_status_update',
             data: {

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { chatMessageSchema } from '../utils/validation';
 import { validateUUID, validatePagination } from '../middleware/validation';
 import { authMiddleware } from '../middleware/auth';
+import { getUserById } from '../utils/database';
 import { createRateLimit } from '../middleware/rateLimit';
 import { jsonSuccess, jsonError, jsonPaginated, createPagination } from '../utils/response';
 import type { Env, Variables } from '../index';
@@ -22,8 +23,33 @@ const eligibleBookingJoin = (roomAlias: string): string => `
    AND b.status IN ('confirmed', 'in_progress')
 `;
 
+async function socketTicketHash(ticket: string): Promise<string> {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ticket));
+  return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 // Apply authentication middleware to all routes
-chat.use('*', authMiddleware);
+chat.use('*', async (c, next) => {
+  const isSocketUpgrade = c.req.method === 'GET'
+    && /\/rooms\/[^/]+\/ws$/.test(c.req.path)
+    && c.req.header('Upgrade')?.toLowerCase() === 'websocket';
+  const ticket = isSocketUpgrade ? c.req.query('ticket') : undefined;
+  if (ticket && ticket.length <= 100 && !c.req.header('Authorization')) {
+    try {
+      const roomId = c.req.path.split('/').at(-2);
+      const consumed = await c.env.DB.prepare(`DELETE FROM chat_socket_tickets
+        WHERE ticket_hash = ? AND room_id = ? AND expires_at > ? RETURNING user_id`)
+        .bind(await socketTicketHash(ticket), roomId, Date.now()).first<{ user_id: string }>();
+      const user = consumed ? await getUserById(consumed.user_id, c.env.DB) : null;
+      if (!user || user.status !== 'active') return jsonError(c, 'Authentication failed', 'Request a new chat connection ticket.', 401);
+      c.set('user', user); c.set('userId', user.id); c.set('userType', user.userType);
+      return next();
+    } catch {
+      return jsonError(c, 'Connection unavailable', 'Please retry your chat connection.', 503);
+    }
+  }
+  return authMiddleware(c, next);
+});
 
 // Apply rate limiting for chat operations
 chat.use('*', createRateLimit('chat'));
@@ -39,7 +65,7 @@ chat.get('/rooms', validatePagination(), async (c) => {
     // Get total count
     const countResult = await c.env.DB.prepare(`
       SELECT COUNT(*) as total 
-      FROM chat_rooms cr
+      FROM booking_chat_rooms cr
       ${eligibleBookingJoin('cr')}
       WHERE b.customer_id = ? OR b.supplier_id = ?
     `).bind(userId, userId).first();
@@ -56,11 +82,11 @@ chat.get('/rooms', validatePagination(), async (c) => {
         sp.display_name as supplier_name, sp.profile_images as supplier_images,
         cm.content as last_message, cm.message_type as last_message_type,
         cm.created_at as last_message_time
-      FROM chat_rooms cr
+      FROM booking_chat_rooms cr
       ${eligibleBookingJoin('cr')}
       LEFT JOIN customer_profiles cp ON cr.customer_id = cp.user_id
       LEFT JOIN supplier_profiles sp ON cr.supplier_id = sp.user_id
-      LEFT JOIN chat_messages cm ON cr.id = cm.room_id 
+      LEFT JOIN booking_chat_messages cm ON cr.id = cm.room_id
         AND cm.created_at = cr.last_message_at
       WHERE b.customer_id = ? OR b.supplier_id = ?
       ORDER BY cr.last_message_at DESC NULLS LAST, cr.created_at DESC
@@ -157,7 +183,7 @@ chat.post('/rooms', async (c) => {
     }
 
     const existingRoom = await c.env.DB.prepare(`
-      SELECT id FROM chat_rooms
+      SELECT id FROM booking_chat_rooms
       WHERE booking_id = ? AND customer_id = ? AND supplier_id = ?
     `).bind(bookingId, customerId, supplierId).first();
 
@@ -172,7 +198,7 @@ chat.post('/rooms', async (c) => {
     const roomId = crypto.randomUUID();
 
     await c.env.DB.prepare(`
-      INSERT INTO chat_rooms (id, booking_id, customer_id, supplier_id, created_at, updated_at)
+      INSERT INTO booking_chat_rooms (id, booking_id, customer_id, supplier_id, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).bind(
       roomId,
@@ -183,7 +209,7 @@ chat.post('/rooms', async (c) => {
       new Date().toISOString()
     ).run();
 
-    // Track chat room creation
+    // Analytics availability must not turn a persisted room into a failed action.
     await c.env.ANALYTICS_QUEUE.send({
       eventType: 'chat_room_created',
       userId,
@@ -193,7 +219,7 @@ chat.post('/rooms', async (c) => {
         otherUserId: userId === customerId ? supplierId : customerId,
       },
       timestamp: new Date().toISOString()
-    });
+    }).catch(() => console.warn('Chat analytics enqueue unavailable'));
 
     return jsonSuccess(c, {
       roomId,
@@ -222,7 +248,7 @@ chat.get('/rooms/:roomId', validateUUID('roomId'), validatePagination(), async (
         cr.id, cr.booking_id, cr.customer_id, cr.supplier_id, cr.status, cr.created_at,
         cp.display_name as customer_name, cp.profile_image as customer_image,
         sp.display_name as supplier_name, sp.profile_images as supplier_images
-      FROM chat_rooms cr
+      FROM booking_chat_rooms cr
       ${eligibleBookingJoin('cr')}
       LEFT JOIN customer_profiles cp ON cr.customer_id = cp.user_id
       LEFT JOIN supplier_profiles sp ON cr.supplier_id = sp.user_id
@@ -235,7 +261,7 @@ chat.get('/rooms/:roomId', validateUUID('roomId'), validatePagination(), async (
 
     // Get message count for pagination
     const countResult = await c.env.DB.prepare(`
-      SELECT COUNT(*) as total FROM chat_messages WHERE room_id = ?
+      SELECT COUNT(*) as total FROM booking_chat_messages WHERE room_id = ?
     `).bind(roomId).first();
     
     const total = countResult?.total as number || 0;
@@ -250,7 +276,7 @@ chat.get('/rooms/:roomId', validateUUID('roomId'), validatePagination(), async (
           WHEN cm.sender_id = ? THEN cp.display_name 
           ELSE sp.display_name 
         END as sender_name
-      FROM chat_messages cm
+      FROM booking_chat_messages cm
       LEFT JOIN customer_profiles cp ON cm.sender_id = cp.user_id
       LEFT JOIN supplier_profiles sp ON cm.sender_id = sp.user_id
       WHERE cm.room_id = ?
@@ -305,7 +331,31 @@ chat.get('/rooms/:roomId', validateUUID('roomId'), validatePagination(), async (
 /**
  * WebSocket endpoint for real-time chat
  */
+chat.post('/rooms/:roomId/socket-ticket', validateUUID('roomId'), async (c) => {
+  const roomId = c.req.param('roomId');
+  const userId = c.get('userId') as string;
+  try {
+    const room = await c.env.DB.prepare(`SELECT cr.id FROM booking_chat_rooms cr ${eligibleBookingJoin('cr')}
+      WHERE cr.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)`)
+      .bind(roomId, userId, userId).first();
+    if (!room) return jsonError(c, 'Chat room not found', 'Access denied or room does not exist', 404);
+    const ticket = crypto.randomUUID() + crypto.randomUUID();
+    const now = Date.now();
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM chat_socket_tickets WHERE expires_at <= ? OR (user_id = ? AND room_id = ?)').bind(now, userId, roomId),
+      c.env.DB.prepare('INSERT INTO chat_socket_tickets (ticket_hash, user_id, room_id, expires_at) VALUES (?, ?, ?, ?)')
+        .bind(await socketTicketHash(ticket), userId, roomId, now + 60_000),
+    ]);
+    return jsonSuccess(c, { ticket, expiresInSeconds: 60 }, 'Chat connection ready');
+  } catch {
+    return jsonError(c, 'Connection unavailable', 'Please retry your chat connection.', 503);
+  }
+});
+
 chat.get('/rooms/:roomId/ws', validateUUID('roomId'), async (c) => {
+  if (c.req.header('Upgrade')?.toLowerCase() !== 'websocket') {
+    return jsonError(c, 'WebSocket upgrade required', 'Use a WebSocket connection for this endpoint.', 426);
+  }
   const roomId = c.req.param('roomId') as string;
   const userId = c.get('userId') as string;
   
@@ -313,7 +363,7 @@ chat.get('/rooms/:roomId/ws', validateUUID('roomId'), async (c) => {
     // Verify user has access to this chat room
     const room = await c.env.DB.prepare(`
       SELECT cr.id, cr.booking_id
-      FROM chat_rooms cr
+      FROM booking_chat_rooms cr
       ${eligibleBookingJoin('cr')}
       WHERE cr.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)
     `).bind(roomId, userId, userId).first();
@@ -329,12 +379,16 @@ chat.get('/rooms/:roomId/ws', validateUUID('roomId'), async (c) => {
     // Forward the WebSocket request to the Durable Object
     const url = new URL(c.req.url);
     url.pathname = '/websocket';
+    url.search = '';
     url.searchParams.set('userId', userId);
     url.searchParams.set('roomId', roomId);
     url.searchParams.set('bookingId', String(room.booking_id));
 
+    const headers = new Headers(c.req.raw.headers);
+    headers.delete('Authorization');
+    headers.delete('Cookie');
     return await durableObject.fetch(url.toString(), {
-      headers: c.req.raw.headers,
+      headers,
     });
 
   } catch (error) {
@@ -353,12 +407,15 @@ chat.post('/rooms/:roomId/messages',
     const roomId = c.req.param('roomId') as string;
     const userId = c.get('userId') as string;
     const messageData = c.req.valid('json');
+    if (messageData.roomId && messageData.roomId !== roomId) {
+      return jsonError(c, 'Room mismatch', 'The message must target the room in the request URL.', 400);
+    }
     
     try {
       // Verify user has access to this chat room
       const room = await c.env.DB.prepare(`
         SELECT cr.id, cr.booking_id, cr.customer_id, cr.supplier_id
-        FROM chat_rooms cr
+        FROM booking_chat_rooms cr
         ${eligibleBookingJoin('cr')}
         WHERE cr.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)
       `).bind(roomId, userId, userId).first();
@@ -434,7 +491,7 @@ chat.post('/rooms/:roomId/read', validateUUID('roomId'), async (c) => {
     // Verify user has access to this chat room
     const room = await c.env.DB.prepare(`
       SELECT cr.id, cr.booking_id
-      FROM chat_rooms cr
+      FROM booking_chat_rooms cr
       ${eligibleBookingJoin('cr')}
       WHERE cr.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)
     `).bind(roomId, userId, userId).first();
@@ -481,7 +538,7 @@ chat.get('/rooms/:roomId/search', validateUUID('roomId'), async (c) => {
     // Verify user has access to this chat room
     const room = await c.env.DB.prepare(`
       SELECT cr.id, cr.booking_id
-      FROM chat_rooms cr
+      FROM booking_chat_rooms cr
       ${eligibleBookingJoin('cr')}
       WHERE cr.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)
     `).bind(roomId, userId, userId).first();
@@ -495,7 +552,7 @@ chat.get('/rooms/:roomId/search', validateUUID('roomId'), async (c) => {
       SELECT 
         cm.id, cm.sender_id, cm.message_type, cm.content, 
         cm.image_url, cm.created_at
-      FROM chat_messages cm
+      FROM booking_chat_messages cm
       WHERE cm.room_id = ? 
         AND cm.message_type = 'text' 
         AND cm.content LIKE ?

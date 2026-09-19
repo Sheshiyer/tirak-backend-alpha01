@@ -13,6 +13,8 @@ name = "tirak-backend-dev"
 # Staging environment
 [env.staging]
 name = "tirak-backend-staging"
+workers_dev = false
+preview_urls = false
 
 # Production environment
 [env.production]
@@ -63,6 +65,14 @@ id = "ff06486f6291490f83c1864d812ef7f8"
 [[env.staging.kv_namespaces]]
 binding = "SESSIONS"
 id = "6f29f29cd08d4920aa3cc35577377270"
+
+# T-036: staging-only runtime policy override. The namespace identity is
+# evidenced in docs/execution/phase-2/t-036-predeployment-mutation-evidence.json.
+# The static floor remains disabled; the audited operator path controls any test
+# enablement after all later staging gates pass.
+[[env.staging.kv_namespaces]]
+binding = "PAYMENT_CONFIG_KV"
+id = "e929e0361e5346af8956bd47cdd2168d"
 
 [[env.production.kv_namespaces]]
 binding = "CACHE"
@@ -230,6 +240,7 @@ allowed_sender_addresses = ["noreply@tirak.app"]
 ENVIRONMENT = "development"
 PAYMENT_MODE = "disabled"
 PROMPTPAY_ENABLED = "false"
+PAYMENT_PRODUCTION_POLICY_WRITES_ENABLED = "false"
 FRONTEND_URLS = "http://localhost:3000,http://localhost:5173,http://localhost:8080"
 JWT_SECRET = "dev-jwt-secret-change-in-production"
 EMAIL_PROVIDER = "cloudflare"
@@ -241,6 +252,7 @@ EMAIL_REPLY_TO = "support@tirak.app"
 ENVIRONMENT = "staging"
 PAYMENT_MODE = "disabled"
 PROMPTPAY_ENABLED = "false"
+PAYMENT_PRODUCTION_POLICY_WRITES_ENABLED = "false"
 FRONTEND_URLS = "https://staging.tirak.app"
 EMAIL_PROVIDER = "cloudflare"
 EMAIL_FROM = "noreply@tirak.app"
@@ -253,6 +265,7 @@ EMAIL_REPLY_TO = "support@tirak.app"
 ENVIRONMENT = "production"
 PAYMENT_MODE = "disabled"
 PROMPTPAY_ENABLED = "false"
+PAYMENT_PRODUCTION_POLICY_WRITES_ENABLED = "false"
 FRONTEND_URLS = "https://tirak.app,https://www.tirak.app"
 EMAIL_PROVIDER = "cloudflare"
 EMAIL_FROM = "noreply@tirak.app"

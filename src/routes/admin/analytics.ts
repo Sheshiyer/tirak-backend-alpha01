@@ -10,6 +10,11 @@ import type { Env, Variables } from '../../index';
 
 const analytics = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+// Keep legacy history in reporting while including the approved booking-chat
+// tables used by the current app. Prefix room keys to avoid cross-table clashes.
+const allChatMessages = `(SELECT created_at, sender_id, 'legacy:' || room_id AS room_id FROM chat_messages
+  UNION ALL SELECT created_at, sender_id, 'booking:' || room_id AS room_id FROM booking_chat_messages)`;
+
 // Apply admin-specific middleware
 analytics.use('*', adminCors());
 analytics.use('*', authMiddleware);
@@ -181,23 +186,15 @@ analytics.get('/performance', validateDateRange(), async (c) => {
         COUNT(*) as message_count,
         COUNT(DISTINCT room_id) as active_rooms,
         COUNT(DISTINCT sender_id) as active_users
-      FROM chat_messages 
+      FROM ${allChatMessages}
       WHERE DATE(created_at) BETWEEN ? AND ?
       GROUP BY DATE(created_at)
       ORDER BY date ASC
     `).bind(startDate, endDate).all();
 
-    // Search activity (if you have search logs)
-    // For now, we'll simulate this data
+    // No search or infrastructure telemetry source is connected yet.
     const searchActivity: unknown[] = [];
-
-    // Platform health metrics
-    const healthMetrics = {
-      uptime: '99.9%',
-      avgResponseTime: '150ms',
-      errorRate: '0.1%',
-      activeConnections: 1250
-    };
+    const healthMetrics = null;
 
     // Feature usage
     const featureUsage = await c.env.DB.prepare(`
@@ -205,7 +202,7 @@ analytics.get('/performance', validateDateRange(), async (c) => {
         'chat' as feature,
         COUNT(DISTINCT sender_id) as unique_users,
         COUNT(*) as total_usage
-      FROM chat_messages 
+      FROM ${allChatMessages}
       WHERE DATE(created_at) BETWEEN ? AND ?
       
       UNION ALL

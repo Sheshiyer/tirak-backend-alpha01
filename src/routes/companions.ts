@@ -7,9 +7,18 @@ import { createRateLimit } from '../middleware/rateLimit';
 import { jsonSuccess, jsonError, jsonPaginated, createPagination } from '../utils/response';
 import { firstProfileImage } from '../utils/profileImages';
 import { getUserById, updateUser } from '../utils/database';
+import { publicCompanionIdentityFilter } from '../utils/publicCompanionIdentity';
 import type { Env, Variables } from '../index';
 
 const companions = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+const publicIdentity = publicCompanionIdentityFilter();
+const publicCompanionVisibility = `
+  COALESCE(sp.subscription_status, 'active') = 'active'
+  AND COALESCE(sp.verification_status, 'pending') != 'rejected'
+  AND u.status = 'active'
+  AND ${publicIdentity.sql}
+`;
 
 // Apply optional authentication and rate limiting
 companions.use('*', optionalAuthMiddleware);
@@ -78,12 +87,10 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
       FROM supplier_profiles sp
       JOIN users u ON sp.user_id = u.id
       LEFT JOIN supplier_services ss ON sp.user_id = ss.supplier_id AND ss.is_active = TRUE
-      WHERE COALESCE(sp.subscription_status, 'active') = 'active'
-        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
-        AND u.status = 'active'
+      WHERE ${publicCompanionVisibility}
     `;
 
-    const queryParams: any[] = [];
+    const queryParams: any[] = [...publicIdentity.parameters];
 
     // Add search filters
     if (searchParams.search) {
@@ -140,6 +147,11 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
       query += ` HAVING ${havingClauses.join(' AND ')}`;
     }
 
+    // Count the same grouped/filtered profile set, before ordering and paging.
+    const countQuery = `SELECT COUNT(*) as total FROM (${query}) visible_companions`;
+    const countResult = await c.env.DB.prepare(countQuery).bind(...queryParams).first();
+    const total = countResult?.total as number || 0;
+
     // Add sorting
     let orderBy = '';
     switch (searchParams.sortBy) {
@@ -161,45 +173,6 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
     }
 
     query += ` ORDER BY ${orderBy}`;
-
-    // Get total count for pagination
-    const countQuery = `
-      SELECT COUNT(DISTINCT sp.user_id) as total
-      FROM supplier_profiles sp
-      JOIN users u ON sp.user_id = u.id
-      LEFT JOIN supplier_services ss ON sp.user_id = ss.supplier_id AND ss.is_active = TRUE
-      WHERE COALESCE(sp.subscription_status, 'active') = 'active'
-        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
-        AND u.status = 'active'
-    `;
-
-    // Apply same filters to count query (simplified)
-    let countQueryWithFilters = countQuery;
-    const countParams = [];
-
-    if (searchParams.search) {
-      countQueryWithFilters += ` AND (sp.display_name LIKE ? OR sp.bio LIKE ?)`;
-      const searchTerm = `%${searchParams.search}%`;
-      countParams.push(searchTerm, searchTerm);
-    }
-
-    if (searchParams.category) {
-      countQueryWithFilters += ` AND JSON_EXTRACT(sp.categories, '$') LIKE ?`;
-      countParams.push(`%"${searchParams.category}"%`);
-    }
-
-    if (searchParams.location) {
-      countQueryWithFilters += ` AND JSON_EXTRACT(sp.regions, '$') LIKE ?`;
-      countParams.push(`%"${searchParams.location}"%`);
-    }
-
-    if (searchParams.verified === true) {
-      countQueryWithFilters += ` AND sp.verification_status = ?`;
-      countParams.push('verified');
-    }
-
-    const countResult = await c.env.DB.prepare(countQueryWithFilters).bind(...countParams).first();
-    const total = countResult?.total as number || 0;
 
     // Get paginated results
     const offset = (searchParams.page - 1) * searchParams.limit;
@@ -231,8 +204,8 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
         categories: categories,
         bio: companion.bio,
         age: null, // Calculate from date_of_birth if available
-        responseTime: '< 1 hour', // Default response time
-        completionRate: 95, // Default completion rate
+        responseTime: null, // No measured response-time aggregate exists yet.
+        completionRate: null, // No measured completion-rate aggregate exists yet.
         distance: null // Would calculate if user location available
       };
     });
@@ -242,29 +215,27 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
       SELECT 
         c.id as category_id,
         c.name_en as category_name,
-        COUNT(DISTINCT sp.user_id) as category_count
+        COUNT(DISTINCT CASE WHEN ${publicCompanionVisibility} THEN sp.user_id END) as category_count
       FROM categories c
       LEFT JOIN supplier_profiles sp ON JSON_EXTRACT(sp.categories, '$') LIKE '%"' || c.id || '"%'
-        AND COALESCE(sp.subscription_status, 'active') = 'active'
-        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
+      LEFT JOIN users u ON sp.user_id = u.id
       WHERE c.is_active = TRUE
       GROUP BY c.id, c.name_en
       ORDER BY category_count DESC
-    `).all();
+    `).bind(...publicIdentity.parameters).all();
 
     const locationsResult = await c.env.DB.prepare(`
       SELECT 
         r.id as location_id,
         r.name_en as location_name,
-        COUNT(DISTINCT sp.user_id) as location_count
+        COUNT(DISTINCT CASE WHEN ${publicCompanionVisibility} THEN sp.user_id END) as location_count
       FROM regions r
       LEFT JOIN supplier_profiles sp ON JSON_EXTRACT(sp.regions, '$') LIKE '%"' || r.id || '"%'
-        AND COALESCE(sp.subscription_status, 'active') = 'active'
-        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
+      LEFT JOIN users u ON sp.user_id = u.id
       WHERE r.is_active = TRUE
       GROUP BY r.id, r.name_en
       ORDER BY location_count DESC
-    `).all();
+    `).bind(...publicIdentity.parameters).all();
 
     const priceRangeResult = await c.env.DB.prepare(`
       SELECT 
@@ -272,10 +243,10 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
         MAX(ss.price_max) as max_price
       FROM supplier_services ss
       JOIN supplier_profiles sp ON ss.supplier_id = sp.user_id
+      JOIN users u ON sp.user_id = u.id
       WHERE ss.is_active = TRUE 
-        AND COALESCE(sp.subscription_status, 'active') = 'active'
-        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
-    `).first();
+        AND ${publicCompanionVisibility}
+    `).bind(...publicIdentity.parameters).first();
 
     const filters = {
       categories: filtersResult.results.map((cat: any) => ({
@@ -290,7 +261,7 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
       })),
       priceRange: {
         min: priceRangeResult?.min_price || 0,
-        max: priceRangeResult?.max_price || 10000
+        max: priceRangeResult?.max_price || 0
       },
       languages: [
         { id: 'en', name: 'English', count: 0 },
@@ -318,11 +289,10 @@ companions.get('/:id/services', validateUUID('id'), async (c) => {
 
   try {
     const companion = await c.env.DB.prepare(`
-      SELECT user_id FROM supplier_profiles
-      WHERE user_id = ?
-        AND COALESCE(subscription_status, 'active') = 'active'
-        AND COALESCE(verification_status, 'pending') != 'rejected'
-    `).bind(companionId).first();
+      SELECT sp.user_id FROM supplier_profiles sp
+      JOIN users u ON sp.user_id = u.id
+      WHERE sp.user_id = ? AND ${publicCompanionVisibility}
+    `).bind(companionId, ...publicIdentity.parameters).first();
 
     if (!companion) {
       return jsonError(c, 'Companion not found', 'The requested companion does not exist', 404);
@@ -370,10 +340,8 @@ companions.get('/:id', validateUUID('id'), async (c) => {
       FROM supplier_profiles sp
       JOIN users u ON sp.user_id = u.id
       WHERE sp.user_id = ?
-        AND COALESCE(sp.subscription_status, 'active') = 'active'
-        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
-        AND u.status = 'active'
-    `).bind(companionId).first();
+        AND ${publicCompanionVisibility}
+    `).bind(companionId, ...publicIdentity.parameters).first();
 
     if (!companion) {
       return jsonError(c, 'Companion not found', 'The requested companion does not exist or is not available', 404);
@@ -465,8 +433,8 @@ companions.get('/:id', validateUUID('id'), async (c) => {
       categories: categories,
       bio: companionRow.bio,
       age: null, // Calculate from date_of_birth if available
-      responseTime: '< 1 hour',
-      completionRate: 95,
+      responseTime: null,
+      completionRate: null,
       joinedDate: companionRow.joined_date,
       availability: {
         weeklySchedule,
@@ -514,11 +482,10 @@ companions.get('/:id/availability', validateUUID('id'), async (c) => {
   try {
     // Verify companion exists
     const companion = await c.env.DB.prepare(`
-      SELECT user_id FROM supplier_profiles
-      WHERE user_id = ?
-        AND COALESCE(subscription_status, 'active') = 'active'
-        AND COALESCE(verification_status, 'pending') != 'rejected'
-    `).bind(companionId).first();
+      SELECT sp.user_id FROM supplier_profiles sp
+      JOIN users u ON sp.user_id = u.id
+      WHERE sp.user_id = ? AND ${publicCompanionVisibility}
+    `).bind(companionId, ...publicIdentity.parameters).first();
 
     if (!companion) {
       return jsonError(c, 'Companion not found', 'The requested companion does not exist', 404);

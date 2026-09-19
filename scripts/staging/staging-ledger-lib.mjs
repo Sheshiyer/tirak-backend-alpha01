@@ -334,8 +334,8 @@ export function validateConfiguredBoundary(configured) {
   if (!exactList(configured.database.map((entry) => `${entry.binding}:${entry.name}`), ['DB:tirak-staging'])) {
     errors.push('configured D1 topology is not exactly DB/tirak-staging');
   }
-  if (!exactList(configured.kv.map((entry) => entry.binding), ['CACHE', 'SESSIONS'])) {
-    errors.push('configured KV topology is not exactly CACHE and SESSIONS');
+  if (!exactList(configured.kv.map((entry) => entry.binding), ['CACHE', 'SESSIONS', 'PAYMENT_CONFIG_KV'])) {
+    errors.push('configured KV topology is not exactly CACHE, SESSIONS, and PAYMENT_CONFIG_KV');
   }
   if (!exactList(configured.r2.map((entry) => `${entry.binding}:${entry.name}`), ['STORAGE:tirak-storage-staging'])) {
     errors.push('configured R2 topology is not exactly STORAGE/tirak-storage-staging');
@@ -423,7 +423,7 @@ function validateProposedConfiguration(configured, evidence) {
   if (!proposed || typeof proposed !== 'object' || Array.isArray(proposed)
     || canonicalJson(Object.keys(proposed).sort()) !== canonicalJson(['database', 'kv'])) return false;
   if (!Array.isArray(proposed.database) || proposed.database.length !== 1
-    || !Array.isArray(proposed.kv) || proposed.kv.length !== 2) return false;
+    || !Array.isArray(proposed.kv) || proposed.kv.length !== 3) return false;
   const database = proposed.database[0];
   if (!database || typeof database !== 'object' || Array.isArray(database)
     || canonicalJson(Object.keys(database).sort()) !== canonicalJson(['binding', 'id', 'name'])
@@ -434,7 +434,7 @@ function validateProposedConfiguration(configured, evidence) {
     .filter((entry) => normalizeName(entry) === configured.database[0]?.name);
   if (remoteDatabases.length !== 1 || normalizeId(remoteDatabases[0]) !== database.id
     || normalizeId(evidence.databaseInfo) !== database.id) return false;
-  const expectedKvBindings = ['CACHE', 'SESSIONS'];
+  const expectedKvBindings = ['CACHE', 'PAYMENT_CONFIG_KV', 'SESSIONS'];
   const proposedBindings = proposed.kv.map((entry) => entry?.binding).sort();
   if (canonicalJson(proposedBindings) !== canonicalJson(expectedKvBindings)) return false;
   for (const namespace of proposed.kv) {
@@ -544,7 +544,7 @@ export function evaluateStagingEvidence(configured, evidence, humanApproval = nu
         'sqlite_schema evidence contains a consistent nonnegative user-table count with explicit internal-table exclusion');
     }
 
-    for (const binding of ['CACHE', 'SESSIONS']) {
+    for (const binding of ['CACHE', 'SESSIONS', 'PAYMENT_CONFIG_KV']) {
       const namespace = exactOne(evidence.kvNamespaces ?? [], (entry) => entry.binding === binding && isStagingName(normalizeName(entry)));
       record(`STAGING_KV_${binding}_UNIQUE`, namespace.exact, `expected one staging namespace mapped to ${binding}, observed ${namespace.matches.length}`);
       if (namespace.exact) {

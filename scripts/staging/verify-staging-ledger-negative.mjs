@@ -29,6 +29,9 @@ id = "11111111111111111111111111111111"
 [[env.staging.kv_namespaces]]
 binding = "SESSIONS"
 id = "22222222222222222222222222222222"
+[[env.staging.kv_namespaces]]
+binding = "PAYMENT_CONFIG_KV"
+id = "33333333333333333333333333333333"
 [[env.staging.queues.producers]]
 binding = "MODERATION_QUEUE"
 queue = "tirak-moderation-staging"
@@ -101,6 +104,7 @@ const baseEvidence = {
   kvNamespaces: [
     { binding: 'CACHE', title: 'tirak-cache-staging', id: '11111111111111111111111111111111' },
     { binding: 'SESSIONS', title: 'tirak-sessions-staging', id: '22222222222222222222222222222222' },
+    { binding: 'PAYMENT_CONFIG_KV', title: 'tirak-payment-config-staging', id: '33333333333333333333333333333333' },
   ],
   r2Buckets: [{ name: 'tirak-storage-staging' }],
   queues: [
@@ -120,6 +124,7 @@ const baseEvidence = {
     kv: [
       { binding: 'CACHE', id: '11111111111111111111111111111111' },
       { binding: 'SESSIONS', id: '22222222222222222222222222222222' },
+      { binding: 'PAYMENT_CONFIG_KV', id: '33333333333333333333333333333333' },
     ],
   },
 };

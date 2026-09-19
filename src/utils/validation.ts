@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { jsonError } from './response';
 import type { Context, Next } from 'hono';
 import type { Env, Variables } from '../index';
+import { ACCOUNT_POLICY_VERSION } from '../services/account-consents';
 
 /**
  * Common validation schemas
@@ -42,6 +43,12 @@ export const registerSchema = z.object({
     z.enum(['male', 'female', 'other', 'prefer_not_to_say']).optional()
   ),
   preferredLanguage: z.enum(['en', 'th']).default('en'),
+  policyAcceptance: z.object({
+    termsVersion: z.literal(ACCOUNT_POLICY_VERSION),
+    privacyVersion: z.literal(ACCOUNT_POLICY_VERSION),
+  }).strict().optional(),
+  marketingOptIn: z.boolean().default(false),
+  analyticsOptIn: z.boolean().default(false),
   referralCode: z.preprocess(
     emptyStringToUndefined,
     z.string().min(4).max(32).optional()
@@ -140,11 +147,11 @@ export const supplierSearchSchema = z.object({
 
 // Chat message schema
 export const chatMessageSchema = z.object({
-  roomId: z.string().uuid('Invalid room ID'),
+  roomId: z.string().uuid('Invalid room ID').optional(),
   messageType: z.enum(['text', 'image'], {
     errorMap: () => ({ message: 'Message type must be text or image' })
   }),
-  content: z.string().max(2000, 'Message too long').optional(),
+  content: z.string().trim().max(2000, 'Message too long').optional(),
   imageUrl: z.string().url('Invalid image URL').optional()
 }).refine(data => {
   if (data.messageType === 'text' && !data.content) {

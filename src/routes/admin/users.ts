@@ -114,6 +114,8 @@ users.get('/', validatePagination(), zValidator('query', userSearchSchema), asyn
         u.created_at,
         u.updated_at,
         u.last_login_at,
+        COALESCE(ac.marketing_opt_in, 0) as marketingOptIn,
+        COALESCE(ac.analytics_opt_in, 0) as analyticsOptIn,
         COALESCE(cp.display_name, sp.display_name) as display_name,
         sp.verification_status as supplier_verification,
         sp.verification_status,
@@ -156,6 +158,7 @@ users.get('/', validatePagination(), zValidator('query', userSearchSchema), asyn
       FROM users u
       LEFT JOIN customer_profiles cp ON u.id = cp.user_id
       LEFT JOIN supplier_profiles sp ON u.id = sp.user_id
+      LEFT JOIN account_consents ac ON ac.user_id = u.id
       ${whereClause}
       ORDER BY u.${sortBy} ${sortOrder.toUpperCase()}
       LIMIT ? OFFSET ?
@@ -188,13 +191,15 @@ users.get('/:userId', validateUUID('userId'), async (c) => {
     }
 
     if (mode === 'tirakplus') {
-      return jsonError(c, 'User not available', 'Tirak Plus user details are served by the admin app demo layer', 404);
+      return jsonError(c, 'User not available', 'Tirak Plus customer records are not connected yet', 404);
     }
 
     // Get user with profile data
     const user = await c.env.DB.prepare(`
       SELECT 
         u.*,
+        COALESCE(ac.marketing_opt_in, 0) as marketingOptIn,
+        COALESCE(ac.analytics_opt_in, 0) as analyticsOptIn,
         cp.display_name as customer_display_name,
         cp.profile_image as customer_profile_image,
         cp.preferences as customer_preferences,
@@ -222,6 +227,7 @@ users.get('/:userId', validateUUID('userId'), async (c) => {
       FROM users u
       LEFT JOIN customer_profiles cp ON u.id = cp.user_id
       LEFT JOIN supplier_profiles sp ON u.id = sp.user_id
+      LEFT JOIN account_consents ac ON u.id = ac.user_id
       WHERE u.id = ?
     `).bind(userId).first();
 
@@ -246,10 +252,15 @@ users.get('/:userId', validateUUID('userId'), async (c) => {
         'Chat message sent' as description
       FROM chat_messages 
       WHERE sender_id = ?
+
+      UNION ALL
+
+      SELECT 'chat' as type, created_at, 'Chat message sent' as description
+      FROM booking_chat_messages WHERE sender_id = ?
       
       ORDER BY created_at DESC
       LIMIT 10
-    `).bind(userId, userId, userId).all();
+    `).bind(userId, userId, userId, userId).all();
 
     // Get user's sessions
     const sessions = await c.env.DB.prepare(`
@@ -292,8 +303,9 @@ users.get('/:userId', validateUUID('userId'), async (c) => {
       favoriteSuppliers = 0;
     }
 
+    const { password_hash: _passwordHash, ...safeUser } = user;
     return jsonSuccess(c, {
-      user,
+      user: safeUser,
       stats: {
         totalBookings: (bookingStats as any)?.total_bookings || 0,
         completedBookings: (bookingStats as any)?.completed_bookings || 0,

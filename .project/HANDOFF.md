@@ -35,3 +35,17 @@ git status --short
 
 No registry, capsule, relocation, session, Paseo, provider, or deployment
 mutation has been performed by drafting this packet.
+
+## Source release candidate — 2026-09-19
+
+- Prepared `codex/release-court-feedback` from remote main
+  `977ff8c5a0cfadda6b20da3844b0fbdef45a60e0`, preserving existing history.
+- Current backend application/config/test changes are integrated, including
+  existing payment application source without activating payments.
+- Release scope, verification and migration safeguards are recorded in
+  `docs/execution/release-court-feedback-20260919.md`.
+- Typecheck, all 407 tests across 34 files, and the portable local account-trust
+  integration probe pass.
+- No commit, push, deployment, remote migration, credential or provider-policy
+  change was performed. Select the actual Worker/D1 target before any release;
+  do not use blanket migration/deploy wrappers.

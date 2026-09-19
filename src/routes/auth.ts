@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import {
   registerSchema,
@@ -38,6 +39,9 @@ import { jsonSuccess, jsonError } from '../utils/response';
 import { createRateLimit } from '../middleware/rateLimit';
 import type { Env, Variables } from '../index';
 import { awardReferralCoins } from './referrals';
+import { authMiddleware } from '../middleware/auth';
+import { saveAccountConsents } from '../services/account-consents';
+import { requestEmailVerification, verifyEmailCode } from '../services/email-verification';
 
 const auth = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -63,7 +67,10 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
     preferredLanguage,
     referralCode,
     dateOfBirth,
-    gender
+    gender,
+    policyAcceptance,
+    marketingOptIn,
+    analyticsOptIn,
   } = c.req.valid('json');
   
   try {
@@ -136,6 +143,8 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
 
     await awardReferralCoins(c.env.DB, userId, referralCode);
 
+    await saveAccountConsents(c.env.DB, userId, { marketingOptIn, analyticsOptIn }, policyAcceptance);
+
     // Generate tokens
     const tokens = await generateTokens(user, c.env.JWT_SECRET);
 
@@ -148,7 +157,10 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
         preferredLanguage: user.preferredLanguage 
       },
       timestamp: new Date().toISOString()
-    });
+    }).catch(() => console.warn('Registration metric could not be queued'));
+
+    const emailVerification = await requestEmailVerification(c.env, user)
+      .catch(() => ({ deliveryStatus: 'unavailable' as const, retryAfterSeconds: 60 }));
 
     return jsonSuccess(c, {
       user: {
@@ -162,7 +174,8 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
         emailVerified: user.emailVerified,
         phoneVerified: user.phoneVerified
       },
-      ...tokens
+      ...tokens,
+      emailVerification,
     }, 'Registration successful.', 201);
 
   } catch (error) {
@@ -174,6 +187,31 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
 /**
  * User login endpoint
  */
+auth.post('/email-verification/request', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (user.emailVerified) {
+    return jsonSuccess(c, { deliveryStatus: 'sent', retryAfterSeconds: 0, emailVerified: true }, 'Email already verified');
+  }
+  try {
+    const delivery = await requestEmailVerification(c.env, user);
+    return jsonSuccess(c, delivery, delivery.deliveryStatus === 'sent'
+      ? 'Check your email for a verification code.'
+      : 'We could not send your verification email. Please try again shortly.');
+  } catch {
+    return jsonError(c, 'Verification unavailable', 'Please try again shortly.', 503);
+  }
+});
+
+auth.post('/verify-email', authMiddleware, zValidator('json', z.object({ code: z.string().regex(/^\d{6}$/) }).strict()), async (c) => {
+  try {
+    const verified = await verifyEmailCode(c.env, c.get('user'), c.req.valid('json').code);
+    if (!verified) return jsonError(c, 'Invalid verification code', 'The code is invalid, expired or already used. Request a new code if needed.', 400);
+    return jsonSuccess(c, { emailVerified: true }, 'Email verified successfully.');
+  } catch {
+    return jsonError(c, 'Verification unavailable', 'Please try again shortly.', 503);
+  }
+});
+
 auth.post('/login', zValidator('json', loginSchema), async (c) => {
   const { identifier, password, deviceId } = c.req.valid('json');
   
@@ -199,11 +237,9 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
 
     if (user.status === 'pending') {
       await c.env.DB.prepare(
-        'UPDATE users SET status = ?, email_verified = TRUE, phone_verified = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+        'UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
       ).bind('active', user.id).run();
       user.status = 'active';
-      user.emailVerified = true;
-      user.phoneVerified = true;
     }
 
     // Generate tokens

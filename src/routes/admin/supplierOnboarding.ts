@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { validatePagination } from '../../middleware/validation';
 import { jsonPaginated, jsonError, createPagination, jsonSuccess } from '../../utils/response';
-import { createEmailConfig, sendEmail, renderBasicEmail } from '../../utils/communication';
+import { createEmailConfig, sendEmail } from '../../utils/communication';
 import { hashPassword } from '../../utils/auth';
 import type { Env, Variables } from '../../index';
 
@@ -205,19 +205,22 @@ adminSupplierOnboarding.post('/:id/approve', async (c) => {
       const emailConfig = createEmailConfig(c.env);
       const subject = 'Your Tirak supplier account has been approved';
       const body = `Welcome to Tirak!\n\nYour application for ${app.business_name} has been approved.\n\nTemporary password (shown once): ${tempPassword}\n\nUse this link to set your permanent password (expires in 24 hours):\nhttps://tirak.app/auth/new?token=${encodeURIComponent(resetToken)}\n\nOr open in the app: tirak://auth/new?token=${encodeURIComponent(resetToken)}`;
-      await sendEmail(emailConfig, app.email, subject, body);
-      emailSent = true;
-    } catch (e) {
-      console.warn('Failed to send supplier onboarding credentials email (will show temp password in UI):', e);
+      const delivery = await sendEmail(emailConfig, app.email, subject, body);
+      emailSent = delivery.status === 'sent' || delivery.status === 'delivered';
+    } catch {
+      console.warn('Failed to send supplier onboarding credentials email; credentials remain available in the admin response.');
     }
 
     // Create in-app notification for the new supplier
     try {
       const notifId = crypto.randomUUID();
+      const notificationMessage = emailSent
+        ? 'Your supplier application has been approved. Check your email for login credentials.'
+        : 'Your supplier application has been approved. Contact support to receive your login credentials.';
       await c.env.DB.prepare(`
         INSERT INTO notifications (id, user_id, type, title, message, data, read, created_at, updated_at)
-        VALUES (?, ?, 'supplier_approved', 'Application Approved', 'Your supplier application has been approved. Check your email for login credentials.', ?, 0, ?, ?)
-      `).bind(notifId, userId, JSON.stringify({ applicationId: id }), now, now).run();
+        VALUES (?, ?, 'supplier_approved', 'Application Approved', ?, ?, 0, ?, ?)
+      `).bind(notifId, userId, notificationMessage, JSON.stringify({ applicationId: id }), now, now).run();
     } catch (e) {
       console.warn('Failed to create supplier approval notification:', e);
     }
