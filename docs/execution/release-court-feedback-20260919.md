@@ -1,6 +1,11 @@
 # Court feedback source-release integration
 
-Date: 2026-09-19. Status: locally verified, unpublished source candidate.
+Date: 2026-09-19. Status: source published for review; live deployment held.
+
+Published source: commit `0971aba9face6e38dd407a059bc405bc515ca56d`,
+[draft PR #29](https://github.com/Sheshiyer/tirak-backend-alpha01/pull/29).
+GitHub's `backend-release` check passed. The release checkout is preserved at
+the sibling `tirak-backend-release-20260919` directory, not the unborn original.
 
 ## Lineage and included scope
 
@@ -63,6 +68,11 @@ Git history. The non-deploying CI workflow and release-check command now use Bun
 ## Verification in the isolated release checkout
 
 - `bun run typecheck`: pass.
+- `bun run release:verify`: pass, including disposable recovery proof and eight
+  negative fixtures, with `externalCommandsExecuted: 0`.
+- `bunx wrangler deploy --dry-run --env production`: bundles successfully and
+  exits without deployment. Production JWT secret presence must be verified
+  after authentication; a dry run cannot prove remote secret readiness.
 - `bun run test:run`: 407 tests in 34 files pass, including mocked provider
   regressions and local SQLite migration tests; no external mail or payment
   calls are made by these tests.

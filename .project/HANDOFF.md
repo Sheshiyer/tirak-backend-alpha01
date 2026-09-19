@@ -38,6 +38,12 @@ mutation has been performed by drafting this packet.
 
 ## Source release candidate — 2026-09-19
 
+Publication follow-up: source commit `0971aba` is pushed on
+`codex/release-court-feedback` with draft PR #29; GitHub CI passes. No live
+deployment or migration occurred. Production/preview Expo currently target the
+default Worker, whose `/health` reports `environment: development`. Cloudflare
+sign-in and exact data-target reconciliation are still required.
+
 - Prepared `codex/release-court-feedback` from remote main
   `977ff8c5a0cfadda6b20da3844b0fbdef45a60e0`, preserving existing history.
 - Current backend application/config/test changes are integrated, including
