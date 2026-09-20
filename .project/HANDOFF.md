@@ -73,3 +73,19 @@ checks and protected-route denial checks passed. The private backup receipt is
 held outside Git. No payment/provider activation, production OTA, or device
 test occurred. See `docs/execution/release-court-feedback-20260919.md` for
 exact boundaries and remaining acceptance gates.
+
+## Tirak Admin access — 2026-09-20
+
+The owner's Tirak application account was provisioned with the existing
+`admin` role in `tirak-development` after a restricted D1 backup and restore
+check. The app has no distinct `superadmin` role. Account identifiers and the
+credential are held outside Git.
+
+The deployed default Worker initially omitted `https://admin.tirak.app` from
+`FRONTEND_URLS`, so browser login failed at CORS preflight before reaching
+authentication. Wrangler profile `tirak` deployed the origin addition as
+Worker version `c1617173-57e7-4313-9295-3491f6bf8d66`. Version readback
+confirmed the same D1 binding, `JWT_SECRET` secret binding, and all three
+payment controls disabled. The owner account then signed in through the
+in-app browser; the dashboard's 29-user count matched D1. Device verification
+and any production release decision remain separate.
