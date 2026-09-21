@@ -16,6 +16,37 @@ import type { Env, Variables } from '../index';
 
 const uploads = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+const PUBLIC_IMAGE_PREFIXES = ['avatars/', 'covers/', 'images/'];
+
+/** Public marketplace images are served by the Worker so profile media does
+ * not depend on a separate, unconfigured R2 custom domain. Documents remain
+ * private and never pass this prefix allowlist. */
+uploads.get('/public/*', async (c) => {
+  const marker = '/public/';
+  const markerIndex = c.req.path.indexOf(marker);
+  let key = '';
+  try {
+    key = markerIndex >= 0 ? decodeURIComponent(c.req.path.slice(markerIndex + marker.length)) : '';
+  } catch {
+    return jsonError(c, 'File not found', 'The requested public image does not exist', 404);
+  }
+  if (!key || key.includes('..') || !PUBLIC_IMAGE_PREFIXES.some(prefix => key.startsWith(prefix))) {
+    return jsonError(c, 'File not found', 'The requested public image does not exist', 404);
+  }
+
+  const object = await c.env.STORAGE.get(key);
+  if (!object) {
+    return jsonError(c, 'File not found', 'The requested public image does not exist', 404);
+  }
+
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set('ETag', object.httpEtag);
+  headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+  headers.set('X-Content-Type-Options', 'nosniff');
+  return new Response(object.body, { headers });
+});
+
 // Apply authentication middleware to all routes
 uploads.use('*', authMiddleware);
 
@@ -63,7 +94,8 @@ uploads.post('/image', async (c) => {
         category,
         originalName: file.name,
         uploadedAt: new Date().toISOString()
-      }
+      },
+      c.env.PUBLIC_ASSET_BASE_URL,
     );
 
     // Track upload event
@@ -272,7 +304,7 @@ uploads.get('/stats', async (c) => {
   
   try {
     // This would typically query a database of file metadata
-    // For now, we'll return placeholder statistics
+    // This endpoint reports only persisted metadata once file indexing exists.
     const stats = {
       totalFiles: 0,
       totalSize: 0,

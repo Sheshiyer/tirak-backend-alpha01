@@ -16,6 +16,15 @@ export interface ImageProcessingOptions {
   format?: 'jpeg' | 'png' | 'webp';
 }
 
+export function publicAssetUrl(baseUrl: string | undefined, key: string): string {
+  const base = baseUrl?.trim().replace(/\/+$/, '');
+  if (!base) {
+    throw new Error('PUBLIC_ASSET_BASE_URL is required for public uploads');
+  }
+  const encodedKey = key.split('/').map(segment => encodeURIComponent(segment)).join('/');
+  return `${base}/${encodedKey}`;
+}
+
 /**
  * Upload file to R2 storage
  */
@@ -24,7 +33,8 @@ export async function uploadFile(
   file: File | ArrayBuffer,
   key: string,
   contentType: string,
-  metadata?: Record<string, string>
+  metadata?: Record<string, string>,
+  publicBaseUrl?: string,
 ): Promise<UploadResult> {
   const uploadMetadata = {
     contentType,
@@ -43,7 +53,7 @@ export async function uploadFile(
 
   return {
     key,
-    url: `https://storage.tirak.app/${key}`, // This would be your R2 custom domain
+    url: publicBaseUrl ? publicAssetUrl(publicBaseUrl, key) : '',
     size,
     contentType
   };

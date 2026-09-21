@@ -5,7 +5,7 @@ import { validateUUID } from '../middleware/validation';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
 import { createRateLimit } from '../middleware/rateLimit';
 import { jsonSuccess, jsonError, jsonPaginated, createPagination } from '../utils/response';
-import { firstProfileImage } from '../utils/profileImages';
+import { firstProfileImage, publicProfileImages } from '../utils/profileImages';
 import { getUserById, updateUser } from '../utils/database';
 import { publicCompanionIdentityFilter } from '../utils/publicCompanionIdentity';
 import type { Env, Variables } from '../index';
@@ -15,8 +15,13 @@ const companions = new Hono<{ Bindings: Env; Variables: Variables }>();
 const publicIdentity = publicCompanionIdentityFilter();
 const publicCompanionVisibility = `
   COALESCE(sp.subscription_status, 'active') = 'active'
-  AND COALESCE(sp.verification_status, 'pending') != 'rejected'
+  AND sp.verification_status = 'verified'
   AND u.status = 'active'
+  AND TRIM(COALESCE(sp.display_name, '')) != ''
+  AND EXISTS (
+    SELECT 1 FROM supplier_services visible_service
+    WHERE visible_service.supplier_id = sp.user_id AND visible_service.is_active = TRUE
+  )
   AND ${publicIdentity.sql}
 `;
 
@@ -182,7 +187,7 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
 
     // Format companions data
     const companionsList = companionsResult.results.map((companion: any) => {
-      const profileImages = JSON.parse(companion.profile_images || '[]');
+      const profileImages = publicProfileImages(companion.profile_images);
       const categories = JSON.parse(companion.categories || '[]');
       const regions = JSON.parse(companion.regions || '[]');
       const languages = JSON.parse(companion.languages || '[]');
@@ -380,7 +385,7 @@ companions.get('/:id', validateUUID('id'), async (c) => {
 
     // Format data
     const companionRow = companion as any;
-    const profileImages = JSON.parse(String(companionRow.profile_images || '[]'));
+    const profileImages = publicProfileImages(companionRow.profile_images);
     const categories = JSON.parse(String(companionRow.categories || '[]'));
     const regions = JSON.parse(String(companionRow.regions || '[]'));
     const languages = JSON.parse(String(companionRow.spoken_languages || '[]'));

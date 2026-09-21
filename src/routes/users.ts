@@ -234,7 +234,8 @@ users.put('/companion/profile', async (c) => {
           file,
           generateFileKey(userId, file.name || 'profile.jpg', 'avatars'),
           file.type || 'image/jpeg',
-          { userId, purpose: 'companion-profile-photo' }
+          { userId, purpose: 'companion-profile-photo' },
+          c.env.PUBLIC_ASSET_BASE_URL,
         );
         uploadedProfilePhoto = upload.url;
       }
@@ -251,7 +252,8 @@ users.put('/companion/profile', async (c) => {
           file,
           generateFileKey(userId, file.name || 'cover.jpg', 'covers'),
           file.type || 'image/jpeg',
-          { userId, purpose: 'companion-cover-photo' }
+          { userId, purpose: 'companion-cover-photo' },
+          c.env.PUBLIC_ASSET_BASE_URL,
         );
         uploadedCoverPhoto = upload.url;
       }
@@ -680,7 +682,8 @@ users.post('/:id/avatar',
           userId,
           purpose: 'avatar',
           originalName: file.name
-        }
+        },
+        c.env.PUBLIC_ASSET_BASE_URL,
       );
 
       // Update user profile with new image URL

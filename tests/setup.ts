@@ -65,6 +65,7 @@ export const createTestEnv = () => ({
   },
   JWT_SECRET: 'test-jwt-secret-key-for-testing-only',
   ENVIRONMENT: 'test',
+  PUBLIC_ASSET_BASE_URL: 'https://api.example.test/api/uploads/public',
   PAYMENT_MODE: 'test',
   PROMPTPAY_ENABLED: 'true',
   PAYMENT_CONFIG_KV: {

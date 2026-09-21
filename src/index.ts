@@ -41,6 +41,7 @@ export interface Env {
   PAYMENT_PRODUCTION_POLICY_WRITES_ENABLED?: string;
   ENVIRONMENT: string;
   FRONTEND_URLS: string;
+  PUBLIC_ASSET_BASE_URL?: string;
   EMAIL?: {
     send(message: {
       to: string | string[];

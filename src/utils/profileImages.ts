@@ -1,25 +1,38 @@
-export function firstProfileImage(value: unknown): string | null {
-  if (!value) return null;
+export function isPublicImageUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+export function publicProfileImages(value: unknown): string[] {
+  if (!value) return [];
 
   if (Array.isArray(value)) {
-    return typeof value[0] === 'string' && value[0].length > 0 ? value[0] : null;
+    return value.filter(isPublicImageUrl);
   }
 
-  if (typeof value !== 'string') return null;
+  if (typeof value !== 'string') return [];
 
   const trimmed = value.trim();
-  if (!trimmed) return null;
+  if (!trimmed) return [];
 
   if (!trimmed.startsWith('[')) {
-    return trimmed;
+    return isPublicImageUrl(trimmed) ? [trimmed] : [];
   }
 
   try {
     const parsed = JSON.parse(trimmed);
-    return Array.isArray(parsed) && typeof parsed[0] === 'string' && parsed[0].length > 0
-      ? parsed[0]
-      : null;
+    return Array.isArray(parsed) ? parsed.filter(isPublicImageUrl) : [];
   } catch {
-    return trimmed;
+    return [];
   }
+}
+
+export function firstProfileImage(value: unknown): string | null {
+  return publicProfileImages(value)[0] || null;
 }

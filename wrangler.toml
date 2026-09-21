@@ -6,7 +6,8 @@ compatibility_flags = ["nodejs_compat"]
 # this Worker against a personal or Tirak Plus account by accident.
 account_id = "2c0c96c68f0ee73b6d980054557bca5b"
 
-# Development environment (default)
+# Legacy named development environment. The default Worker below is the live
+# Tirak target because it contains the current user base.
 [env.development]
 name = "tirak-backend-dev"
 
@@ -237,7 +238,10 @@ allowed_sender_addresses = ["noreply@tirak.app"]
 
 # Environment variables (secrets will be set via wrangler secret)
 [vars]
-ENVIRONMENT = "development"
+# The default Worker is production-facing even though its retained D1/R2
+# resource names include "development". Renaming resources would risk moving
+# the current users to an empty database.
+ENVIRONMENT = "production"
 PAYMENT_MODE = "disabled"
 PROMPTPAY_ENABLED = "false"
 PAYMENT_PRODUCTION_POLICY_WRITES_ENABLED = "false"
@@ -248,6 +252,7 @@ EMAIL_PROVIDER = "cloudflare"
 EMAIL_FROM = "noreply@tirak.app"
 EMAIL_FROM_NAME = "Tirak"
 EMAIL_REPLY_TO = "support@tirak.app"
+PUBLIC_ASSET_BASE_URL = "https://tirak-backend.tirak-court.workers.dev/api/uploads/public"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
@@ -259,6 +264,7 @@ EMAIL_PROVIDER = "cloudflare"
 EMAIL_FROM = "noreply@tirak.app"
 EMAIL_FROM_NAME = "Tirak"
 EMAIL_REPLY_TO = "support@tirak.app"
+PUBLIC_ASSET_BASE_URL = "https://tirak-backend-staging.tirak-court.workers.dev/api/uploads/public"
 # JWT_SECRET must be provisioned as a Worker secret (never committed in vars):
 #   npx wrangler secret put JWT_SECRET --env staging
 
@@ -272,5 +278,6 @@ EMAIL_PROVIDER = "cloudflare"
 EMAIL_FROM = "noreply@tirak.app"
 EMAIL_FROM_NAME = "Tirak"
 EMAIL_REPLY_TO = "support@tirak.app"
+PUBLIC_ASSET_BASE_URL = "https://tirak-backend-production.tirak-court.workers.dev/api/uploads/public"
 # JWT_SECRET must be provisioned as a Worker secret (never committed in vars):
 #   npx wrangler secret put JWT_SECRET --env production

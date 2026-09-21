@@ -387,8 +387,6 @@ auth.post('/resend-otp', async (c) => {
       // Continue even if SMS fails
     }
 
-    console.log(`New OTP for ${normalizedPhone}: ${otpData.code}`); // Development only
-
     return jsonSuccess(c, { sent: true }, 'Verification code sent successfully');
 
   } catch (error) {
