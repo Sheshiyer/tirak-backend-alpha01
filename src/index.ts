@@ -37,8 +37,11 @@ export interface Env {
   PAYMENT_MODE?: string;
   PROMPTPAY_ENABLED?: string;
   PAYMENT_CONFIG_KV?: KVNamespace;
+  PAYMENT_ADMIN_USER_IDS?: string;
+  PAYMENT_PRODUCTION_POLICY_WRITES_ENABLED?: string;
   ENVIRONMENT: string;
   FRONTEND_URLS: string;
+  PUBLIC_ASSET_BASE_URL?: string;
   EMAIL?: {
     send(message: {
       to: string | string[];

@@ -444,6 +444,63 @@ describe('Omise PromptPay booking payments', () => {
     expect(statements.some(entry => entry.query.includes("payment_status = 'completed'"))).toBe(false);
   });
 
+  it('retrieves provider truth before ignoring a valid signed unknown charge', async () => {
+    const body = JSON.stringify({
+      id: 'evnt_unknown_charge',
+      key: 'charge.complete',
+      data: { id: 'chrg_unknown_charge' },
+    });
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const signature = await signWebhook(body, timestamp, env.OMISE_WEBHOOK_SECRET);
+    const omiseFetch = vi.fn().mockResolvedValue(jsonResponse({
+      ...pendingCharge,
+      id: 'chrg_unknown_charge',
+      status: 'successful',
+      paid: true,
+    }));
+    vi.stubGlobal('fetch', omiseFetch);
+
+    const response = await app.request(new Request('http://localhost/payments/webhooks/omise', {
+      method: 'POST',
+      body,
+      headers: {
+        'Omise-Signature': signature,
+        'Omise-Signature-Timestamp': timestamp,
+      },
+    }), undefined, env);
+
+    expect(response.status).toBe(200);
+    expect(omiseFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/charges/chrg_unknown_charge'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(statements.some(entry => entry.query.includes("status = 'ignored'"))).toBe(true);
+    expect(statements.some(entry => entry.query.includes('UPDATE payment_attempts'))).toBe(false);
+    expect(statements.some(entry => entry.query.includes("payment_status = 'completed'"))).toBe(false);
+  });
+
+  it('keeps an unknown-charge webhook retryable when provider retrieval fails', async () => {
+    const body = JSON.stringify({ id: 'evnt_unknown_failure', data: { id: 'chrg_unknown_failure' } });
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const signature = await signWebhook(body, timestamp, env.OMISE_WEBHOOK_SECRET);
+    const omiseFetch = vi.fn().mockResolvedValue(jsonResponse({ message: 'unavailable' }, 503));
+    vi.stubGlobal('fetch', omiseFetch);
+
+    const response = await app.request(new Request('http://localhost/payments/webhooks/omise', {
+      method: 'POST',
+      body,
+      headers: {
+        'Omise-Signature': signature,
+        'Omise-Signature-Timestamp': timestamp,
+      },
+    }), undefined, env);
+
+    expect(response.status).toBe(502);
+    expect(statements.some(entry => entry.query.includes("status = 'failed'"))).toBe(true);
+    expect(statements.some(entry => entry.query.includes("status = 'ignored'"))).toBe(false);
+    expect(statements.some(entry => entry.query.includes('UPDATE payment_attempts'))).toBe(false);
+  });
+
   it('rejects stale/invalid signatures and safely acknowledges replay without retrieving a charge', async () => {
     const body = JSON.stringify({ id: 'evnt_2', data: { id: 'chrg_promptpay_1' } });
     const staleTimestamp = Math.floor((Date.now() - (6 * 60 * 1000)) / 1000).toString();

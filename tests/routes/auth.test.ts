@@ -47,6 +47,8 @@ describe('Auth Routes', () => {
     expect(data.data.user.email).toBe('newuser@example.com');
     expect(data.data.accessToken).toBeDefined();
     expect(data.data.refreshToken).toBeDefined();
+    expect(data.data.user.emailVerified).toBe(false);
+    expect(data.data.user.phoneVerified).toBe(false);
   });
 
   it('rejects duplicate registration with the current flat error contract', async () => {

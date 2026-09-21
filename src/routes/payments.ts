@@ -20,6 +20,10 @@ import {
   webhookReplayKey,
   type OmiseCharge,
 } from '../services/omise';
+import {
+  readStoredPaymentProviderPolicy,
+  resolvePaymentProviderPolicy,
+} from '../payments/provider-policy';
 import type { Env, Variables } from '../index';
 
 const payments = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -277,15 +281,18 @@ payments.post('/webhooks/omise', async (c) => {
     LIMIT 1
   `).bind(chargeId).first<PaymentAttemptRow>();
 
-  if (!attempt) {
-    await c.env.DB.prepare(`
-      UPDATE payment_webhook_events SET status = 'ignored', processed_at = ? WHERE replay_key = ?
-    `).bind(receivedAt, eventReplayKey).run();
-    return jsonSuccess(c, { received: true });
-  }
-
   try {
     const charge = await retrieveOmiseCharge(secretKey, chargeId);
+    if (!attempt) {
+      // Provider truth is verified before an unknown charge is ignored. This
+      // preserves a signed-delivery proof without allowing an unknown charge
+      // to mutate any booking or payment-attempt state.
+      await c.env.DB.prepare(`
+        UPDATE payment_webhook_events SET status = 'ignored', processed_at = ? WHERE replay_key = ?
+      `).bind(receivedAt, eventReplayKey).run();
+      return jsonSuccess(c, { received: true });
+    }
+
     await reconcileAttempt(c.env.DB, attempt, charge);
     await c.env.DB.prepare(`
       UPDATE payment_webhook_events SET status = 'processed', processed_at = ? WHERE replay_key = ?
@@ -309,8 +316,17 @@ payments.use('*', createRateLimit('payment'));
 payments.post('/charges', zValidator('json', promptPayBookingSchema), async (c) => {
   const secretKey = c.env.OMISE_SECRET_KEY;
   const runtime = await resolvePaymentRuntimePolicy(c.env);
-  if (!runtime.createEnabled || !secretKey) {
-    return jsonError(c, 'PAYMENT_CREATION_DISABLED', `PromptPay charge creation is closed: ${runtime.reason || 'missing_secret'}`, 503);
+  const providerPolicyState = await readStoredPaymentProviderPolicy(c.env.PAYMENT_CONFIG_KV);
+  const providerPolicy = providerPolicyState.invalid
+    ? { enabled: false, reason: 'provider_policy_invalid' as const }
+    : resolvePaymentProviderPolicy(providerPolicyState.document?.policy, 'promptpay', c.env);
+  if (!runtime.createEnabled || !providerPolicy.enabled || !secretKey) {
+    return jsonError(
+      c,
+      'PAYMENT_CREATION_DISABLED',
+      `PromptPay charge creation is closed: ${runtime.reason || providerPolicy.reason || 'missing_secret'}`,
+      503,
+    );
   }
 
   const customerId = c.get('userId');

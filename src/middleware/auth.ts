@@ -13,9 +13,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env; Variables: Vari
   try {
     const authHeader = c.req.header('Authorization');
     const cookieToken = getCookie(c, 'auth-token');
-    
     const token = authHeader?.replace('Bearer ', '') || cookieToken;
-    
     if (!token) {
       throw new AuthenticationError('No authentication token provided');
     }

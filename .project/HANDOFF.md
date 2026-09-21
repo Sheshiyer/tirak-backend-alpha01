@@ -35,3 +35,57 @@ git status --short
 
 No registry, capsule, relocation, session, Paseo, provider, or deployment
 mutation has been performed by drafting this packet.
+
+## Source release candidate — 2026-09-19
+
+Publication follow-up: source commit `0971aba` is pushed on
+`codex/release-court-feedback` with draft PR #29; GitHub CI passes. No live
+deployment or migration occurred. Production/preview Expo currently target the
+default Worker, whose `/health` reports `environment: development`. Cloudflare
+sign-in and exact data-target reconciliation are still required.
+
+- Prepared `codex/release-court-feedback` from remote main
+  `977ff8c5a0cfadda6b20da3844b0fbdef45a60e0`, preserving existing history.
+- Current backend application/config/test changes are integrated, including
+  existing payment application source without activating payments.
+- Release scope, verification and migration safeguards are recorded in
+  `docs/execution/release-court-feedback-20260919.md`.
+- Typecheck, all 407 tests across 34 files, and the portable local account-trust
+  integration probe pass.
+- No commit, push, deployment, remote migration, credential or provider-policy
+  change was performed. Select the actual Worker/D1 target before any release;
+  do not use blanket migration/deploy wrappers.
+
+## Authorized backend promotion — 2026-09-19
+
+The app's current default `tirak-backend` Worker and `tirak-development` D1
+were selected to preserve its existing users. A restricted backup was exported
+and restored successfully before applying only `015_account_trust.sql` to that
+D1. The schema, migration ledger, unchanged user/booking counts, and zero
+foreign-key violations were read back. Source commit `c7d10eb` removed the
+checked-in JWT placeholder and added a release-gate check; 407 tests, the local
+account-trust probe, and GitHub CI passed.
+
+Worker version `6dcb5ac9-3501-4e9d-816c-e77d43c0ddac` is deployed at 100%
+to the app's existing URL. Its JWT binding is `secret_text`; the old signing
+key is rejected. The three payment controls are disabled. Health/public smoke
+checks and protected-route denial checks passed. The private backup receipt is
+held outside Git. No payment/provider activation, production OTA, or device
+test occurred. See `docs/execution/release-court-feedback-20260919.md` for
+exact boundaries and remaining acceptance gates.
+
+## Tirak Admin access — 2026-09-20
+
+The owner's Tirak application account was provisioned with the existing
+`admin` role in `tirak-development` after a restricted D1 backup and restore
+check. The app has no distinct `superadmin` role. Account identifiers and the
+credential are held outside Git.
+
+The deployed default Worker initially omitted `https://admin.tirak.app` from
+`FRONTEND_URLS`, so browser login failed at CORS preflight before reaching
+authentication. Wrangler profile `tirak` deployed the origin addition as
+Worker version `c1617173-57e7-4313-9295-3491f6bf8d66`. Version readback
+confirmed the same D1 binding, `JWT_SECRET` secret binding, and all three
+payment controls disabled. The owner account then signed in through the
+in-app browser; the dashboard's 29-user count matched D1. Device verification
+and any production release decision remain separate.

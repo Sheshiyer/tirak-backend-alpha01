@@ -6,6 +6,7 @@ import { createRateLimit } from '../../middleware/rateLimit';
 import { adminCors } from '../../middleware/cors';
 import { validatePagination, validateUUID } from '../../middleware/validation';
 import { jsonSuccess, jsonError, jsonPaginated, createPagination } from '../../utils/response';
+import { getEmailReadiness } from '../../utils/communication';
 import type { Env, Variables } from '../../index';
 
 const operations = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -122,11 +123,7 @@ operations.get('/summary', zValidator('query', modeSchema), async (c) => {
         awardedEvents: (referralStats as any)?.awarded_events || 0,
         coinsIssued: (referralStats as any)?.coins_issued || 0
       },
-      email: {
-        configured: Boolean(c.env.EMAIL || c.env.SENDGRID_API_KEY || c.env.MAILCHANNELS_API_KEY),
-        provider: c.env.EMAIL_PROVIDER || (c.env.EMAIL ? 'cloudflare-email' : c.env.SENDGRID_API_KEY ? 'sendgrid' : c.env.MAILCHANNELS_API_KEY ? 'mailchannels' : 'unconfigured'),
-        from: c.env.EMAIL_FROM || c.env.SENDGRID_FROM_EMAIL || c.env.MAILCHANNELS_FROM_EMAIL || null
-      },
+      email: getEmailReadiness(c.env),
       settings: await readSettings(c.env)
     }, 'Admin operations summary retrieved successfully');
   } catch (error) {
@@ -385,11 +382,7 @@ operations.get('/settings', zValidator('query', modeSchema), async (c) => {
 
     return jsonSuccess(c, {
       ...(await readSettings(c.env)),
-      email: {
-        configured: Boolean(c.env.EMAIL || c.env.SENDGRID_API_KEY || c.env.MAILCHANNELS_API_KEY),
-        provider: c.env.EMAIL_PROVIDER || (c.env.EMAIL ? 'cloudflare-email' : c.env.SENDGRID_API_KEY ? 'sendgrid' : c.env.MAILCHANNELS_API_KEY ? 'mailchannels' : 'unconfigured'),
-        from: c.env.EMAIL_FROM || c.env.SENDGRID_FROM_EMAIL || c.env.MAILCHANNELS_FROM_EMAIL || null
-      }
+      email: getEmailReadiness(c.env)
     }, 'Admin settings retrieved successfully');
   } catch (error) {
     console.error('Admin settings load error:', error);

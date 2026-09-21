@@ -351,20 +351,56 @@ async function sendSendGridEmail(
   content: string,
   deliveryId: string
 ): Promise<DeliveryStatus> {
-  // In a real implementation, you would use the SendGrid SDK
-  // For now, we'll simulate the API call
-  
-  if (!config.apiKey || !config.fromEmail) {
+  if (!config.apiKey?.trim() || !config.fromEmail?.trim()) {
     throw new Error('Missing SendGrid configuration');
   }
+  const emailAddress = z.string().email();
+  if (!emailAddress.safeParse(to).success || !emailAddress.safeParse(config.fromEmail).success
+    || (config.replyTo && !emailAddress.safeParse(config.replyTo).success)) {
+    throw new Error('Invalid SendGrid email address configuration');
+  }
 
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 100));
-  
-  // For development, we'll always return success
-  // In production, replace with actual SendGrid API call
+  const isHtml = /<[a-z][^>]*>/i.test(content);
+  const html = isHtml ? content : renderBasicEmail(subject, content);
+  const plainText = isHtml
+    ? content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || subject
+    : content || subject;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  let response: Response;
+  try {
+    response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      redirect: 'error',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: to }] }],
+        from: { email: config.fromEmail, name: config.fromName || 'Tirak' },
+        reply_to: { email: config.replyTo || config.fromEmail },
+        subject,
+        content: [
+          { type: 'text/plain', value: plainText },
+          { type: 'text/html', value: html },
+        ],
+      }),
+    });
+  } catch {
+    // Provider errors can contain credentials, recipients or message bodies.
+    throw new Error(controller.signal.aborted ? 'SendGrid email request timed out' : 'SendGrid email request failed');
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  // SendGrid accepts Mail Send requests with 202; acceptance is not delivery.
+  if (response.status !== 202) {
+    throw new Error(`SendGrid email request rejected with status ${response.status}`);
+  }
   return {
-    id: deliveryId,
+    id: response.headers.get('X-Message-Id') || deliveryId,
     status: 'sent',
     timestamp: new Date(),
     provider: 'sendgrid'
@@ -379,24 +415,7 @@ async function sendAWSEmail(
   content: string,
   deliveryId: string
 ): Promise<DeliveryStatus> {
-  // In a real implementation, you would use the AWS SDK
-  // For now, we'll simulate the API call
-
-  if (!config.accessKeyId || !config.secretAccessKey || !config.region || !config.fromEmail) {
-    throw new Error('Missing AWS SES configuration');
-  }
-
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 100));
-
-  // For development, we'll always return success
-  // In production, replace with actual AWS SES API call
-  return {
-    id: deliveryId,
-    status: 'sent',
-    timestamp: new Date(),
-    provider: 'aws-ses'
-  };
+  throw new Error('AWS SES email delivery is not implemented. Configure a supported email provider.');
 }
 
 // High-level helper functions
@@ -466,6 +485,40 @@ export async function sendNotificationEmail(
 }
 
 // Configuration helpers
+export interface EmailReadiness {
+  configured: boolean;
+  provider: string;
+  from: string | null;
+  reason?: string;
+}
+
+/** Configuration readiness only; this does not prove delivery or sender-domain approval. */
+export function getEmailReadiness(env: object): EmailReadiness {
+  let config: EmailConfig;
+  try {
+    config = createEmailConfig(env);
+  } catch {
+    return { configured: false, provider: 'unsupported', from: null, reason: 'Unsupported email provider' };
+  }
+  const from = config.fromEmail || null;
+  if (config.provider === 'aws-ses') {
+    return { configured: false, provider: config.provider, from, reason: 'AWS SES email delivery is not implemented' };
+  }
+  if (!z.string().email().safeParse(from).success
+    || (config.replyTo && !z.string().email().safeParse(config.replyTo).success)) {
+    return { configured: false, provider: config.provider, from, reason: 'A valid sender and reply-to address are required' };
+  }
+  const configured = config.provider === 'cloudflare'
+    ? typeof config.env?.EMAIL?.send === 'function'
+    : Boolean(config.apiKey?.trim());
+  return {
+    configured,
+    provider: config.provider,
+    from,
+    ...(!configured ? { reason: config.provider === 'cloudflare' ? 'Email service binding is unavailable' : 'Provider API key is missing' } : {}),
+  };
+}
+
 export function createSMSConfig(env: any): SMSConfig {
   const provider = env.SMS_PROVIDER || 'twilio';
 

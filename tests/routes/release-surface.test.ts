@@ -18,7 +18,9 @@ describe('App Store release API surface', () => {
       'utf8'
     );
 
-    expect(chatSource).toContain("chat.use('*', authMiddleware)");
+    expect(chatSource).toContain('return authMiddleware(c, next)');
+    expect(chatSource).not.toMatch(/c\.req\.query\(['"]token['"]\)/);
+    expect(chatSource).toContain('DELETE FROM chat_socket_tickets');
     expect(chatSource).toContain("url.searchParams.set('userId', userId)");
     expect(chatSource).not.toMatch(/searchParams\.set\(['"]token['"]/);
     expect(durableObjectSource).not.toMatch(/searchParams\.get\(['"]token['"]/);

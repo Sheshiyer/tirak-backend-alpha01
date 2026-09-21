@@ -110,3 +110,8 @@ jspm_packages/
 
 # CodeGraph local index (MCP tool)
 .codegraph/
+.superset/
+.temperance/
+.worktrees/
+evidence/
+rehearsal/

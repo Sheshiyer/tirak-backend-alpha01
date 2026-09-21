@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { getEmailReadiness } from '../../utils/communication';
 import { zValidator } from '@hono/zod-validator';
 import { authMiddleware, adminOnly } from '../../middleware/auth';
 import { createRateLimit } from '../../middleware/rateLimit';
@@ -533,11 +534,7 @@ dashboard.get('/overview', async (c) => {
           awardedEvents: referralStats?.total_events || 0,
           coinsIssued: referralStats?.coins_issued || 0
         },
-        email: {
-          configured: Boolean(c.env.EMAIL || c.env.SENDGRID_API_KEY || c.env.MAILCHANNELS_API_KEY),
-          provider: c.env.EMAIL_PROVIDER || (c.env.EMAIL ? 'cloudflare-email' : c.env.SENDGRID_API_KEY ? 'sendgrid' : c.env.MAILCHANNELS_API_KEY ? 'mailchannels' : 'unconfigured'),
-          from: c.env.EMAIL_FROM || c.env.SENDGRID_FROM_EMAIL || c.env.MAILCHANNELS_FROM_EMAIL || null
-        }
+        email: getEmailReadiness(c.env)
       },
       integrations,
       generatedAt: new Date().toISOString()

@@ -13,7 +13,7 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest --watch",
     "test:ui": "vitest --ui",
-    "release:verify": "npm run typecheck && npm run test:run && node scripts/verify-release-gate.mjs",
+    "release:verify": "bun run typecheck && bun run test:run && bun scripts/verify-release-gate.mjs",
     "release:verify:static": "node scripts/verify-release-gate.mjs",
     "release:verify:negative": "node scripts/release-negative-matrix.mjs",
     "staging:discover": "node scripts/staging/collect-staging-ledger.mjs",
