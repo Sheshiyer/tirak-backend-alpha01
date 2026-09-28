@@ -13,6 +13,8 @@ import {
 } from '../contracts/payment';
 import type { Env, Variables } from '../index';
 import { createNotification } from './notifications';
+import { publicCompanionVisibility, publicIdentity } from '../utils/guideVisibility';
+import { dateSchema, timeSchema, minutes, scheduleAllows } from '../utils/guideAvailability';
 
 const bookings = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -22,10 +24,10 @@ bookings.use('*', createRateLimit('booking'));
 const createBookingSchema = z.object({
   companionId: z.string().uuid('Invalid guide ID'),
   serviceId: z.string().min(1, 'A guided experience is required'),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Start time must be in HH:MM format'),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be in HH:MM format').optional(),
-  duration: z.number().min(30, 'Minimum duration is 30 minutes').max(1440, 'Maximum duration is 24 hours'),
+  date: dateSchema,
+  startTime: timeSchema,
+  endTime: timeSchema.optional(),
+  duration: z.number().int().min(30, 'Minimum duration is 30 minutes').max(1440, 'Maximum duration is 24 hours'),
   location: z.string().max(500, 'Location too long').optional(),
   meetingPoint: z.string().max(500, 'Meeting point too long').optional(),
   specialRequests: z.string().max(1000, 'Special requests too long').optional(),
@@ -125,7 +127,7 @@ const formatBooking = (booking: any, userType?: string) => {
       id: booking.service_id,
       name: booking.service_name,
       description: booking.service_description,
-      price: Number(booking.service_price || booking.total_amount || 0)
+      price: Number(booking.total_amount || 0)
     } : null,
     date,
     startTime,
@@ -213,10 +215,8 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
       FROM supplier_profiles sp
       JOIN users u ON sp.user_id = u.id
       WHERE sp.user_id = ?
-        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
-        AND COALESCE(sp.subscription_status, 'active') = 'active'
-        AND u.status = 'active'
-    `).bind(bookingData.companionId).first();
+        AND ${publicCompanionVisibility}
+    `).bind(bookingData.companionId, ...publicIdentity.parameters).first();
 
     if (!companion) {
       return jsonError(c, 'Guide not found', 'The selected guide is not available', 404);
@@ -225,7 +225,7 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
     const service: any = await c.env.DB.prepare(`
       SELECT id, title, description, price_min, price_max, currency, duration_hours
       FROM supplier_services
-      WHERE id = ? AND supplier_id = ? AND is_active = TRUE
+      WHERE id = ? AND supplier_id = ? AND is_active = TRUE AND archived_at IS NULL
     `).bind(bookingData.serviceId, bookingData.companionId).first();
 
     if (!service) {
@@ -233,8 +233,17 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
     }
 
     const scheduledAt = toScheduledAt(bookingData.date, bookingData.startTime);
-    const duration = bookingData.duration || Math.max(30, Math.round(Number(service?.duration_hours || 1) * 60));
-    const endTime = bookingData.endTime || getEndTime(bookingData.startTime, duration);
+    const duration = Math.round(Number(service.duration_hours) * 60);
+    if (!Number.isFinite(duration) || duration < 30 || bookingData.duration !== duration) {
+      return jsonError(c, 'Invalid experience duration', 'Booking duration must match the selected guided experience', 400);
+    }
+    if (minutes(bookingData.startTime) + duration >= 1440 || (bookingData.endTime && minutes(bookingData.endTime) !== minutes(bookingData.startTime) + duration)) {
+      return jsonError(c, 'Invalid booking interval', 'The end time must match duration within the same Bangkok calendar day', 400);
+    }
+    if (!await scheduleAllows(c.env.DB, bookingData.companionId, bookingData.date, bookingData.startTime, duration)) {
+      return jsonError(c, 'Guide schedule unavailable', 'This time is outside the guide schedule or no schedule has been set', 409);
+    }
+    const endTime = getEndTime(bookingData.startTime, duration);
     const endAt = toScheduledAt(bookingData.date, endTime);
 
     const conflictCheck = await c.env.DB.prepare(`
@@ -250,7 +259,7 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
       return jsonError(c, 'Time slot unavailable', 'The selected time slot is already booked', 409);
     }
 
-    const basePrice = Number(service?.price_min || 1000);
+    const basePrice = Number(service.price_min);
     const totalAmount = basePrice;
     const bookingId = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -374,6 +383,7 @@ bookings.post('/', zValidator('json', createBookingSchema), async (c) => {
     }, 'Booking created successfully', 201);
 
   } catch (error) {
+    if (String(error).includes('core_booking_overlap')) return jsonError(c, 'Time slot unavailable', 'The selected time slot was just reserved', 409);
     console.error('Create booking error:', error);
     return jsonError(c, 'Booking failed', 'An error occurred while creating the booking', 500);
   }
@@ -597,6 +607,7 @@ bookings.put('/:id/status', validateUUID('id'), zValidator('json', updateBooking
     }, 'Booking status updated successfully');
 
   } catch (error) {
+    if (String(error).includes('core_booking_overlap')) return jsonError(c, 'Time slot unavailable', 'Another booking reserves this time', 409);
     console.error('Update booking status error:', error);
     return jsonError(c, 'Failed to update booking', 'An error occurred while updating booking status', 500);
   }

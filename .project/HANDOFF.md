@@ -89,3 +89,18 @@ confirmed the same D1 binding, `JWT_SECRET` secret binding, and all three
 payment controls disabled. The owner account then signed in through the
 in-app browser; the dashboard's 29-user count matched D1. Device verification
 and any production release decision remain separate.
+
+
+## Core guide repair candidate — 2026-09-28
+
+Implemented owner experience persistence/archival, recurring settings and dated
+availability, shared public visibility for legacy aliases, real owner stats,
+canonical booking duration and schedule checks. Migration 017 is prepared but
+not applied. Historical service IDs and booking foreign keys are preserved.
+
+Local verification: TypeScript and all 435 tests across 38 files pass;
+11 new SQLite route scenarios include security, transactional rollback,
+archive/history, schedule precedence, overlap enforcement and truthful stats.
+See `docs/execution/core-guide-repairs-20260928.md` for exact mobile contracts,
+legacy live-schema drift, selected migration preflight and release limitations.
+No remote mutation, release, provider message or device acceptance is claimed.

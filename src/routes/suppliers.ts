@@ -17,11 +17,24 @@ import {
 } from '../utils/database';
 import { jsonSuccess, jsonError, jsonPaginated, createPagination } from '../utils/response';
 import type { Env, Variables } from '../index';
+import { requireRole } from '../middleware/auth';
+import { publicIdentity, publicCompanionVisibility, isPublicGuide } from '../utils/guideVisibility';
+import { guideStats } from '../utils/guideStats';
 
 const suppliers = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // Apply rate limiting
 suppliers.use('*', createRateLimit('search'));
+
+suppliers.get('/stats', authMiddleware, requireRole('supplier', 'companion'), async c => {
+  try {
+    const data = await guideStats(c.env.DB, c.get('userId') as string);
+    if (!data) return jsonError(c, 'Guide profile not found', 'Complete your guide profile first', 404);
+    return jsonSuccess(c, data, 'Guide booking statistics; cash collection is not measured');
+  } catch {
+    return jsonError(c, 'Stats unavailable', 'Unable to retrieve guide statistics', 500);
+  }
+});
 
 /**
  * Search suppliers with advanced filtering
@@ -48,12 +61,12 @@ suppliers.get('/search', zValidator('query', supplierSearchSchema), optionalAuth
         MIN(ss.price_min) as min_price,
         MAX(ss.price_max) as max_price
       FROM supplier_profiles sp
-      LEFT JOIN supplier_services ss ON sp.user_id = ss.supplier_id AND ss.is_active = TRUE
-      WHERE COALESCE(sp.subscription_status, 'active') = 'active'
-        AND COALESCE(sp.verification_status, 'pending') != 'rejected'
+      JOIN users u ON sp.user_id=u.id
+      LEFT JOIN supplier_services ss ON sp.user_id = ss.supplier_id AND ss.is_active = TRUE AND ss.archived_at IS NULL
+      WHERE ${publicCompanionVisibility}
     `;
 
-    const queryParams: any[] = [];
+    const queryParams: any[] = [...publicIdentity.parameters];
 
     // Add filters
     if (region) {
@@ -165,27 +178,10 @@ suppliers.get('/:id', validateUUID('id'), optionalAuthMiddleware, async (c) => {
   const supplierId = c.req.param('id') as string;
   
   try {
-    // Check cache first
-    const cacheKey = `supplier:${supplierId}`;
-    const cached = await c.env.CACHE.get(cacheKey);
-    
-    if (cached) {
-      const supplierData = JSON.parse(cached);
-      
-      // Track profile view
-      const userId = c.get('userId');
-      if (userId && userId !== supplierId) {
-        await c.env.ANALYTICS_QUEUE.send({
-          eventType: 'supplier_profile_view',
-          userId,
-          properties: { supplierId, source: 'cache' },
-          timestamp: new Date().toISOString()
-        });
-      }
-      
-      return jsonSuccess(c, supplierData, 'Supplier profile retrieved successfully');
+    // Always re-evaluate eligibility. A stale cached profile must never bypass approval or last-service archival.
+    if (!await isPublicGuide(c.env.DB, supplierId)) {
+      return jsonError(c, 'Supplier not found', 'The requested supplier is unavailable', 404);
     }
-
     // Get supplier profile
     const supplier = await getSupplierProfile(supplierId, c.env.DB);
     if (!supplier) {
@@ -202,7 +198,7 @@ suppliers.get('/:id', validateUUID('id'), optionalAuthMiddleware, async (c) => {
     const servicesResult = await c.env.DB.prepare(`
       SELECT id, title, description, price_min, price_max, currency, duration_hours, created_at
       FROM supplier_services 
-      WHERE supplier_id = ? AND is_active = TRUE
+      WHERE supplier_id = ? AND is_active = TRUE AND archived_at IS NULL
       ORDER BY created_at DESC
     `).bind(supplierId).all();
 
@@ -217,16 +213,8 @@ suppliers.get('/:id', validateUUID('id'), optionalAuthMiddleware, async (c) => {
       createdAt: service.created_at
     })) || [];
 
-    // Get availability (placeholder - would be more complex in real implementation)
-    const availability = [
-      { dayOfWeek: 1, startTime: '09:00', endTime: '17:00', isAvailable: true },
-      { dayOfWeek: 2, startTime: '09:00', endTime: '17:00', isAvailable: true },
-      { dayOfWeek: 3, startTime: '09:00', endTime: '17:00', isAvailable: true },
-      { dayOfWeek: 4, startTime: '09:00', endTime: '17:00', isAvailable: true },
-      { dayOfWeek: 5, startTime: '09:00', endTime: '17:00', isAvailable: true },
-      { dayOfWeek: 6, startTime: '10:00', endTime: '16:00', isAvailable: true },
-      { dayOfWeek: 0, startTime: '10:00', endTime: '16:00', isAvailable: false }
-    ];
+    const schedule = await c.env.DB.prepare('SELECT day_of_week,start_time,end_time,is_available FROM supplier_availability WHERE supplier_id=?').bind(supplierId).all();
+    const availability = schedule.results.map((row: any) => ({ dayOfWeek: row.day_of_week, startTime: row.start_time, endTime: row.end_time, isAvailable: Boolean(row.is_available) }));
 
     // Get recent reviews (last 10)
     const reviewsResult = await c.env.DB.prepare(`
@@ -263,12 +251,10 @@ suppliers.get('/:id', validateUUID('id'), optionalAuthMiddleware, async (c) => {
       availability,
       reviews,
       memberSince: supplier.createdAt,
-      responseTime: '< 1 hour', // Placeholder
+      responseTime: null,
       languages: user.preferredLanguage
     };
 
-    // Cache for 10 minutes
-    await c.env.CACHE.put(cacheKey, JSON.stringify(supplierData), { expirationTtl: 600 });
 
     // Track profile view
     const userId = c.get('userId');
@@ -412,11 +398,12 @@ suppliers.get('/:id/services', validateUUID('id'), validatePagination(), async (
   const { page, limit } = c.get('validatedQuery');
   
   try {
+    if (!await isPublicGuide(c.env.DB, supplierId)) return jsonError(c, 'Supplier not found', 'The requested supplier is unavailable', 404);
     // Get total count
     const countResult = await c.env.DB.prepare(`
       SELECT COUNT(*) as total 
       FROM supplier_services 
-      WHERE supplier_id = ? AND is_active = TRUE
+      WHERE supplier_id = ? AND is_active = TRUE AND archived_at IS NULL
     `).bind(supplierId).first();
     
     const total = countResult?.total as number || 0;
@@ -427,7 +414,7 @@ suppliers.get('/:id/services', validateUUID('id'), validatePagination(), async (
       SELECT id, title, description, price_min, price_max, currency, 
              duration_hours, is_active, created_at, updated_at
       FROM supplier_services 
-      WHERE supplier_id = ? AND is_active = TRUE
+      WHERE supplier_id = ? AND is_active = TRUE AND archived_at IS NULL
       ORDER BY created_at DESC
       LIMIT ? OFFSET ?
     `).bind(supplierId, limit, offset).all();
