@@ -16,7 +16,7 @@ describe('Resend transport', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, options] = fetchMock.mock.calls[0];
     expect(url).toBe('https://api.resend.com/emails');
-    expect(options).toMatchObject({ method: 'POST', redirect: 'error', signal: expect.any(AbortSignal) });
+    expect(options).toMatchObject({ method: 'POST', redirect: 'manual', signal: expect.any(AbortSignal) });
     expect(options.headers.Authorization).toBe('Bearer test-resend-key');
     expect(JSON.parse(options.body)).toMatchObject({ from: '"Tirak" <noreply@example.test>', to: ['owner@example.test'], reply_to: 'support@example.test', subject: 'Confirm email', text: 'Your code is 123456.', html: expect.stringContaining('Your code is 123456.') });
     expect(vi.getTimerCount()).toBe(0);
@@ -32,7 +32,7 @@ describe('Resend transport', () => {
     await send({ replyTo: undefined }, html);
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ html, text: 'Reset (https://example.test/auth#token=sample)', reply_to: config.fromEmail });
   });
-  it.each([301, 400, 401, 403, 429, 500])('reports HTTP %s as rejection without raw provider details', async (status) => {
+  it.each([301, 302, 307, 308, 400, 401, 403, 429, 500])('reports HTTP %s as rejection without raw provider details', async (status) => {
     vi.useFakeTimers();
     const fetchMock = vi.fn().mockResolvedValue(new Response('secret body owner@example.test', { status }));
     vi.stubGlobal('fetch', fetchMock);

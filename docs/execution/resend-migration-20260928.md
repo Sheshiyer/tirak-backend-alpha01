@@ -36,3 +36,11 @@ Resend removes the dependency on enabling Cloudflare Email Sending. Retaining th
 - [Domain verification](https://resend.com/docs/dashboard/domains/introduction)
 - [Cloudflare DNS setup](https://resend.com/docs/knowledge-base/cloudflare)
 - [API key permissions](https://resend.com/docs/dashboard/api-keys/introduction)
+
+## Authorized release and runtime correction
+
+The owner approved deployment of the integrated candidate including selected migrations 017/019 and the Resend provider cutover. Commit `ecc0841` deployed as Worker version `86e500b7-f578-4ddc-91f1-71cc533b2c10`, deployment `e6b5064a-fbfb-454a-8894-1874e159404d` at 100%. Target remains `tirak-backend` with D1 `60443346-c480-4975-962e-bd4daf4a37a8`. Live readback retained both secrets and disabled payment flags. Health, reset HTML/CSS/JS returned 200; unauthenticated user/admin routes returned 401; admin-origin CORS preflight returned 204 with the correct origin.
+
+One authorized QA send was attempted only to `mrhigh3r@gmail.com` through an ephemeral remote preview importing the shared adapter. The adapter reported unknown acceptance. Follow-up read-only runtime diagnostics isolated a TypeError for unsupported `redirect: error` under compatibility date 2024-09-23. The adapter now uses `manual`, returning redirects for explicit rejection without forwarding credentials. Expanded unit cases cover 301/302/307/308. Full suite: 44 files / 507 tests; typecheck and static release gate pass. A separate workerd runtime probe uses the real bundled adapter with all outbound traffic handled synthetically, verifying acceptance and redirect rejection under the retained compatibility date.
+
+After the redirect correction in the read-only diagnostic preview, Resend GET /emails returned HTTP 400 `validation_error`, `API key is invalid`. The existing secret binding is present but its credential is rejected. No key value was retrieved or printed. The owner was asked to replace it securely through Wrangler. No additional message was sent, and provider acceptance/inbox delivery are not claimed. Missing-account forgot-password responses are not used as mail evidence. The diagnostic preview is not a production endpoint and is stopped when verification finishes.

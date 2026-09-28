@@ -477,7 +477,9 @@ async function sendResendEmail(
     result = await Promise.race([
       (async () => {
         const response = await fetch('https://api.resend.com/emails', {
-          method: 'POST', redirect: 'error', signal: controller.signal,
+          // The retained Workers compatibility runtime rejects redirect: 'error'.
+          // Manual returns 3xx for rejection below without forwarding credentials.
+          method: 'POST', redirect: 'manual', signal: controller.signal,
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey!.trim()}` },
           body: JSON.stringify({
             from: config.fromName ? `${JSON.stringify(config.fromName)} <${config.fromEmail}>` : config.fromEmail,
