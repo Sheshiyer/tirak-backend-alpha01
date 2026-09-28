@@ -192,6 +192,7 @@ describe('Core guide management against migrated SQLite', () => {
     expect((await request(`/companions/${guide}/experiences`, 'POST', { ...payload, durationMinutes: 1440 }, guide)).status).toBe(400);
     const created = await request(`/companions/${guide}/experiences`, 'POST', { ...payload, durationMinutes: 1439 }, guide);
     expect(created.status).toBe(201);
+    expect((await request(`/suppliers/${guide}/services`, 'POST', { title: 'Legacy long service', priceMin: 500, priceMax: 500, currency: 'THB', durationHours: 24 }, guide)).status).toBe(400);
     approve();
     await weekly([{ dayOfWeek: 1, startTime: '00:00', endTime: '23:59', isAvailable: true }]);
     expect((await request('/bookings', 'POST', { companionId: guide, serviceId: created.body.data.experienceId,
