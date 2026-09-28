@@ -1,4 +1,4 @@
--- Additive single-use authority for existing KV reset and admin invitation tokens.
+-- Additive single-use authority for KV reset and invitation tokens carrying an explicit expiry.
 -- Store only SHA-256 token digests. No raw token, recipient, or message content.
 CREATE TABLE IF NOT EXISTS password_reset_consumptions (
   token_hash TEXT PRIMARY KEY,

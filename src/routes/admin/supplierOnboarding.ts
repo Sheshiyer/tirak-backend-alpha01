@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { validatePagination } from '../../middleware/validation';
 import { jsonPaginated, jsonError, createPagination, jsonSuccess } from '../../utils/response';
-import { createEmailConfig, sendEmail } from '../../utils/communication';
+import { createEmailConfig, sendEmail, renderBasicEmail, recordEmailOutcome } from '../../utils/communication';
 import { hashPassword } from '../../utils/auth';
 import type { Env, Variables } from '../../index';
 
@@ -195,7 +195,7 @@ adminSupplierOnboarding.post('/:id/approve', async (c) => {
     const resetToken = crypto.randomUUID();
     await c.env.CACHE.put(
       `reset:${resetToken}`,
-      JSON.stringify({ email: app.email, userId, purpose: 'supplier-onboarding' }),
+      JSON.stringify({ email: app.email, userId, purpose: 'supplier-onboarding', expiresAt: new Date(Date.now() + 86400_000).toISOString() }),
       { expirationTtl: 86400 }
     );
 
@@ -204,8 +204,11 @@ adminSupplierOnboarding.post('/:id/approve', async (c) => {
     try {
       const emailConfig = createEmailConfig(c.env);
       const subject = 'Your Tirak supplier account has been approved';
-      const body = `Welcome to Tirak!\n\nYour application for ${app.business_name} has been approved.\n\nTemporary password (shown once): ${tempPassword}\n\nUse this link to set your permanent password (expires in 24 hours):\nhttps://tirak.app/auth/new?token=${encodeURIComponent(resetToken)}\n\nOr open in the app: tirak://auth/new?token=${encodeURIComponent(resetToken)}`;
-      const delivery = await sendEmail(emailConfig, app.email, subject, body);
+      const body = `Welcome to Tirak!\n\nYour application for ${app.business_name} has been approved.\n\nTemporary password (shown once): ${tempPassword}\n\nUse this link to set your permanent password (expires in 24 hours):\nhttps://tirak-backend.tirak-court.workers.dev/auth/new#token=${encodeURIComponent(resetToken)}\n\nOr open in the app: tirak://auth/new?token=${encodeURIComponent(resetToken)}`;
+      const html = renderBasicEmail(subject, body, { label: 'Set password in Tirak', url: `tirak://auth/new?token=${encodeURIComponent(resetToken)}` })
+        .replace('</main>', `<p>Or <a href="https://tirak-backend.tirak-court.workers.dev/auth/new#token=${encodeURIComponent(resetToken)}">set your password securely in your browser</a>.</p></main>`);
+      const delivery = await sendEmail(emailConfig, app.email, subject, html);
+      recordEmailOutcome('supplier_invite', delivery, crypto.randomUUID());
       emailSent = delivery.status === 'sent' || delivery.status === 'delivered';
     } catch {
       console.warn('Failed to send supplier onboarding credentials email; credentials remain available in the admin response.');

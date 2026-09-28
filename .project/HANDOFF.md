@@ -112,6 +112,12 @@ page, and atomic single-use reset consumption. Authenticated push registration
 now reassigns token ownership atomically; logout removal is owner-scoped.
 Migration `019_password_reset_consumptions.sql` is additive and local-only;
 apply it explicitly to the retained Core target before any authorized deploy.
-TypeScript and all 449 tests pass. See
+TypeScript and all 458 tests pass. See
 `docs/execution/core-comms-repair-20260928.md` for contracts and remaining live,
 inbox, signed-binary and physical-device gates. No live changes occurred.
+
+Review correction: new supplier invitations now include explicit 24-hour expiry
+and use the Core reset page. Historical invite KV records without an expiry are
+rejected; a fresh forgot-password request is the supported recovery path.
+Verification timeout remains pending/unavailable and supports a received valid
+code under unchanged attempt/expiry limits. Definitive failures stay unusable.

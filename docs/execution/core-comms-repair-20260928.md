@@ -19,6 +19,9 @@ Forgot-password inspects adapter delivery status while retaining a uniform publi
 response for existing/missing accounts and internal failures. Existing auth rate
 limits remain. A definite rejected send removes its token. Email verification
 keeps its cooldown, attempt and expiry rules; failed delivery is unavailable.
+A timed-out challenge stays pending: public status is unavailable, but possession
+of a correct code can complete verification within the same expiry/attempt caps.
+Definite failures cannot verify. A late send outcome cannot revive consumed codes.
 
 Reset mail contains the native link and a visible browser alternative on the
 selected Core API host. Plain-text mail retains both URLs. The URL host is pinned
@@ -28,8 +31,11 @@ Its page must ship with this backend release. Marketing hosting is not a
 supported recovery destination.
 
 Additive migration **019_password_reset_consumptions.sql** is required before
-this handler is deployed. Existing KV tokens, including admin invitations,
-remain compatible. The reset transaction conditionally updates the password and
+this handler is deployed. Existing KV reset tokens with a provable expiry remain compatible. Newly issued
+admin invitations now include their 24-hour expiry and use the supported Core
+reset page. Older invitation records omit expiry and are intentionally rejected;
+their owners can request a fresh forgot-password link. No unbounded legacy expiry
+is inferred. The reset transaction conditionally updates the password and
 inserts the SHA-256 token digest in D1; stale KV reads and concurrent consumers
 cannot reset twice. Pending invitations activate in the same update; other
 statuses are preserved. Queue or KV cleanup failures cannot turn an already
@@ -56,7 +62,7 @@ polling, native entitlement signing, and physical device tests remain separate.
 
 - Frozen existing `bun.lock` installed without source or lock changes.
 - TypeScript passed.
-- All 449 tests in 42 files passed, including actual SQLite execution of the
+- All 458 tests in 42 files passed, including actual SQLite execution of the
   production atomic reset/push SQL, concurrent consumers, stale KV replay,
   rollback, ownership switching, provider rejection/timeout, verification
   cooldown/single use, and browser recovery tests.

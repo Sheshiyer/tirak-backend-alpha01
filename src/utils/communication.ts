@@ -50,8 +50,9 @@ export interface DeliveryStatus {
 }
 
 export type EmailFailureCode = 'E_SENDER_NOT_VERIFIED' | 'E_SENDER_DOMAIN_NOT_AVAILABLE'
-  | 'E_RECIPIENT_SUPPRESSED' | 'EMAIL_CONFIGURATION' | 'EMAIL_TIMEOUT' | 'EMAIL_PROVIDER_REJECTED';
-const EMAIL_PROVIDER_CODES = new Set(['E_SENDER_NOT_VERIFIED', 'E_SENDER_DOMAIN_NOT_AVAILABLE', 'E_RECIPIENT_SUPPRESSED']);
+  | 'E_RECIPIENT_SUPPRESSED' | 'E_RECIPIENT_NOT_ALLOWED' | 'E_RATE_LIMIT_EXCEEDED' | 'E_DAILY_LIMIT_EXCEEDED'
+  | 'E_DELIVERY_FAILED' | 'E_INTERNAL_SERVER_ERROR' | 'EMAIL_CONFIGURATION' | 'EMAIL_TIMEOUT' | 'EMAIL_PROVIDER_REJECTED';
+const EMAIL_PROVIDER_CODES = new Set(['E_SENDER_NOT_VERIFIED', 'E_SENDER_DOMAIN_NOT_AVAILABLE', 'E_RECIPIENT_SUPPRESSED', 'E_RECIPIENT_NOT_ALLOWED', 'E_RATE_LIMIT_EXCEEDED', 'E_DAILY_LIMIT_EXCEEDED', 'E_DELIVERY_FAILED', 'E_INTERNAL_SERVER_ERROR']);
 
 function safeEmailFailure(error: unknown): { error: string; errorCode: EmailFailureCode; providerRequestId?: string } {
   const candidate = error as { code?: unknown; requestId?: unknown; message?: unknown } | null;
@@ -67,7 +68,7 @@ function safeEmailFailure(error: unknown): { error: string; errorCode: EmailFail
 }
 
 /** Structured operational receipt: no recipient, token, code, content, or raw exception. */
-export function recordEmailOutcome(purpose: 'password_reset' | 'email_verification', delivery: DeliveryStatus, requestId: string): void {
+export function recordEmailOutcome(purpose: 'password_reset' | 'email_verification' | 'supplier_invite', delivery: DeliveryStatus, requestId: string): void {
   console.info(JSON.stringify({ event: 'email_delivery', purpose, requestId, provider: delivery.provider,
     outcome: delivery.errorCode === 'EMAIL_TIMEOUT' ? 'unknown' : delivery.status === 'sent' || delivery.status === 'delivered' ? 'accepted' : 'failed',
     errorCode: delivery.errorCode, providerRequestId: delivery.providerRequestId }));

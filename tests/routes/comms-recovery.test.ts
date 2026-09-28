@@ -64,6 +64,19 @@ describe('password recovery provider and single-use contract', () => {
     expect(cache.size).toBe(1);
     expect(JSON.stringify(vi.mocked(console.info).mock.calls)).toContain('unknown');
   });
+  it('requires recovery for a legacy invite with no provable expiry', async () => {
+    const token = crypto.randomUUID();
+    cache.set(`reset:${token}`, JSON.stringify({ email: 'owner@example.test', userId: 'owner', purpose: 'supplier-onboarding' }));
+    expect((await post('reset-password', { token, newPassword: 'ChangedPassword123!' })).status).toBe(400);
+    expect(cache.has(`reset:${token}`)).toBe(false);
+  });
+  it('rolls back password mutation if consumption recording fails', async () => {
+    const token = crypto.randomUUID();
+    cache.set(`reset:${token}`, JSON.stringify({ userId: 'owner', expiresAt: new Date(Date.now() + 3600000).toISOString() }));
+    harness.sqlite.exec("CREATE TRIGGER reject_consumption BEFORE INSERT ON password_reset_consumptions BEGIN SELECT RAISE(ABORT, 'test failure'); END");
+    expect((await post('reset-password', { token, newPassword: 'ChangedPassword123!' })).status).toBe(500);
+    expect((harness.sqlite.prepare('SELECT password_hash FROM users').get() as any).password_hash).toBe('old-hash');
+  });
   it('denies expired and malformed expiries without changing password', async () => {
     for (const expiry of [new Date(Date.now() - 1).toISOString(), 'invalid']) {
       const token = crypto.randomUUID(); cache.set(`reset:${token}`, JSON.stringify({ userId: 'owner', expiresAt: expiry }));
@@ -71,7 +84,7 @@ describe('password recovery provider and single-use contract', () => {
     }
     expect((harness.sqlite.prepare('SELECT password_hash FROM users').get() as any).password_hash).toBe('old-hash');
   });
-  it('allows only one simultaneous consumer of a legacy invite token', async () => {
+  it('allows only one simultaneous consumer of an invite token with explicit expiry', async () => {
     const token = crypto.randomUUID(); cache.set(`reset:${token}`, JSON.stringify({ userId: 'owner', expiresAt: new Date(Date.now() + 3600000).toISOString() }));
     const results = await Promise.all(['FirstPassword123!', 'SecondPassword123!'].map(newPassword => post('reset-password', { token, newPassword })));
     expect(results.map(result => result.status).sort()).toEqual([200, 400]);

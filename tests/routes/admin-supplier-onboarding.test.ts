@@ -132,6 +132,8 @@ describe('Admin Supplier Onboarding Review Routes', () => {
     expect(kvPuts.some((p) => p.key.startsWith('reset:'))).toBe(true);
     const invitePayload = JSON.parse(kvPuts.find((p) => p.key.startsWith('reset:'))!.value);
     expect(invitePayload.userId).toBe(body.data.userId);
+    expect(Date.parse(invitePayload.expiresAt)).toBeGreaterThan(Date.now() + 86300_000);
+    expect(Date.parse(invitePayload.expiresAt)).toBeLessThanOrEqual(Date.now() + 86400_000);
 
     const appUpdate = executed.find(
       (e) => e.query.includes('UPDATE supplier_onboarding_applications') && e.query.includes("'approved'")
@@ -165,6 +167,9 @@ describe('Admin Supplier Onboarding Review Routes', () => {
     const body = await res.json();
     expect(body.data.emailSent).toBe(status === 202);
     expect(body.data.tempPassword).toHaveLength(12);
+    const mailPayload = JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string);
+    expect(JSON.stringify(mailPayload.content)).toContain('https://tirak-backend.tirak-court.workers.dev/auth/new#token=');
+    expect(JSON.stringify(mailPayload.content)).not.toContain('https://tirak.app/auth/new');
     const notification = executed.find((entry) => entry.query.includes('INSERT INTO notifications'));
     expect(notification!.params[2]).toContain(status === 202 ? 'Check your email' : 'Contact support');
   });

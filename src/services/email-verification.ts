@@ -45,18 +45,20 @@ export async function requestEmailVerification(
   }
 
   let sent = false;
+  let uncertain = false;
   try {
     const delivery = await sendEmail(createEmailConfig(env), user.email, 'Confirm your Tirak email',
       renderBasicEmail('Confirm your email', `Your Tirak verification code is ${code}. It expires in 10 minutes. If you did not request this, you can ignore this email.`));
     recordEmailOutcome('email_verification', delivery, crypto.randomUUID());
+    uncertain = delivery.errorCode === 'EMAIL_TIMEOUT';
     sent = delivery.status === 'sent' || delivery.status === 'delivered';
   } catch {
     recordEmailOutcome('email_verification', { id: '', status: 'failed', timestamp: new Date(), errorCode: 'EMAIL_CONFIGURATION' }, crypto.randomUUID());
     // Provider configuration and delivery failures must not masquerade as sent mail.
     sent = false;
   }
-  await env.DB.prepare(`UPDATE email_verification_challenges SET delivery_status = ? WHERE user_id = ? AND code_hash = ?`)
-    .bind(sent ? 'sent' : 'failed', user.id, codeHash).run();
+  await env.DB.prepare(`UPDATE email_verification_challenges SET delivery_status = ? WHERE user_id = ? AND code_hash = ? AND delivery_status = 'pending'`)
+    .bind(sent ? 'sent' : uncertain ? 'pending' : 'failed', user.id, codeHash).run();
   return { deliveryStatus: sent ? 'sent' : 'unavailable', retryAfterSeconds: RESEND_INTERVAL_MS / 1000 };
 }
 
@@ -68,13 +70,13 @@ export async function verifyEmailCode(
     env.DB.prepare(`UPDATE users SET email_verified = TRUE, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND email = ? AND EXISTS (
         SELECT 1 FROM email_verification_challenges WHERE user_id = ? AND email = ?
-          AND code_hash = ? AND delivery_status = 'sent' AND expires_at > ? AND attempts < ?
+          AND code_hash = ? AND delivery_status IN ('sent', 'pending') AND expires_at > ? AND attempts < ?
       )`).bind(user.id, user.email, user.id, user.email, codeHash, now, MAX_ATTEMPTS),
     env.DB.prepare(`UPDATE email_verification_challenges SET delivery_status = 'consumed'
-      WHERE user_id = ? AND email = ? AND code_hash = ? AND delivery_status = 'sent'
+      WHERE user_id = ? AND email = ? AND code_hash = ? AND delivery_status IN ('sent', 'pending')
         AND expires_at > ? AND attempts < ?`).bind(user.id, user.email, codeHash, now, MAX_ATTEMPTS),
     env.DB.prepare(`UPDATE email_verification_challenges SET attempts = MIN(attempts + 1, ?)
-      WHERE user_id = ? AND delivery_status = 'sent' AND expires_at > ? AND code_hash != ?`)
+      WHERE user_id = ? AND delivery_status IN ('sent', 'pending') AND expires_at > ? AND code_hash != ?`)
       .bind(MAX_ATTEMPTS, user.id, now, codeHash),
   ]);
   return result[0]?.meta.changes === 1 && result[1]?.meta.changes === 1;

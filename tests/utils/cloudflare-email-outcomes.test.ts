@@ -9,7 +9,7 @@ describe('Cloudflare email acceptance and safe failures', () => {
       .toMatchObject({ status: 'sent', id: 'accepted-id', provider: 'cloudflare' });
     expect(send.mock.calls[0][0]).toMatchObject({ to: 'owner@example.test', from: { email: 'noreply@tirak.app' }, subject: 'Subject', text: 'Body' });
   });
-  it.each(['E_SENDER_NOT_VERIFIED', 'E_SENDER_DOMAIN_NOT_AVAILABLE', 'E_RECIPIENT_SUPPRESSED'])('retains only safe provider code %s and request id', async code => {
+  it.each(['E_SENDER_NOT_VERIFIED', 'E_SENDER_DOMAIN_NOT_AVAILABLE', 'E_RECIPIENT_SUPPRESSED', 'E_RECIPIENT_NOT_ALLOWED', 'E_RATE_LIMIT_EXCEEDED', 'E_DAILY_LIMIT_EXCEEDED', 'E_DELIVERY_FAILED', 'E_INTERNAL_SERVER_ERROR'])('retains only safe provider code %s and request id', async code => {
     const send = vi.fn().mockRejectedValue({ code, message: 'owner@example.test secret reset token', requestId: 'aaaa1111-bbbb2222' });
     const result = await sendEmail({ provider: 'cloudflare', env: { EMAIL: { send } }, fromEmail: 'noreply@tirak.app' }, 'owner@example.test', 'Subject', 'private');
     expect(result).toMatchObject({ status: 'failed', errorCode: code, providerRequestId: 'aaaa1111-bbbb2222' });
