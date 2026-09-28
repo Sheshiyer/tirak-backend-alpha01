@@ -29,7 +29,7 @@ describe('password recovery provider and single-use contract', () => {
   });
   afterEach(() => { harness.sqlite.close(); vi.restoreAllMocks(); vi.useRealTimers(); });
   it('connects request, provider payload, native/browser links, password update and stale-KV replay denial', async () => {
-    const response = await post('forgot-password', { identifier: 'owner@example.test' });
+    const response = await post('forgot-password', { identifier: '  Owner@Example.Test  ' });
     expect(response.status).toBe(200);
     const email = env.EMAIL.send.mock.calls[0][0];
     const token = email.html.match(/tirak:\/\/auth\/new\?token=([^"<]+)/)[1];

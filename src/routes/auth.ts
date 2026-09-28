@@ -404,8 +404,10 @@ auth.post('/forgot-password', zValidator('json', passwordResetRequestSchema), as
   
   try {
     // Find user by email or phone
-    const user = await getUserByEmail(identifier, c.env.DB) || 
-                 await getUserByPhone(identifier, c.env.DB);
+    const normalizedIdentifier = identifier.trim();
+    const user = normalizedIdentifier.includes('@')
+      ? await getUserByEmail(normalizedIdentifier.toLowerCase(), c.env.DB)
+      : await getUserByPhone(normalizePhone(normalizedIdentifier), c.env.DB);
     
     if (!user) {
       // Don't reveal if user exists or not
