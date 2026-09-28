@@ -130,3 +130,15 @@ uncertainty; full suite passes 504 tests. Typecheck and Worker dry-run pass.
 See `docs/execution/resend-migration-20260928.md` for activation prerequisites.
 Provider selection remains Cloudflare. No DNS, secret, account, deployment or
 email send occurred. Resend workspace/domain setup and inbox acceptance remain open.
+
+## Resend live release — supersedes preparation status
+
+User approved the integrated Core release. Migrations 017/019 are applied after
+a fresh export and successful restore rehearsal. Corrected source 31e1cbf is
+live as version ee8b5743-8907-4fd2-8a2e-67f0aed6344c at 100%, with Resend
+selected and payments disabled. All 507 tests, typecheck, static release gate,
+workerd acceptance/redirect checks and live HTTP smoke pass. The existing
+RESEND_API_KEY secret is rejected by Resend as invalid. Await secure owner
+replacement, then test only mrhigh3r@gmail.com. No provider acceptance or inbox
+delivery is claimed; do not use missing-account recovery as mail proof.
+See docs/execution/resend-migration-20260928.md for provenance and limitations.
