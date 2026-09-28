@@ -104,3 +104,14 @@ archive/history, schedule precedence, overlap enforcement and truthful stats.
 See `docs/execution/core-guide-repairs-20260928.md` for exact mobile contracts,
 legacy live-schema drift, selected migration preflight and release limitations.
 No remote mutation, release, provider message or device acceptance is claimed.
+## Core communication repair candidate — 2026-09-28
+
+Local email/reset/push repair preserves the selected Cloudflare provider, adds
+sanitized delivery outcomes, uniform recovery responses, a secure browser reset
+page, and atomic single-use reset consumption. Authenticated push registration
+now reassigns token ownership atomically; logout removal is owner-scoped.
+Migration `019_password_reset_consumptions.sql` is additive and local-only;
+apply it explicitly to the retained Core target before any authorized deploy.
+TypeScript and all 449 tests pass. See
+`docs/execution/core-comms-repair-20260928.md` for contracts and remaining live,
+inbox, signed-binary and physical-device gates. No live changes occurred.

@@ -166,6 +166,8 @@ describe('Auth Routes', () => {
       }),
     });
 
+    testEnv.DB.batch = async (statements: any[]) => Promise.all(statements.map(statement => statement.run()));
+
     const request = createMockRequest('http://localhost/auth/reset-password', {
       method: 'POST',
       body: JSON.stringify({ token: 'invite-token-1', newPassword: 'NewSecurePass123!' }),
@@ -178,10 +180,10 @@ describe('Auth Routes', () => {
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
     const activation = executed.find(
-      (e) => e.query.includes("SET status = 'active'") && e.query.includes("status = 'pending'")
+      (e) => e.query.includes("CASE WHEN status = 'pending' THEN 'active'")
     );
     expect(activation).toBeDefined();
-    expect(activation!.params[0]).toBe('pending-user-1');
+    expect(activation!.params[1]).toBe('pending-user-1');
   });
 
   it('logs out idempotently', async () => {

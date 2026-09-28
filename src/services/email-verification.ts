@@ -1,5 +1,5 @@
 import type { Env } from '../index';
-import { createEmailConfig, renderBasicEmail, sendEmail } from '../utils/communication';
+import { createEmailConfig, renderBasicEmail, sendEmail, recordEmailOutcome } from '../utils/communication';
 
 const CODE_LIFETIME_MS = 10 * 60 * 1000;
 const RESEND_INTERVAL_MS = 60 * 1000;
@@ -48,8 +48,10 @@ export async function requestEmailVerification(
   try {
     const delivery = await sendEmail(createEmailConfig(env), user.email, 'Confirm your Tirak email',
       renderBasicEmail('Confirm your email', `Your Tirak verification code is ${code}. It expires in 10 minutes. If you did not request this, you can ignore this email.`));
+    recordEmailOutcome('email_verification', delivery, crypto.randomUUID());
     sent = delivery.status === 'sent' || delivery.status === 'delivered';
   } catch {
+    recordEmailOutcome('email_verification', { id: '', status: 'failed', timestamp: new Date(), errorCode: 'EMAIL_CONFIGURATION' }, crypto.randomUUID());
     // Provider configuration and delivery failures must not masquerade as sent mail.
     sent = false;
   }

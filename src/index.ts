@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { jwt } from 'hono/jwt';
 import { authRoutes } from './routes/auth';
+import { passwordResetPageRoutes } from './routes/passwordResetPage';
 import { userRoutes } from './routes/users';
 import { supplierRoutes } from './routes/suppliers';
 import { supplierOnboardingRoutes } from './routes/supplierOnboarding';
@@ -119,6 +120,7 @@ app.get('/health', (c) => {
 
 // Auth routes (no JWT required)
 app.route('/api/auth', authRoutes);
+app.route('/auth', passwordResetPageRoutes);
 
 // Public routes (no authentication required)
 app.route('/api/public', publicRoutes);

@@ -45,6 +45,32 @@ export interface DeliveryStatus {
   timestamp: Date;
   error?: string;
   provider?: string;
+  errorCode?: EmailFailureCode;
+  providerRequestId?: string;
+}
+
+export type EmailFailureCode = 'E_SENDER_NOT_VERIFIED' | 'E_SENDER_DOMAIN_NOT_AVAILABLE'
+  | 'E_RECIPIENT_SUPPRESSED' | 'EMAIL_CONFIGURATION' | 'EMAIL_TIMEOUT' | 'EMAIL_PROVIDER_REJECTED';
+const EMAIL_PROVIDER_CODES = new Set(['E_SENDER_NOT_VERIFIED', 'E_SENDER_DOMAIN_NOT_AVAILABLE', 'E_RECIPIENT_SUPPRESSED']);
+
+function safeEmailFailure(error: unknown): { error: string; errorCode: EmailFailureCode; providerRequestId?: string } {
+  const candidate = error as { code?: unknown; requestId?: unknown; message?: unknown } | null;
+  const code = typeof candidate?.code === 'string' && EMAIL_PROVIDER_CODES.has(candidate.code)
+    ? candidate.code as EmailFailureCode : candidate?.code === 'EMAIL_TIMEOUT' ? 'EMAIL_TIMEOUT' : 'EMAIL_PROVIDER_REJECTED';
+  // Only our own fixed adapter messages may survive. Arbitrary provider messages can include PII.
+  const message = typeof candidate?.message === 'string' ? candidate.message : '';
+  const safe = /^(SendGrid email request (failed|timed out|rejected with status [0-9]{3})|Missing (Cloudflare Email Service binding or sender|SendGrid configuration|MailChannels configuration)|Invalid SendGrid email address configuration|AWS SES email sending is not implemented)$/.test(message);
+  return { error: safe ? message : message === 'AWS SES email delivery is not implemented. Configure a supported email provider.' ? 'AWS SES email delivery is not implemented' : 'Email provider rejected the request',
+    errorCode: message.startsWith('Missing ') || message.startsWith('Invalid SendGrid') ? 'EMAIL_CONFIGURATION' : code,
+    ...(typeof candidate?.requestId === 'string' && /^[a-fA-F0-9-]{16,64}$/.test(candidate.requestId)
+      ? { providerRequestId: candidate.requestId } : {}) };
+}
+
+/** Structured operational receipt: no recipient, token, code, content, or raw exception. */
+export function recordEmailOutcome(purpose: 'password_reset' | 'email_verification', delivery: DeliveryStatus, requestId: string): void {
+  console.info(JSON.stringify({ event: 'email_delivery', purpose, requestId, provider: delivery.provider,
+    outcome: delivery.errorCode === 'EMAIL_TIMEOUT' ? 'unknown' : delivery.status === 'sent' || delivery.status === 'delivered' ? 'accepted' : 'failed',
+    errorCode: delivery.errorCode, providerRequestId: delivery.providerRequestId }));
 }
 
 const htmlEscape = (value: string): string =>
@@ -208,7 +234,7 @@ export async function sendEmail(
       id: deliveryId,
       status: 'failed',
       timestamp: new Date(),
-      error: error instanceof Error ? error.message : 'Unknown error',
+      ...safeEmailFailure(error),
       provider: config.provider
     };
   }
@@ -225,14 +251,23 @@ async function sendCloudflareEmail(
     throw new Error('Missing Cloudflare Email Service binding or sender');
   }
 
-  const response = await config.env.EMAIL.send({
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const sending = config.env.EMAIL.send({
     to,
     from: { email: config.fromEmail, name: config.fromName || 'Tirak' },
     replyTo: config.replyTo || config.fromEmail,
     subject,
     html: content.includes('<html') || content.includes('<p') ? content : renderBasicEmail(subject, content),
-    text: content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || subject
+    text: content.replace(/<a\b[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '$2 ($1)').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || subject
   });
+
+  // The binding has no AbortSignal. Bound our wait; timeout is unknown delivery, never success.
+  let response: any;
+  try {
+    response = await Promise.race([sending, new Promise((_, reject) => {
+      timeout = setTimeout(() => reject({ code: 'EMAIL_TIMEOUT' }), 10_000);
+    })]);
+  } finally { if (timeout) clearTimeout(timeout); }
 
   return {
     id: response?.messageId || deliveryId,
@@ -271,7 +306,7 @@ async function sendMailChannelsEmail(
         },
         {
           type: 'text/plain',
-          value: content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || subject,
+          value: content.replace(/<a\b[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '$2 ($1)').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || subject,
         },
       ],
     }),
@@ -363,7 +398,7 @@ async function sendSendGridEmail(
   const isHtml = /<[a-z][^>]*>/i.test(content);
   const html = isHtml ? content : renderBasicEmail(subject, content);
   const plainText = isHtml
-    ? content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || subject
+    ? content.replace(/<a\b[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '$2 ($1)').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || subject
     : content || subject;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);

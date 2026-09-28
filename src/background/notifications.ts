@@ -166,6 +166,7 @@ async function sendPushNotification(job: NotificationJob, env: Env): Promise<Not
 
     const pushResponse = await sendExpoPushNotification({
       tokens: pushTokens,
+      userId: job.userId,
       title: job.title,
       body: job.message,
       data: job.data || {}
@@ -393,7 +394,7 @@ async function getUserPushTokens(userId: string, env: Env): Promise<string[]> {
     }
   }
   
-  return tokens;
+  return [...new Set(tokens)];
 }
 
 async function getUserEmail(userId: string, env: Env): Promise<string | null> {
@@ -414,7 +415,7 @@ async function getUserPhone(userId: string, env: Env): Promise<string | null> {
 
 // External service integrations
 
-async function sendExpoPushNotification(payload: any, env: Env): Promise<{ messageId: string }> {
+export async function sendExpoPushNotification(payload: any, env: Env): Promise<{ messageId: string }> {
   const messages = payload.tokens.map((to: string) => ({
     to,
     sound: 'default',
@@ -438,13 +439,21 @@ async function sendExpoPushNotification(payload: any, env: Env): Promise<{ messa
   }
 
   const result = await response.json() as any;
-  const firstTicket = Array.isArray(result?.data) ? result.data[0] : result?.data;
-
-  if (firstTicket?.status === 'error') {
-    throw new Error(firstTicket?.message || 'Expo push ticket returned an error');
+  const tickets = Array.isArray(result?.data) ? result.data : [result?.data];
+  // Inspect every ticket: a successful first installation cannot mask failures elsewhere.
+  for (let index = 0; index < tickets.length; index += 1) {
+    if (tickets[index]?.details?.error === 'DeviceNotRegistered' && payload.tokens[index] && payload.userId) {
+      await env.DB.prepare(`UPDATE user_devices SET push_tokens = (
+        SELECT json_group_array(value) FROM json_each(CASE WHEN json_valid(push_tokens) THEN push_tokens ELSE '[]' END) WHERE value != ?
+      ) WHERE user_id = ?`).bind(payload.tokens[index], payload.userId).run();
+    }
   }
+  if (tickets.length !== messages.length || tickets.some((ticket: any) => ticket?.status !== 'ok' || typeof ticket.id !== 'string')) {
+    throw new Error('Expo push tickets were not all accepted');
+  }
+  // Ticket acceptance is not a delivery receipt. Device receipt verification remains separate.
+  return { messageId: tickets[0].id };
 
-  return { messageId: firstTicket?.id || `expo_${crypto.randomUUID()}` };
 }
 
 async function sendEmail(payload: any, env: Env): Promise<{ messageId: string }> {
