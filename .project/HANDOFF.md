@@ -142,3 +142,15 @@ RESEND_API_KEY secret is rejected by Resend as invalid. Await secure owner
 replacement, then test only mrhigh3r@gmail.com. No provider acceptance or inbox
 delivery is claimed; do not use missing-account recovery as mail proof.
 See docs/execution/resend-migration-20260928.md for provenance and limitations.
+
+## Credential resolution — 2026-09-28
+
+Owner authorized the Tirak-labeled Resend key from the Claude environment. It was
+installed securely as RESEND_API_KEY without printing its value. Secret update
+activated version ec46c7ab-b96a-4ba2-a907-53849c0f50dc at 100%, retaining the same
+source, D1, Resend configuration and disabled payments. The real shared adapter
+with the inherited Worker secret sent one QA email to mrhigh3r@gmail.com. Resend
+accepted message 01a0e97b-7c8f-7619-a59b-7d4019112a19 and its exact-message GET
+returned last_event=delivered with the recipient verified. The preview was stopped.
+The invalid-key blocker is resolved. Human inbox confirmation and real invitation/
+password-reset completion remain separate from provider-reported delivery.

@@ -46,3 +46,15 @@ One authorized QA send was attempted only to `mrhigh3r@gmail.com` through an eph
 After the redirect correction in the read-only diagnostic preview, Resend GET /emails returned HTTP 400 `validation_error`, `API key is invalid`. The existing secret binding is present but its credential is rejected. No key value was retrieved or printed. The owner was asked to replace it securely through Wrangler. No additional message was sent, and provider acceptance/inbox delivery are not claimed. Missing-account forgot-password responses are not used as mail evidence. The diagnostic preview is not a production endpoint and is stopped when verification finishes.
 
 Final corrected source `31e1cbf` deployed as version `ee8b5743-8907-4fd2-8a2e-67f0aed6344c`, deployment `2aa91839-8b48-4044-a0d6-5132d0529b78` at 100%. Final live smoke and binding checks pass. Resend credential remains invalid; owner secure replacement is pending. The diagnostic preview has been stopped. See outer workspace `.planning/reviews/2026-09-28-mobile-issues/RESEND-RELEASE.md` and `resend-release-evidence.json`.
+
+## Credential resolution — 2026-09-28
+
+Owner authorized the Tirak-labeled Resend key from the Claude environment. It was
+installed securely as RESEND_API_KEY without printing its value. Secret update
+activated version ec46c7ab-b96a-4ba2-a907-53849c0f50dc at 100%, retaining the same
+source, D1, Resend configuration and disabled payments. The real shared adapter
+with the inherited Worker secret sent one QA email to mrhigh3r@gmail.com. Resend
+accepted message 01a0e97b-7c8f-7619-a59b-7d4019112a19 and its exact-message GET
+returned last_event=delivered with the recipient verified. The preview was stopped.
+The invalid-key blocker is resolved. Human inbox confirmation and real invitation/
+password-reset completion remain separate from provider-reported delivery.
