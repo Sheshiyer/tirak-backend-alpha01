@@ -58,3 +58,9 @@ accepted message 01a0e97b-7c8f-7619-a59b-7d4019112a19 and its exact-message GET
 returned last_event=delivered with the recipient verified. The preview was stopped.
 The invalid-key blocker is resolved. Human inbox confirmation and real invitation/
 password-reset completion remain separate from provider-reported delivery.
+
+Recipient confirmation: the owner confirmed QA email receipt and supplied a
+matching Gmail screenshot with Inbox label on 2026-09-28. Provider acceptance,
+reported delivery and human-observed inbox arrival are all verified. Resend
+connectivity migration is complete; actual invitation/reset journeys remain
+separate. See outer workspace RESEND-RELEASE.md and its JSON evidence.
