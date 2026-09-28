@@ -11,7 +11,7 @@ import { availabilitySaveSchema, clockTime, dateRange, GUIDE_TIME_ZONE, loadGuid
 type GuideApp = Hono<{ Bindings: Env; Variables: Variables }>;
 const experienceSchema = z.object({
   title: z.string().trim().min(1).max(200), description: z.string().max(5000).optional(),
-  durationMinutes: z.number().int().min(30).max(1440),
+  durationMinutes: z.number().int().min(30).max(1439),
   keywords: z.array(z.string().trim().min(1).max(80)).max(20),
   price: z.number().finite().min(0).max(1000000), currency: z.literal('THB'), is_active: z.boolean(),
 });

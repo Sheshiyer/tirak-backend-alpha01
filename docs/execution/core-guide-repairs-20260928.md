@@ -41,3 +41,5 @@ New code requires migration 017 before deployment. Old Worker can read the addit
 The new SQLite route suite covers pending owner persistence, cross-account/anonymous denial, archival with booking FK preservation, all public aliases including stale cache, date exception precedence, full validation/no partial writes, rollback after a later statement fails, pending overlap and database concurrency guard, canonical duration, schedule enforcement, static stats auth/owner isolation, more than 20 bookings, year boundaries, mixed currencies and truthful null metrics. Ordinary transport/device acceptance remains separate.
 
 Final candidate verification: TypeScript passed; 435 tests across 38 files passed, including 11 new SQLite route scenarios. `git diff --check` passed.
+
+Independent review correction: service create/update duration is bounded to30–1439 minutes, matching the supported same-day00:00–23:59 contract. A SQLite route regression creates1439 minutes and books the full interval;1440-minute create/update is rejected. Overnight scheduling is outside this repair.

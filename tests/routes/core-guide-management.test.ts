@@ -188,6 +188,18 @@ describe('Core guide management against migrated SQLite', () => {
     expect((await request('/bookings', 'POST', data, traveler)).status).toBe(404);
   });
 
+  it('only publishes same-day durations and books the largest supported interval', async () => {
+    expect((await request(`/companions/${guide}/experiences`, 'POST', { ...payload, durationMinutes: 1440 }, guide)).status).toBe(400);
+    const created = await request(`/companions/${guide}/experiences`, 'POST', { ...payload, durationMinutes: 1439 }, guide);
+    expect(created.status).toBe(201);
+    approve();
+    await weekly([{ dayOfWeek: 1, startTime: '00:00', endTime: '23:59', isAvailable: true }]);
+    expect((await request('/bookings', 'POST', { companionId: guide, serviceId: created.body.data.experienceId,
+      date: '2026-10-05', startTime: '00:00', duration: 1439 }, traveler)).status).toBe(201);
+    expect((await request(`/companions/${guide}/experiences/${created.body.data.experienceId}`, 'PUT',
+      { ...payload, durationMinutes: 1440 }, guide)).status).toBe(400);
+  });
+
   it('static stats requires guide authentication, aggregates beyond 20 rows and never claims cash earnings', async () => {
     expect((await request('/suppliers/stats')).status).toBe(401);
     expect((await request('/suppliers/stats', 'GET', undefined, traveler)).status).toBe(403);
