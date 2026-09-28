@@ -16,6 +16,33 @@ describe('verification and Expo provider contracts', () => {
     vi.spyOn(console, 'info').mockImplementation(() => {});
   });
   afterEach(() => { harness.sqlite.close(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
+  it.each(['accepted', 'rejected', 'network', 'malformed'])('preserves the Resend verification contract for %s outcomes', async (outcome) => {
+    env.EMAIL_PROVIDER = 'resend';
+    env.RESEND_API_KEY = 'test-resend-key';
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      if (outcome === 'network') throw new Error('private transport detail');
+      return new Response(outcome === 'accepted'
+        ? JSON.stringify({ id: 'f99089d1-7ec8-4d45-8b72-bde78c42c665' })
+        : outcome === 'rejected' ? 'private rejection' : 'invalid-json',
+      { status: outcome === 'rejected' ? 403 : 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = { id: 'owner', email: 'owner@example.test' };
+    const now = Date.now();
+    expect(await requestEmailVerification(env, user, now)).toMatchObject({
+      deliveryStatus: outcome === 'accepted' ? 'sent' : 'unavailable',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const stored = harness.sqlite.prepare('SELECT delivery_status FROM email_verification_challenges').get() as any;
+    expect(stored.delivery_status).toBe(outcome === 'accepted' ? 'sent' : outcome === 'rejected' ? 'failed' : 'pending');
+    await requestEmailVerification(env, user, now + 1000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const code = payload.html.match(/code is (\d{6})/)[1];
+    expect(await verifyEmailCode(env, user, code, now + 2000)).toBe(outcome !== 'rejected');
+    expect(await verifyEmailCode(env, user, code, now + 3000)).toBe(false);
+    expect(JSON.stringify(vi.mocked(console.info).mock.calls)).not.toMatch(/owner@example|test-resend-key|private/);
+  });
   it('preserves verification failure, cooldown, success, and one-use code state', async () => {
     const user = { id: 'owner', email: 'owner@example.test' };
     env.EMAIL.send.mockRejectedValueOnce({ code: 'E_RECIPIENT_SUPPRESSED', message: 'private' });

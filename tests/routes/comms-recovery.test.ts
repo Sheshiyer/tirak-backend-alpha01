@@ -27,7 +27,30 @@ describe('password recovery provider and single-use contract', () => {
     vi.spyOn(console, 'info').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
-  afterEach(() => { harness.sqlite.close(); vi.restoreAllMocks(); vi.useRealTimers(); });
+  afterEach(() => { harness.sqlite.close(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
+  it.each(['accepted', 'rejected', 'network', 'malformed'])('preserves the Resend recovery contract for %s outcomes', async (outcome) => {
+    env.EMAIL_PROVIDER = 'resend';
+    env.RESEND_API_KEY = 'test-resend-key';
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      if (outcome === 'network') throw new Error('private transport detail');
+      return new Response(outcome === 'accepted'
+        ? JSON.stringify({ id: 'f99089d1-7ec8-4d45-8b72-bde78c42c665' })
+        : outcome === 'rejected' ? 'private rejection' : 'invalid-json',
+      { status: outcome === 'rejected' ? 403 : 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    expect((await post('forgot-password', { identifier: 'owner@example.test' })).status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(cache.size).toBe(outcome === 'rejected' ? 0 : 1);
+    const logs = JSON.stringify(vi.mocked(console.info).mock.calls);
+    expect(logs).toContain(outcome === 'accepted' ? 'accepted' : outcome === 'rejected' ? 'failed' : 'unknown');
+    expect(logs).not.toMatch(/owner@example|test-resend-key|private/);
+    if (outcome !== 'rejected') {
+      const token = [...cache.keys()][0].slice('reset:'.length);
+      expect((await post('reset-password', { token, newPassword: 'ChangedPassword123!' })).status).toBe(200);
+      expect((await post('reset-password', { token, newPassword: 'AnotherPassword123!' })).status).toBe(400);
+    }
+  });
   it('connects request, provider payload, native/browser links, password update and stale-KV replay denial', async () => {
     const response = await post('forgot-password', { identifier: '  Owner@Example.Test  ' });
     expect(response.status).toBe(200);

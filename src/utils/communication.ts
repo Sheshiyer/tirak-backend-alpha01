@@ -12,7 +12,7 @@ export interface SMSConfig {
 }
 
 export interface EmailConfig {
-  provider: 'cloudflare' | 'mailchannels' | 'sendgrid' | 'aws-ses';
+  provider: 'cloudflare' | 'mailchannels' | 'sendgrid' | 'aws-ses' | 'resend';
   env?: any;
   apiKey?: string;
   fromEmail?: string;
@@ -60,9 +60,9 @@ function safeEmailFailure(error: unknown): { error: string; errorCode: EmailFail
     ? candidate.code as EmailFailureCode : candidate?.code === 'EMAIL_TIMEOUT' ? 'EMAIL_TIMEOUT' : 'EMAIL_PROVIDER_REJECTED';
   // Only our own fixed adapter messages may survive. Arbitrary provider messages can include PII.
   const message = typeof candidate?.message === 'string' ? candidate.message : '';
-  const safe = /^(SendGrid email request (failed|timed out|rejected with status [0-9]{3})|Missing (Cloudflare Email Service binding or sender|SendGrid configuration|MailChannels configuration)|Invalid SendGrid email address configuration|AWS SES email sending is not implemented)$/.test(message);
+  const safe = /^(SendGrid email request (failed|timed out|rejected with status [0-9]{3})|Resend email request (outcome is unknown|rejected with status [0-9]{3})|Missing (Cloudflare Email Service binding or sender|SendGrid configuration|MailChannels configuration|Resend configuration)|Invalid (SendGrid|Resend) email address configuration|AWS SES email sending is not implemented)$/.test(message);
   return { error: safe ? message : message === 'AWS SES email delivery is not implemented. Configure a supported email provider.' ? 'AWS SES email delivery is not implemented' : 'Email provider rejected the request',
-    errorCode: message.startsWith('Missing ') || message.startsWith('Invalid SendGrid') ? 'EMAIL_CONFIGURATION' : code,
+    errorCode: message.startsWith('Missing ') || message.startsWith('Invalid SendGrid') || message.startsWith('Invalid Resend') ? 'EMAIL_CONFIGURATION' : code,
     ...(typeof candidate?.requestId === 'string' && /^[a-fA-F0-9-]{16,64}$/.test(candidate.requestId)
       ? { providerRequestId: candidate.requestId } : {}) };
 }
@@ -227,6 +227,8 @@ export async function sendEmail(
       return await sendCloudflareEmail(config, to, subject, content, deliveryId);
     } else if (config.provider === 'mailchannels') {
       return await sendMailChannelsEmail(config, to, subject, content, deliveryId);
+    } else if (config.provider === 'resend') {
+      return await sendResendEmail(config, to, subject, content);
     } else {
       throw new Error(`Unsupported email provider: ${config.provider}`);
     }
@@ -443,6 +445,67 @@ async function sendSendGridEmail(
   };
 }
 
+
+async function sendResendEmail(
+  config: EmailConfig,
+  to: string,
+  subject: string,
+  content: string
+): Promise<DeliveryStatus> {
+  if (!config.apiKey?.trim() || !config.fromEmail?.trim()) {
+    throw new Error('Missing Resend configuration');
+  }
+  const emailAddress = z.string().email();
+  if (!emailAddress.safeParse(to).success || !emailAddress.safeParse(config.fromEmail).success
+    || (config.replyTo !== undefined && !emailAddress.safeParse(config.replyTo).success)
+    || (config.fromName && /[\r\n<>]/.test(config.fromName))) {
+    throw new Error('Invalid Resend email address configuration');
+  }
+  const isHtml = /<[a-z][^>]*>/i.test(content);
+  const html = isHtml ? content : renderBasicEmail(subject, content);
+  const text = isHtml
+    ? content.replace(/<a\b[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '$2 ($1)').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || subject
+    : content || subject;
+  // EMAIL_TIMEOUT is the existing consumer contract for uncertain acceptance.
+  // Network and success-body failures also use it so possibly delivered reset
+  // tokens/challenges remain usable under their original expiry and limits.
+  const unknown = () => Object.assign(new Error('Resend email request outcome is unknown'), { code: 'EMAIL_TIMEOUT' });
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let result: { status: number; body: unknown };
+  try {
+    result = await Promise.race([
+      (async () => {
+        const response = await fetch('https://api.resend.com/emails', {
+          method: 'POST', redirect: 'error', signal: controller.signal,
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey!.trim()}` },
+          body: JSON.stringify({
+            from: config.fromName ? `${JSON.stringify(config.fromName)} <${config.fromEmail}>` : config.fromEmail,
+            to: [to], subject, html, text, reply_to: config.replyTo || config.fromEmail,
+          }),
+        });
+        return { status: response.status, body: response.status === 200 ? await response.json() : null };
+      })(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => { controller.abort(); reject(unknown()); }, 10_000);
+      }),
+    ]);
+  } catch {
+    throw unknown();
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+  if (result.status < 200 || result.status >= 300) {
+    throw new Error(`Resend email request rejected with status ${result.status}`);
+  }
+  const body = result.body as { id?: unknown; error?: unknown } | null;
+  if (result.status !== 200 || !z.string().uuid().safeParse(body?.id).success || body?.error != null) {
+    throw unknown();
+  }
+  const id = body!.id as string;
+  return { id, providerRequestId: id, status: 'sent', timestamp: new Date(), provider: 'resend' };
+}
+
 // AWS SES email implementation
 async function sendAWSEmail(
   config: EmailConfig,
@@ -541,7 +604,8 @@ export function getEmailReadiness(env: object): EmailReadiness {
     return { configured: false, provider: config.provider, from, reason: 'AWS SES email delivery is not implemented' };
   }
   if (!z.string().email().safeParse(from).success
-    || (config.replyTo && !z.string().email().safeParse(config.replyTo).success)) {
+    || (config.replyTo && !z.string().email().safeParse(config.replyTo).success)
+    || (config.provider === 'resend' && config.fromName && /[\r\n<>]/.test(config.fromName))) {
     return { configured: false, provider: config.provider, from, reason: 'A valid sender and reply-to address are required' };
   }
   const configured = config.provider === 'cloudflare'
@@ -587,6 +651,11 @@ export function createEmailConfig(env: any): EmailConfig {
       fromEmail: env.EMAIL_FROM || 'noreply@tirak.app',
       fromName: env.EMAIL_FROM_NAME || 'Tirak',
       replyTo: env.EMAIL_REPLY_TO || 'support@tirak.app'
+    };
+  } else if (provider === 'resend') {
+    return {
+      provider: 'resend', apiKey: env.RESEND_API_KEY, fromEmail: env.EMAIL_FROM,
+      fromName: env.EMAIL_FROM_NAME || 'Tirak', replyTo: env.EMAIL_REPLY_TO || 'support@tirak.app'
     };
   } else if (provider === 'mailchannels') {
     return {

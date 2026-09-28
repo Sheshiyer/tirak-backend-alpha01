@@ -61,6 +61,7 @@ export interface Env {
   MAILCHANNELS_FROM_EMAIL?: string;
   MAILCHANNELS_FROM_NAME?: string;
   SENDGRID_API_KEY?: string;
+  RESEND_API_KEY?: string;
   SENDGRID_FROM_EMAIL?: string;
   SENDGRID_FROM_NAME?: string;
   CF_ANALYTICS_API_TOKEN?: string;

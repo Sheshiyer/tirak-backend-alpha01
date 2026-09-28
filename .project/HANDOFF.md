@@ -121,3 +121,12 @@ and use the Core reset page. Historical invite KV records without an expiry are
 rejected; a fresh forgot-password request is the supported recovery path.
 Verification timeout remains pending/unavailable and supports a received valid
 code under unchanged attempt/expiry limits. Definitive failures stay unusable.
+
+## Resend preparation — 2026-09-28
+
+Local shared Resend adapter and Worker secret type are prepared atop the integrated
+repair candidate. Tests cover real verification/reset consumers and transport
+uncertainty; full suite passes 504 tests. Typecheck and Worker dry-run pass.
+See `docs/execution/resend-migration-20260928.md` for activation prerequisites.
+Provider selection remains Cloudflare. No DNS, secret, account, deployment or
+email send occurred. Resend workspace/domain setup and inbox acceptance remain open.
