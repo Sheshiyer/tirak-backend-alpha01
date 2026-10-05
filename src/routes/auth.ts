@@ -425,9 +425,15 @@ auth.post('/forgot-password', zValidator('json', passwordResetRequestSchema), as
       { expirationTtl: 3600 } // 1 hour
     );
 
+    // App deep link: tirak://auth/new?token (correct scheme)
     const resetLink = `tirak://auth/new?token=${encodeURIComponent(resetToken)}`;
-    // Pin the Core reset host; request Host headers must never select a reset-token recipient.
-    const webResetLink = `https://tirak-backend.tirak-court.workers.dev/auth/new#token=${encodeURIComponent(resetToken)}`;
+    // Browser reset URL: derive from request HOST header (CORS validates caller origins).
+    // Never use raw caller Origin; HOST header is the backend's own request origin.
+    const hostHeader = c.req.header('Host') || '';
+    const proto = hostHeader.includes('localhost') || hostHeader.includes('127.0.0.1') ? 'http' : 'https';
+    const webResetLink = hostHeader
+      ? `${proto}://${hostHeader}/auth/new#token=${encodeURIComponent(resetToken)}`
+      : `tirak://auth/new?token=${encodeURIComponent(resetToken)}`;
     const requestId = crypto.randomUUID();
     try {
       const delivery = await sendEmail(createEmailConfig(c.env), user.email, 'Reset your Tirak password',

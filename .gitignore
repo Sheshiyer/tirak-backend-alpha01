@@ -115,3 +115,6 @@ jspm_packages/
 .worktrees/
 evidence/
 rehearsal/
+
+# Generated disposable QA runtime artifacts
+scripts/core-qa/generated/

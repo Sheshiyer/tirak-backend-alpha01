@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
 export const GUIDE_TIME_ZONE = 'Asia/Bangkok' as const;
+/** Explicit Bangkok offset for deterministic timezone comparison.
+ *  Bangkok is UTC+7, no DST. Used to construct ISO strings with offset
+ *  so that past/future checks never depend on server or device timezone. */
+export const BANGKOK_OFFSET = '+07:00' as const;
+
 export const validDate = (date: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(date)
   && !Number.isNaN(Date.parse(`${date}T00:00:00Z`))
   && new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date;
@@ -56,4 +61,44 @@ export async function scheduleAllows(db: D1Database, id: string, date: string, s
   const row = scheduleForDate(date, weekly, overrides);
   return Boolean(row?.is_available && minutes(startTime) >= minutes(row.start_time)
     && minutes(startTime) + duration <= minutes(row.end_time));
+}
+
+/**
+ * Construct an explicit Bangkok-ISO datetime from a calendar date and time.
+ * Format: "YYYY-MM-DDTHH:mm:00+07:00" — no ambiguity, no server TZ dependency.
+ */
+export function toBangkokIso(date: string, time: string): string {
+  return `${date}T${time}:00${BANGKOK_OFFSET}`;
+}
+
+/**
+ * Parse a Bangkok-ISO string into a UTC millisecond timestamp for comparison.
+ * Works with any ISO string that carries an offset.
+ */
+export function parseToUtcMs(isoWithOffset: string): number {
+  return new Date(isoWithOffset).getTime();
+}
+
+/**
+ * Check whether a Bangkok-locale date+time is strictly in the future
+ * compared to a reference instant (default: Date.now()).
+ * Uses explicit +07:00 offset — never guesses server/device timezone.
+ */
+export function isFutureBangkok(
+  date: string,
+  time: string,
+  referenceMs: number = Date.now(),
+): boolean {
+  const bangkokMs = parseToUtcMs(toBangkokIso(date, time));
+  return bangkokMs > referenceMs;
+}
+
+/**
+ * Compute the weekday (0=Sunday..6=Saturday) for a given calendar date
+ * as observed in the Asia/Bangkok timezone.
+ * Uses the explicit offset to avoid UTC/local ambiguity at midnight boundaries.
+ */
+export function weekdayBangkok(date: string): number {
+  const d = new Date(toBangkokIso(date, '12:00'));
+  return d.getUTCDay();
 }

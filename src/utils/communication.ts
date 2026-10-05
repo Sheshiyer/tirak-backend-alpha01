@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { isQaPermittedRecipient } from '../middleware/coreQa';
+import type { Env } from '../index';
 
 // Types for communication services
 export interface SMSConfig {
@@ -217,7 +219,29 @@ export async function sendEmail(
   templateId?: string
 ): Promise<DeliveryStatus> {
   const deliveryId = crypto.randomUUID();
-  
+
+  // QA recipient guard: in core-qa, only permitted recipients are allowed
+  if (config.env && !isQaPermittedRecipient(config.env, to)) {
+    return {
+      id: deliveryId,
+      status: 'failed',
+      timestamp: new Date(),
+      error: 'Recipient not permitted in QA environment',
+      provider: config.provider,
+    };
+  }
+
+  // If EMAIL_PROVIDER is disabled, do not attempt to send
+  if (config.env?.EMAIL_PROVIDER === 'disabled') {
+    return {
+      id: deliveryId,
+      status: 'failed',
+      timestamp: new Date(),
+      error: 'Email provider is disabled',
+      provider: config.provider,
+    };
+  }
+
   try {
     if (config.provider === 'sendgrid') {
       return await sendSendGridEmail(config, to, subject, content, deliveryId);

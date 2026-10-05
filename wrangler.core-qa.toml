@@ -1,0 +1,83 @@
+# Isolated Core QA only. Never use retained live or legacy payment staging bindings.
+name = "tirak-core-qa-20261005"
+main = "src/index.ts"
+account_id = "2c0c96c68f0ee73b6d980054557bca5b"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tirak-core-qa-20261005"
+database_id = "83574656-cd4b-4483-902c-06dfd9e77496"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "STORAGE"
+bucket_name = "tirak-core-qa-20261005"
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "20d12ac0b70749059926c2e30ad19b9b"
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "8e97fc0d1e8e4aeaa770d73f66a296b4"
+
+[[queues.producers]]
+binding = "MODERATION_QUEUE"
+queue = "tirak-core-qa-moderation-20261005"
+
+[[queues.producers]]
+binding = "ANALYTICS_QUEUE"
+queue = "tirak-core-qa-analytics-20261005"
+
+[[queues.producers]]
+binding = "NOTIFICATION_QUEUE"
+queue = "tirak-core-qa-notification-20261005"
+
+[[queues.consumers]]
+queue = "tirak-core-qa-moderation-20261005"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+[[queues.consumers]]
+queue = "tirak-core-qa-analytics-20261005"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+[[queues.consumers]]
+queue = "tirak-core-qa-notification-20261005"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+[[durable_objects.bindings]]
+name = "CHAT_ROOM"
+class_name = "ChatRoom"
+
+[[durable_objects.bindings]]
+name = "NOTIFICATION_SERVICE"
+class_name = "NotificationService"
+
+[[migrations]]
+tag = "core-qa-v1"
+new_sqlite_classes = ["ChatRoom", "NotificationService"]
+
+[vars]
+ENVIRONMENT = "core-qa"
+CORE_QA_MODE = "cohort"
+PAYMENT_MODE = "disabled"
+PROMPTPAY_ENABLED = "false"
+PAYMENT_PRODUCTION_POLICY_WRITES_ENABLED = "false"
+FRONTEND_URLS = "https://tirak-core-qa-website-20261005.tirak-court.workers.dev,https://tirak-core-qa-admin-20261005.tirak-court.workers.dev,http://localhost:5174,http://127.0.0.1:5174,http://localhost:8081,http://127.0.0.1:8081,http://localhost:8082,http://127.0.0.1:8082,http://localhost:8083,http://127.0.0.1:8083"
+PUBLIC_ASSET_BASE_URL = "https://tirak-core-qa-20261005.tirak-court.workers.dev/api/uploads/public"
+EMAIL_PROVIDER = "disabled"
+EMAIL_FROM = "noreply@tirak.app"
+EMAIL_FROM_NAME = "Tirak Core QA"
+EMAIL_REPLY_TO = "support@tirak.app"
+# JWT_SECRET is separately generated/provisioned for this Worker only.
+# Email remains disabled until authorized recipient restriction is proven.

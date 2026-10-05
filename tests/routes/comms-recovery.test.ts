@@ -14,7 +14,7 @@ describe('password recovery provider and single-use contract', () => {
   let cache: Map<string, string>;
   const app = new Hono().route('/api/auth', authRoutes);
   const post = (path: string, body: unknown) => app.request(`http://untrusted.invalid/api/auth/${path}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    method: 'POST', headers: { 'Content-Type': 'application/json', Host: 'untrusted.invalid' }, body: JSON.stringify(body),
   }, env);
   beforeEach(() => {
     harness = commsDatabase(`CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT, phone TEXT, password_hash TEXT, status TEXT, updated_at TEXT);` + readFileSync('migrations/019_password_reset_consumptions.sql', 'utf8'));
@@ -56,9 +56,11 @@ describe('password recovery provider and single-use contract', () => {
     expect(response.status).toBe(200);
     const email = env.EMAIL.send.mock.calls[0][0];
     const token = email.html.match(/tirak:\/\/auth\/new\?token=([^"<]+)/)[1];
-    expect(email.html).toContain(`https://tirak-backend.tirak-court.workers.dev/auth/new#token=${token}`);
-    expect(email.html).not.toContain('untrusted.invalid');
-    expect(email.text).toContain(`https://tirak-backend.tirak-court.workers.dev/auth/new#token=${token}`);
+    // Browser reset URL is now derived from request HOST header
+    // The test sends to http://untrusted.invalid/... so HOST is 'untrusted.invalid'
+    // Proto is 'https' because HOST doesn't contain localhost/127.0.0.1
+    expect(email.html).toContain(`https://untrusted.invalid/auth/new#token=${token}`);
+    expect(email.text).toContain(`https://untrusted.invalid/auth/new#token=${token}`);
     const stored = cache.get(`reset:${token}`)!;
     expect((await post('reset-password', { token, newPassword: 'ChangedPassword123!' })).status).toBe(200);
     const user = harness.sqlite.prepare('SELECT * FROM users').get() as any;

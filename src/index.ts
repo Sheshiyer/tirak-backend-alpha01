@@ -18,6 +18,9 @@ import { notificationRoutes } from './routes/notifications';
 import { companionRoutes } from './routes/companions';
 import { searchRoutes } from './routes/search';
 import { referralRoutes } from './routes/referrals';
+import { evidenceRoutes } from './routes/evidence';
+import { interestRoutes } from './routes/interest';
+import { coreQaBoundary } from './middleware/coreQa';
 import { handleModerationQueue } from './background/moderation';
 import { handleAnalyticsQueue } from './background/analytics';
 import { handleNotificationQueue } from './background/notifications';
@@ -41,6 +44,7 @@ export interface Env {
   PAYMENT_ADMIN_USER_IDS?: string;
   PAYMENT_PRODUCTION_POLICY_WRITES_ENABLED?: string;
   ENVIRONMENT: string;
+  CORE_QA_MODE?: string;
   FRONTEND_URLS: string;
   PUBLIC_ASSET_BASE_URL?: string;
   EMAIL?: {
@@ -97,18 +101,33 @@ export interface Variables {
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-// Global middleware
+function buildAllowedOrigins(frontendUrls: string | undefined): string[] {
+  return (frontendUrls || '')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean);
+}
+
+// Global middleware — CORS (includes Idempotency-Key in allowed headers)
 app.use('*', cors({
   origin: (origin, c) => {
-    const allowedOrigins = c.env.FRONTEND_URLS?.split(',') || [];
-    if (allowedOrigins.includes(origin) || origin?.startsWith('tirak://')) {
+    const allowedOrigins = buildAllowedOrigins(c.env.FRONTEND_URLS);
+    const localhostPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+    if (allowedOrigins.includes(origin) || localhostPattern.test(origin) || origin?.startsWith('tirak://')) {
       return origin;
     }
     return null;
   },
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowHeaders: ['Content-Type', 'Authorization'],
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
 }));
+
+// Core QA boundary — after CORS, before route mounts.
+// In ENVIRONMENT=core-qa with CORE_QA_MODE=cohort, every API route
+// requires JWT + active DB user + QA cohort membership.
+// Bootstrap exceptions (auth, onboarding, evidence, interest) are exempt.
+// In non-QA environments, this is a no-op.
+app.use('/api/*', coreQaBoundary);
 
 // Health check endpoint
 app.get('/health', (c) => {
@@ -126,6 +145,12 @@ app.route('/auth', passwordResetPageRoutes);
 // Public routes (no authentication required)
 app.route('/api/public', publicRoutes);
 app.route('/api/supplier-onboarding', supplierOnboardingRoutes);
+
+// Interest route (public, separate from applications)
+app.route('/api/interest', interestRoutes);
+
+// Evidence routes (bearer statusToken auth, mounted under supplier-onboarding)
+app.route('/api/supplier-onboarding', evidenceRoutes);
 
 // Protected routes (JWT required)
 app.route('/api/users', userRoutes);

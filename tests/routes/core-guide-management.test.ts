@@ -8,6 +8,7 @@ import { bookingRoutes } from '@/routes/bookings';
 import { generateJWT } from '@/utils/auth';
 import { createTestEnv } from '@tests/setup';
 import { buildMigrationDb, seedStubRow } from '../migrations/helpers/sqlite';
+import { commsDatabase } from '@tests/helpers/comms-sqlite';
 
 // Transport delivery is owned by the notification suite; this suite verifies booking persistence.
 vi.mock('@/routes/notifications', () => ({ createNotification: vi.fn(async () => 'notification-fixture') }));
@@ -21,29 +22,23 @@ describe('Core guide management against migrated SQLite', () => {
   let db: DatabaseSync, app: Hono, env: ReturnType<typeof createTestEnv>;
   const tokens: Record<string,string> = {};
   beforeEach(async () => {
-    db = buildMigrationDb();
-    // These six nullable fields were verified by scoped read-only live PRAGMA on 2026-09-28.
-    // They predate this repair but are absent from the canonical baseline: fixture-only,
-    // not duplicate ALTER statements in migration 017. Release must preflight this drift.
-    for (const column of ['customer_preferences', 'special_requests', 'preferred_language', 'group_composition', 'dietary_requirements', 'experience_id']) {
-      db.exec(`ALTER TABLE bookings ADD COLUMN ${column} TEXT`);
-    }
-    db.exec(readFileSync('migrations/017_core_guide_management.sql', 'utf8'));
+    const coreSchema = [
+      'migrations/baseline/canonical-baseline.sql',
+      'migrations/010_booking_chat_expansion.sql',
+      'migrations/012_supplier_onboarding.sql',
+      'migrations/013_supplier_onboarding_review.sql',
+      'migrations/015_account_trust.sql',
+      'migrations/017_core_guide_management.sql',
+      'migrations/019_password_reset_consumptions.sql',
+      'migrations/022_core_booking_idempotency.sql',
+      'migrations/023_core_customer_registration_fields.sql',
+      'migrations/025_core_booking_mobile_fields.sql',
+      'migrations/026_core_notification_prerequisites.sql',
+    ].map((path) => readFileSync(path, 'utf8')).join('\n');
+    const sqlHarness = commsDatabase(coreSchema);
+    db = sqlHarness.sqlite;
     env = createTestEnv();
-    const prepare = (sql: string) => {
-      const statement = (values: any[] = []): any => ({
-        bind: (...params: any[]) => statement(params),
-        first: async () => db.prepare(sql).get(...values) ?? null,
-        all: async () => ({ results: db.prepare(sql).all(...values), success: true }),
-        run: async () => ({ success: true, meta: { changes: Number(db.prepare(sql).run(...values).changes) } }),
-      });
-      return statement();
-    };
-    env.DB = { ...env.DB, prepare, batch: async (statements: any[]) => {
-      db.exec('BEGIN');
-      try { const result = []; for (const statement of statements) result.push(await statement.run()); db.exec('COMMIT'); return result; }
-      catch (error) { db.exec('ROLLBACK'); throw error; }
-    }};
+    env.DB = sqlHarness.db as unknown as D1Database;
     for (const id of [guide, other, traveler]) {
       const role = id === traveler ? 'customer' : 'supplier';
       seedStubRow(db, 'users', { id, email: `${id}@example.test`, user_type: role, status: 'active' });
@@ -172,7 +167,7 @@ describe('Core guide management against migrated SQLite', () => {
 
   it('rejects direct booking of pending guide, unset schedule, archived service, invalid date and mismatched end', async () => {
     const id = (await create()).body.data.experienceId;
-    const data = { companionId: guide, serviceId: id, date: '2026-10-05', startTime: '10:00', duration: 90 };
+    const data = { companionId: guide, serviceId: id, date: '2026-12-14', startTime: '10:00', duration: 90 };
     expect((await request('/bookings', 'POST', data, traveler)).status).toBe(404);
     approve();
     expect((await request('/bookings', 'POST', data, traveler)).status).toBe(409);
@@ -196,7 +191,7 @@ describe('Core guide management against migrated SQLite', () => {
     approve();
     await weekly([{ dayOfWeek: 1, startTime: '00:00', endTime: '23:59', isAvailable: true }]);
     expect((await request('/bookings', 'POST', { companionId: guide, serviceId: created.body.data.experienceId,
-      date: '2026-10-05', startTime: '00:00', duration: 1439 }, traveler)).status).toBe(201);
+      date: '2026-12-14', startTime: '00:00', duration: 1439 }, traveler)).status).toBe(201);
     expect((await request(`/companions/${guide}/experiences/${created.body.data.experienceId}`, 'PUT',
       { ...payload, durationMinutes: 1440 }, guide)).status).toBe(400);
   });
