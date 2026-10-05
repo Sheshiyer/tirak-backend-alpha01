@@ -29,7 +29,7 @@ async function main() {
   await mkdir(outputDir, { recursive: true, mode: 0o700 });
   const sqlPath = path.join(outputDir, 'approved-empty-core-qa-schema.sql');
   await writeFile(sqlPath, approvedSql, { mode: 0o600 });
-  const stdout = execFileSync(path.join(repoRoot, 'node_modules/.bin/wrangler'), [
+  const stdout = execFileSync('/opt/homebrew/bin/wrangler', [
     'd1', 'execute', HOSTED_RUNTIME.d1DatabaseName, '--profile', 'tirak', '--config', HOSTED_RUNTIME.wranglerConfigPath,
     '--remote', '--file', sqlPath, '--yes', '--json',
   ], { encoding: 'utf8', timeout: 180_000, maxBuffer: 4 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
