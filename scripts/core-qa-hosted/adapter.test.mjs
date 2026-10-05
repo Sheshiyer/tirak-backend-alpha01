@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import { EventEmitter } from 'node:events';
+import { Readable } from 'node:stream';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -45,6 +46,10 @@ class MockWs extends EventEmitter {
 }
 
 MockWs.instances = [];
+
+function createIncomingMessageLikeResponse({ statusCode, headers, chunks }) {
+  return Object.assign(Readable.from(chunks), { statusCode, headers });
+}
 
 describe('assertHostedPins', () => {
   it('accepts the exact pinned hosted QA configuration shape', () => {
@@ -186,18 +191,24 @@ describe('openHostedWebSocket', () => {
     ws.emit('open');
 
     const response = await pending;
+    const deferredErrors = [];
+    response.webSocket.addEventListener('error', (event) => {
+      deferredErrors.push(event.error?.message || String(event.error));
+    });
 
     expect(response.status).toBe(101);
     expect(response.webSocket).toBeTruthy();
     expect(typeof response.webSocket.accept).toBe('function');
     expect(typeof response.webSocket.addEventListener).toBe('function');
     expect(typeof response.webSocket.close).toBe('function');
+    ws.emit('error', new Error('deferred transport issue'));
+    expect(deferredErrors).toEqual(['deferred transport issue']);
     response.webSocket.close(1000, 'complete');
     expect(ws.closed).toEqual({ code: 1000, reason: 'complete' });
     expect(budget.snapshot().usedCalls).toBe(1);
   });
 
-  it('returns sanitized unexpected-response details for replayed ticket 401', async () => {
+  it('returns sanitized unexpected-response details for replayed ticket 401 and tolerates delayed ws errors', async () => {
     const hosted = { ...HOSTED_RUNTIME, workerUrl: 'ws://qa.example.test' };
     const pending = openHostedWebSocket(
       'http://local.test/api/chat/rooms/room-1/ws?ticket=raw-secret-ticket',
@@ -206,18 +217,25 @@ describe('openHostedWebSocket', () => {
     );
 
     const ws = MockWs.instances.pop();
-    ws.emit('unexpected-response', {}, {
+    const responseStream = createIncomingMessageLikeResponse({
       statusCode: 401,
       headers: { 'content-type': 'text/plain' },
-      text: async () => 'ticket replay denied for /api/chat/rooms/room-1/ws?ticket=raw-secret-ticket',
+      chunks: [
+        'ticket replay denied for /api/chat/rooms/room-1/ws?',
+        'ticket=raw-secret-ticket',
+      ],
     });
+    ws.emit('unexpected-response', {}, responseStream);
+    expect(() => ws.emit('error', new Error('Opening handshake timed out'))).not.toThrow();
 
     const response = await pending;
 
     expect(response.status).toBe(401);
-    expect(await response.text()).toContain('raw-secret-ticket');
+    expect(await response.text()).toContain('ticket=<redacted>');
+    expect(await response.text()).not.toContain('raw-secret-ticket');
     expect(response.sanitizedBody).toContain('ticket=<redacted>');
     expect(response.sanitizedBody).not.toContain('raw-secret-ticket');
+    expect(ws.terminated).toBe(true);
   });
 
   it('rejects Authorization-bearing websocket upgrades', async () => {

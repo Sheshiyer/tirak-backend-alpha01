@@ -386,59 +386,87 @@ supplierOnboardingRoutes.get('/:id/status', async (c) => {
     let resolvedAccountStatus = 'unknown';
     let resolvedProfileStatus = 'none';
     let resolvedExpiresAt: string | null = null;
+    let publicationStatus: 'awaiting_approval' | 'blocked' | 'draft' | 'active' = 'blocked';
 
     if (app.status === 'pending') {
+      resolvedAccountStatus = 'not_provisioned';
+      publicationStatus = 'awaiting_approval';
       blockers.account = 'application_pending';
       blockers.profile = 'application_pending';
     } else if (app.status === 'rejected') {
+      publicationStatus = 'blocked';
       blockers.account = 'application_rejected';
-    } else if (app.status === 'approved' && app.approved_user_id) {
-      // Check actual account state — query real joined user status
-      const user = await c.env.DB.prepare(
-        `SELECT status FROM users WHERE id = ?`
-      ).bind(app.approved_user_id).first<{ status: string }>();
-      if (!user) {
-        blockers.account = 'account_not_provisioned';
-        resolvedAccountStatus = 'pending';
-      } else {
-        // Map actual user.status truthfully (no suspended→active, no rejected→verified)
-        resolvedAccountStatus = user.status;
-        if (user.status === 'suspended') {
-          blockers.account = 'account_suspended';
-        } else if (user.status === 'pending') {
-          blockers.account = 'account_pending';
-        }
-        // Any other status (active, etc.) → no blocker
-      }
+    } else if (app.status === 'approved') {
+      publicationStatus = 'blocked';
 
-      // Check profile verification — query actual verification_status
-      const profile = await c.env.DB.prepare(
-        `SELECT verification_status, subscription_expires_at FROM supplier_profiles WHERE user_id = ?`
-      ).bind(app.approved_user_id).first<{ verification_status: string; subscription_expires_at: string | null }>();
-      if (!profile) {
-        blockers.profile = 'profile_not_provisioned';
-        resolvedProfileStatus = 'pending';
+      if (!app.approved_user_id) {
+        resolvedAccountStatus = 'not_provisioned';
+        blockers.account = 'account_not_provisioned';
       } else {
-        // Map actual verification_status truthfully (no rejected→verified)
-        resolvedProfileStatus = profile.verification_status;
-        if (profile.verification_status === 'pending') {
-          blockers.profile = 'profile_pending_verification';
-        } else if (profile.verification_status === 'rejected') {
-          blockers.profile = 'profile_rejected';
+        let accountReady = false;
+        let profileReady = false;
+
+        // Check actual account state — query real joined user status
+        const user = await c.env.DB.prepare(
+          `SELECT status FROM users WHERE id = ?`
+        ).bind(app.approved_user_id).first<{ status: string }>();
+        if (!user) {
+          blockers.account = 'account_not_provisioned';
+          resolvedAccountStatus = 'not_provisioned';
+        } else {
+          // Map actual user.status truthfully (no suspended→active, no rejected→verified)
+          resolvedAccountStatus = user.status;
+          if (user.status === 'active') {
+            accountReady = true;
+          } else if (user.status === 'suspended') {
+            blockers.account = 'account_suspended';
+          } else if (user.status === 'pending') {
+            blockers.account = 'account_pending';
+          } else {
+            blockers.account = 'account_inactive';
+          }
         }
-        // Read real trial/subscription expiry
-        resolvedExpiresAt = profile.subscription_expires_at || null;
-      }
-      // Check service publication — active, non-archived services only
-      try {
-        const services = await c.env.DB.prepare(
-          `SELECT COUNT(*) as cnt FROM supplier_services WHERE supplier_id = ? AND is_active = 1 AND archived_at IS NULL`
-        ).bind(app.approved_user_id).first<{ cnt: number }>();
-        if (!services || services.cnt === 0) {
-          blockers.publication = 'no_active_services';
+
+        // Check profile verification — query actual verification_status
+        const profile = await c.env.DB.prepare(
+          `SELECT verification_status, subscription_expires_at FROM supplier_profiles WHERE user_id = ?`
+        ).bind(app.approved_user_id).first<{ verification_status: string; subscription_expires_at: string | null }>();
+        if (!profile) {
+          blockers.profile = 'profile_not_provisioned';
+          resolvedProfileStatus = 'none';
+        } else {
+          // Map actual verification_status truthfully (no rejected→verified)
+          resolvedProfileStatus = profile.verification_status;
+          if (profile.verification_status === 'verified') {
+            profileReady = true;
+          } else if (profile.verification_status === 'pending') {
+            blockers.profile = 'profile_pending_verification';
+          } else if (profile.verification_status === 'rejected') {
+            blockers.profile = 'profile_rejected';
+          } else {
+            blockers.profile = 'profile_unverified';
+          }
+          // Read real trial/subscription expiry
+          resolvedExpiresAt = profile.subscription_expires_at || null;
         }
-      } catch {
-        blockers.publication = 'service_query_failed';
+
+        // Preserve the concrete service blocker even while activation/verification is pending.
+        {
+          try {
+            const services = await c.env.DB.prepare(
+              `SELECT COUNT(*) as cnt FROM supplier_services WHERE supplier_id = ? AND is_active = 1 AND archived_at IS NULL`
+            ).bind(app.approved_user_id).first<{ cnt: number }>();
+            if (!services || Number(services.cnt) === 0) {
+              if (accountReady && profileReady) publicationStatus = 'draft';
+              blockers.publication = 'no_active_services';
+            } else if (accountReady && profileReady) {
+              publicationStatus = 'active';
+            }
+          } catch {
+            publicationStatus = 'blocked';
+            blockers.publication = 'service_query_failed';
+          }
+        }
       }
     }
 
@@ -465,6 +493,7 @@ supplierOnboardingRoutes.get('/:id/status', async (c) => {
       status: app.status,
       accountStatus: resolvedAccountStatus,
       profileStatus: resolvedProfileStatus,
+      publicationStatus,
       blockers,
       evidence: evidenceList,
       expiresAt: resolvedExpiresAt,

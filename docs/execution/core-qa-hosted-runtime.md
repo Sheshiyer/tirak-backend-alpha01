@@ -69,7 +69,7 @@ Before any write-capable journey step, the runner requires:
   `PROMPTPAY_ENABLED=false`,
   `PAYMENT_PRODUCTION_POLICY_WRITES_ENABLED=false`),
 - D1 table existence for `users`, `core_qa_accounts`,
-  `supplier_onboarding_applications`, and `interests`,
+  `supplier_onboarding_applications`, and `interest_entries`,
 - zero existing synthetic QA user/application/interest data.
 
 If any synthetic footprint is already present, the run aborts without trying to

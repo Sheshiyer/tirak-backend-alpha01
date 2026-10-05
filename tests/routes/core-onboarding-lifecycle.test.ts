@@ -504,6 +504,52 @@ describe('Core supplier onboarding status', () => {
     expect(bodyStr).not.toContain('token');
     expect(bodyStr).not.toContain('email');
   });
+
+  it('returns not_provisioned publication contract when approved application has no provisioned user', async () => {
+    const token = generateStatusToken();
+    const tokenHash = await hashStatusToken(token);
+    testEnv.DB.prepare = (query: string) => ({
+      bind: () => ({
+        first: async () => {
+          if (query.includes('FROM supplier_onboarding_applications') && query.includes('application_data')) {
+            return {
+              id: 'app-1',
+              status: 'approved',
+              status_token_hash: tokenHash,
+              approved_user_id: 'supplier-1',
+              created_at: new Date().toISOString(),
+              reviewed_at: new Date().toISOString(),
+              rejection_reason: null,
+              application_data: '{}',
+            };
+          }
+          if (query.includes('SELECT status FROM users')) {
+            return null;
+          }
+          if (query.includes('SELECT verification_status, subscription_expires_at FROM supplier_profiles')) {
+            return null;
+          }
+          if (query.includes('SELECT invitation_delivery_status')) {
+            return { invitation_delivery_status: 'pending' };
+          }
+          return null;
+        },
+        all: async () => ({ results: [] }),
+      }),
+    });
+
+    const res = await app.request('/supplier-onboarding/app-1/status', {
+      headers: { Authorization: `Bearer ${token}` },
+    }, testEnv);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.accountStatus).toBe('not_provisioned');
+    expect(body.data.profileStatus).toBe('none');
+    expect(body.data.publicationStatus).toBe('blocked');
+    expect(body.data.blockers.account).toBe('account_not_provisioned');
+    expect(body.data.blockers.profile).toBe('profile_not_provisioned');
+    expect(body.data.paymentStatus).toBe('unavailable');
+  });
 });
 
 // ---------------------------------------------------------------------------

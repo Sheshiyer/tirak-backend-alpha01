@@ -346,6 +346,7 @@ function recordStep(proof, name, result, extra = {}) {
     envelope: sanitizeJsonForDiag(result.json),
     ...extra,
   });
+  proof.onStep?.();
 }
 
 function assertStatus(result, expectedStatus, context, proof) {
@@ -578,6 +579,8 @@ export async function runJourney({ worker, secrets, proof }) {
   assertStatus(statusPending, 200, 'application status pending', proof);
   assertSuccessEnvelope(statusPending, 'application status pending');
   assertEqual(statusPending.json.data.status, 'pending', 'pending application status');
+  assertEqual(statusPending.json.data.accountStatus, 'not_provisioned', 'pending account not created');
+  assertEqual(statusPending.json.data.publicationStatus, 'awaiting_approval', 'pending publication stage');
   assertEqual(statusPending.json.data.blockers.account, 'application_pending', 'pending account blocker');
   assertEqual(statusPending.json.data.blockers.profile, 'application_pending', 'pending profile blocker');
   assertArrayLength(statusPending.json.data.evidence, 0, 'pending status evidence array');
@@ -653,6 +656,7 @@ export async function runJourney({ worker, secrets, proof }) {
   assertStatus(statusAfterApproval, 200, 'application status after approval', proof);
   assertSuccessEnvelope(statusAfterApproval, 'application status after approval');
   assertEqual(statusAfterApproval.json.data.status, 'approved', 'approved application status');
+  assertEqual(statusAfterApproval.json.data.publicationStatus, 'blocked', 'activation and verification gate');
   assertEqual(statusAfterApproval.json.data.accountStatus, 'pending', 'approved pending account status');
   assertEqual(statusAfterApproval.json.data.profileStatus, 'pending', 'approved pending profile status');
   assertEqual(statusAfterApproval.json.data.blockers.account, 'account_pending', 'approved account blocker');
@@ -836,6 +840,12 @@ export async function runJourney({ worker, secrets, proof }) {
   assertStatus(legacySupplierServices, 200, 'traveler supplier services after verify', proof);
   assertSuccessEnvelope(legacySupplierServices, 'traveler supplier services after verify');
   assertEqual(legacySupplierServices.json.data.items.some((service) => service.id === serviceId), true, 'traveler supplier services include active service');
+
+  const activeApplicationStatus = await sendNoBody(worker, `http://local.test/api/supplier-onboarding/${applicationId}/status`, 'GET', null, { Authorization: `Bearer ${statusToken}` });
+  recordStep(proof, 'application_publication_active', activeApplicationStatus, makeStepNote(activeApplicationStatus));
+  assertStatus(activeApplicationStatus, 200, 'active publication status', proof);
+  assertEqual(activeApplicationStatus.json.data.publicationStatus, 'active', 'verified active service publication');
+  assertEqual(activeApplicationStatus.json.data.paymentStatus, 'unavailable', 'published guide payments unavailable');
 
   const travelerDiscoveryAfterVerify = await sendNoBody(worker, 'http://local.test/api/companions?limit=10&page=1', 'GET', travelerAccessToken);
   recordStep(proof, 'traveler_companions_after_verify', travelerDiscoveryAfterVerify, makeStepNote(travelerDiscoveryAfterVerify));
@@ -1174,6 +1184,11 @@ export async function runJourney({ worker, secrets, proof }) {
   assertStatus(chatDetailAfterArchive, 200, 'chat detail after archive', proof);
   assertSuccessEnvelope(chatDetailAfterArchive, 'chat detail after archive');
   assertArrayLength(chatDetailAfterArchive.json.data.messages, 1, 'chat detail after archive message count');
+
+  const archivedApplicationStatus = await sendNoBody(worker, `http://local.test/api/supplier-onboarding/${applicationId}/status`, 'GET', null, { Authorization: `Bearer ${statusToken}` });
+  recordStep(proof, 'application_publication_after_archive', archivedApplicationStatus, makeStepNote(archivedApplicationStatus));
+  assertStatus(archivedApplicationStatus, 200, 'archived publication status', proof);
+  assertEqual(archivedApplicationStatus.json.data.publicationStatus, 'draft', 'archived final active service returns draft');
 
   const guideStats = await sendNoBody(worker, 'http://local.test/api/suppliers/stats', 'GET', guideAccessToken);
   recordStep(proof, 'guide_stats', guideStats, makeStepNote(guideStats));

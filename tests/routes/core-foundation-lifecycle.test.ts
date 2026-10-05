@@ -353,6 +353,7 @@ describe('Core foundation lifecycle (real SQLite)', () => {
     expect(statusRes.status).toBe(200);
     const statusBody = await statusRes.json();
     expect(statusBody.data.status).toBe('pending');
+    expect(statusBody.data.publicationStatus).toBe('awaiting_approval');
     expect(statusBody.data.blockers).toBeDefined();
     expect(statusBody.data.blockers.account).toBe('application_pending');
     expect(statusBody.data.evidence).toEqual([]);
@@ -1066,6 +1067,7 @@ describe('Duration, persist fields, status truthfulness', () => {
     expect(statusRes.status).toBe(200);
     const body = await statusRes.json();
     expect(body.data.accountStatus).toBe('suspended');
+    expect(body.data.publicationStatus).toBe('blocked');
     expect(body.data.blockers.account).toBe('account_suspended');
   });
 
@@ -1081,10 +1083,11 @@ describe('Duration, persist fields, status truthfulness', () => {
     }, env);
     const body = await statusRes.json();
     expect(body.data.profileStatus).toBe('rejected');
+    expect(body.data.publicationStatus).toBe('blocked');
     expect(body.data.blockers.profile).toBe('profile_rejected');
   });
 
-  it('status: active user with profile returns active/verified', async () => {
+  it('status: active user with verified profile but no active services returns draft', async () => {
     const { app, env } = createApp(db);
     const { appId, token, userId } = await submitAndApprove(app, env, VALID_PAYLOAD);
 
@@ -1098,8 +1101,10 @@ describe('Duration, persist fields, status truthfulness', () => {
     const body = await statusRes.json();
     expect(body.data.accountStatus).toBe('active');
     expect(body.data.profileStatus).toBe('verified');
+    expect(body.data.publicationStatus).toBe('draft');
     expect(body.data.blockers.account).toBeUndefined();
     expect(body.data.blockers.profile).toBeUndefined();
+    expect(body.data.blockers.publication).toBe('no_active_services');
   });
 
   it('status: real trial expiresAt from subscription_expires_at', async () => {
@@ -1121,6 +1126,9 @@ describe('Duration, persist fields, status truthfulness', () => {
     const { app, env } = createApp(db);
     const { appId, token, userId } = await submitAndApprove(app, env, VALID_PAYLOAD);
 
+    await db.prepare(`UPDATE users SET status = 'active' WHERE id = ?`).bind(userId).run();
+    await db.prepare(`UPDATE supplier_profiles SET verification_status = 'verified' WHERE user_id = ?`).bind(userId).run();
+
     // Archive all services using the owner-route semantics.
     await db.prepare(`UPDATE supplier_services SET archived_at = ? WHERE supplier_id = ?`).bind('2026-10-05T00:00:00Z', userId).run();
 
@@ -1128,7 +1136,52 @@ describe('Duration, persist fields, status truthfulness', () => {
       headers: { Authorization: `Bearer ${token}` },
     }, env);
     const body = await statusRes.json();
+    expect(body.data.publicationStatus).toBe('draft');
     expect(body.data.blockers.publication).toBe('no_active_services');
+  });
+
+  it('status: verified active supplier with active non-archived service returns active publication', async () => {
+    const { app, env } = createApp(db);
+    const { appId, token, userId } = await submitAndApprove(app, env, VALID_PAYLOAD);
+
+    await db.prepare(`UPDATE users SET status = 'active' WHERE id = ?`).bind(userId).run();
+    await db.prepare(`UPDATE supplier_profiles SET verification_status = 'verified' WHERE user_id = ?`).bind(userId).run();
+    await db.prepare(
+      `INSERT INTO supplier_services (id, supplier_id, title, description, price_min, price_max, currency, duration_hours, is_active, created_at, updated_at)
+       VALUES (?, ?, 'Published Service', '', 1000, 1000, 'THB', 1, 1, datetime('now'), datetime('now'))`
+    ).bind(crypto.randomUUID(), userId).run();
+
+    const statusRes = await app.request(`/api/supplier-onboarding/${appId}/status`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }, env);
+    expect(statusRes.status).toBe(200);
+    const body = await statusRes.json();
+    expect(body.data.accountStatus).toBe('active');
+    expect(body.data.profileStatus).toBe('verified');
+    expect(body.data.publicationStatus).toBe('active');
+    expect(body.data.blockers.account).toBeUndefined();
+    expect(body.data.blockers.profile).toBeUndefined();
+    expect(body.data.blockers.publication).toBeUndefined();
+  });
+
+  it('status: service query failure blocks publication without inventing payment gating', async () => {
+    const { app, env } = createApp(db);
+    const { appId, token, userId } = await submitAndApprove(app, env, VALID_PAYLOAD);
+
+    await db.prepare(`UPDATE users SET status = 'active' WHERE id = ?`).bind(userId).run();
+    await db.prepare(`UPDATE supplier_profiles SET verification_status = 'verified' WHERE user_id = ?`).bind(userId).run();
+    await db.prepare(`DROP TABLE supplier_services`).run();
+
+    const statusRes = await app.request(`/api/supplier-onboarding/${appId}/status`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }, env);
+    expect(statusRes.status).toBe(200);
+    const body = await statusRes.json();
+    expect(body.data.accountStatus).toBe('active');
+    expect(body.data.profileStatus).toBe('verified');
+    expect(body.data.publicationStatus).toBe('blocked');
+    expect(body.data.blockers.publication).toBe('service_query_failed');
+    expect(body.data.paymentStatus).toBe('unavailable');
   });
 
   it('replay intake returns actual saved status', async () => {
@@ -1530,6 +1583,7 @@ describe('Typed response envelope validation', () => {
     expect(body.data).toHaveProperty('status');
     expect(body.data).toHaveProperty('accountStatus');
     expect(body.data).toHaveProperty('profileStatus');
+    expect(body.data).toHaveProperty('publicationStatus');
     expect(body.data).toHaveProperty('blockers');
     expect(body.data).toHaveProperty('evidence');
     expect(body.data).toHaveProperty('expiresAt');

@@ -208,10 +208,46 @@ function sanitizeBodyPreview(text) {
   return sanitizePreview(String(text || '').replace(/ticket=[^&\s"']+/gi, 'ticket=<redacted>'));
 }
 
-async function consumeResponseText(response) {
+function appendLimitedText(chunks, value, state) {
+  if (state.remainingBytes <= 0) {
+    state.truncated = true;
+    return;
+  }
+  const buffer = Buffer.isBuffer(value) ? value : Buffer.from(String(value || ''), 'utf8');
+  if (buffer.length <= state.remainingBytes) {
+    chunks.push(buffer);
+    state.remainingBytes -= buffer.length;
+    return;
+  }
+  chunks.push(buffer.subarray(0, state.remainingBytes));
+  state.remainingBytes = 0;
+  state.truncated = true;
+}
+
+async function consumeResponseText(response, { maxBytes = 16 * 1024 } = {}) {
   if (!response) return '';
-  if (typeof response.text === 'function') return response.text();
+  const chunks = [];
+  const state = { remainingBytes: maxBytes, truncated: false };
+  if (typeof response[Symbol.asyncIterator] === 'function') {
+    for await (const chunk of response) {
+      appendLimitedText(chunks, chunk, state);
+    }
+    const text = Buffer.concat(chunks).toString('utf8');
+    return state.truncated ? `${text}...` : text;
+  }
+  if (typeof response.text === 'function') {
+    appendLimitedText(chunks, await response.text(), state);
+    const text = Buffer.concat(chunks).toString('utf8');
+    return state.truncated ? `${text}...` : text;
+  }
   if (response.body === undefined || response.body === null) return '';
+  if (typeof response.body[Symbol.asyncIterator] === 'function') {
+    for await (const chunk of response.body) {
+      appendLimitedText(chunks, chunk, state);
+    }
+    const text = Buffer.concat(chunks).toString('utf8');
+    return state.truncated ? `${text}...` : text;
+  }
   return String(response.body);
 }
 
@@ -238,42 +274,67 @@ export async function openHostedWebSocket(input, init = {}, { callBudget, hosted
       perMessageDeflate: false,
     });
 
+    let settled = false;
+    const safetyErrorListener = () => {};
+    ws.on('error', safetyErrorListener);
+
+    const removeOwnedListener = (event, listener) => {
+      if (typeof ws.off === 'function') {
+        ws.off(event, listener);
+        return;
+      }
+      ws.removeListener(event, listener);
+    };
+    const cleanupPendingListeners = () => {
+      removeOwnedListener('open', handleOpen);
+      removeOwnedListener('unexpected-response', handleUnexpectedResponse);
+      removeOwnedListener('error', handlePendingError);
+    };
     const settle = (fn, value) => {
-      cleanup();
+      if (settled) return;
+      settled = true;
+      cleanupPendingListeners();
       fn(value);
     };
-    const cleanup = () => {
-      ws.removeAllListeners('open');
-      ws.removeAllListeners('unexpected-response');
-      ws.removeAllListeners('error');
-    };
 
-    ws.once('open', () => {
+    const handleOpen = () => {
       settle(resolve, {
         status: 101,
         ok: true,
         headers: new Headers(),
         webSocket: createWebSocketFacade(ws),
       });
-    });
+    };
 
-    ws.once('unexpected-response', async (_request, response) => {
+    const handleUnexpectedResponse = async (_request, response) => {
+      if (settled) return;
+      settled = true;
+      cleanupPendingListeners();
+
       const body = await consumeResponseText(response);
-      settle(resolve, {
+      const sanitizedBody = sanitizeBodyPreview(body);
+      try {
+        ws.terminate();
+      } catch {}
+      resolve({
         status: response.statusCode || 500,
         ok: false,
         headers: new Headers(response.headers || {}),
-        text: async () => body,
+        text: async () => sanitizedBody,
         bodyUsed: false,
-        sanitizedBody: sanitizeBodyPreview(body),
+        sanitizedBody,
       });
-    });
+    };
 
-    ws.once('error', (error) => {
+    const handlePendingError = (error) => {
       const wrapped = new Error(`Hosted websocket bridge failed: ${sanitizePreview(error?.message || error)}`);
       wrapped.code = error?.code || 'HOSTED_WEBSOCKET_FAILED';
       settle(reject, wrapped);
-    });
+    };
+
+    ws.once('open', handleOpen);
+    ws.once('unexpected-response', handleUnexpectedResponse);
+    ws.once('error', handlePendingError);
   });
 }
 
@@ -623,10 +684,10 @@ export async function preflightHostedRuntime({ worker, proof, hosted = HOSTED_RU
   }
 
   const tableRows = await db.prepare(
-    `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('users', 'core_qa_accounts', 'supplier_onboarding_applications', 'interests') ORDER BY name ASC`,
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('users', 'core_qa_accounts', 'supplier_onboarding_applications', 'interest_entries') ORDER BY name ASC`,
   ).all();
   const tables = Array.isArray(tableRows.results) ? tableRows.results.map((row) => row.name) : [];
-  const requiredTables = ['core_qa_accounts', 'interests', 'supplier_onboarding_applications', 'users'];
+  const requiredTables = ['core_qa_accounts', 'interest_entries', 'supplier_onboarding_applications', 'users'];
   for (const table of requiredTables) {
     if (!tables.includes(table)) {
       throw new Error(`Hosted database preflight missing required table ${table}`);
@@ -645,7 +706,7 @@ export async function preflightHostedRuntime({ worker, proof, hosted = HOSTED_RU
     'SELECT COUNT(*) AS total FROM supplier_onboarding_applications WHERE lower(email) = ?',
   ).bind(SYNTHETIC_IDENTITIES.guide).first();
   const syntheticInterestCountRow = await db.prepare(
-    'SELECT COUNT(*) AS total FROM interests WHERE lower(email) = ?',
+    'SELECT COUNT(*) AS total FROM interest_entries WHERE email_normalized = ?',
   ).bind(SYNTHETIC_IDENTITIES.interest).first();
   const syntheticGuideMembershipRow = await db.prepare(
     `SELECT COUNT(*) AS total

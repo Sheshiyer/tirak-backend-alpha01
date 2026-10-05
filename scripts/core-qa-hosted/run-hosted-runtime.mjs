@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises';
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { HOSTED_RUNTIME } from './constants.mjs';
 import { runHostedJourney, sanitizeHostedProof } from './adapter.mjs';
@@ -35,7 +36,10 @@ async function main() {
 
   const outputDir = path.join(repoRoot, 'scripts/core-qa-hosted/generated');
   const proofPath = path.join(outputDir, 'core-qa-hosted-proof.json');
-  await mkdir(outputDir, { recursive: true });
+  await mkdir(outputDir, { recursive: true, mode: 0o700 });
+  const checkpoint = () => writeFileSync(proofPath, JSON.stringify(sanitizeHostedProof(proof), null, 2), { mode: 0o600 });
+  Object.defineProperty(proof, 'onStep', { value: checkpoint, enumerable: false });
+  checkpoint();
 
   try {
     await runHostedJourney({ repoRoot, proof });
