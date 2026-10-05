@@ -33,6 +33,10 @@ export interface NotificationResult {
 const getErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+/** Cloudflare Queue delays are limited to 24 hours; the consumer rechecks due time. */
+export const notificationDelaySeconds = (scheduledFor: string, now = Date.now()): number =>
+  Math.min(86400, Math.max(1, Math.ceil((Date.parse(scheduledFor) - now) / 1000)));
+
 /**
  * Main queue consumer for notification jobs
  */
@@ -47,7 +51,7 @@ export async function handleNotificationQueue(batch: MessageBatch<NotificationJo
       if (job.scheduledFor && new Date(job.scheduledFor) > new Date()) {
         // Re-queue for later processing
         await env.NOTIFICATION_QUEUE.send(job, {
-          delaySeconds: Math.floor((new Date(job.scheduledFor).getTime() - Date.now()) / 1000),
+          delaySeconds: notificationDelaySeconds(job.scheduledFor),
         });
         message.ack();
         continue;
