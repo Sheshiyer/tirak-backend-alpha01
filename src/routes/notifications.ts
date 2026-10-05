@@ -13,8 +13,9 @@ const notifications = new Hono<{ Bindings: Env; Variables: Variables }>();
 notifications.use('*', authMiddleware);
 notifications.use('*', createRateLimit('notification'));
 
+const pushTokenSchema = z.string().max(512).regex(/^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/);
 const registerPushTokenSchema = z.object({
-  token: z.string().min(1),
+  token: pushTokenSchema,
   deviceType: z.enum(['ios', 'android', 'web']),
   deviceInfo: z.record(z.unknown()).optional()
 });
@@ -94,48 +95,43 @@ notifications.post('/push-token', zValidator('json', registerPushTokenSchema), a
   const now = new Date().toISOString();
 
   try {
-    const existing = await c.env.DB.prepare(`
-      SELECT id, push_tokens FROM user_devices
-      WHERE user_id = ? AND device_type = ? AND is_active = TRUE
-      ORDER BY last_seen DESC
-      LIMIT 1
-    `).bind(userId, deviceType).first();
-
-    if (existing?.id) {
-      const tokens = new Set<string>(JSON.parse(String(existing.push_tokens || '[]')));
-      tokens.add(token);
-
-      await c.env.DB.prepare(`
-        UPDATE user_devices
-        SET push_tokens = ?, device_info = ?, last_seen = ?
-        WHERE id = ?
-      `).bind(
-        JSON.stringify([...tokens]),
-        JSON.stringify(deviceInfo || {}),
-        now,
-        existing.id
-      ).run();
-    } else {
-      await c.env.DB.prepare(`
-        INSERT INTO user_devices (
-          id, user_id, device_type, push_tokens, device_info, is_active, last_seen, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        crypto.randomUUID(),
-        userId,
-        deviceType,
-        JSON.stringify([token]),
-        JSON.stringify(deviceInfo || {}),
-        true,
-        now,
-        now
-      ).run();
-    }
+    // All statements execute in one D1 transaction. No read/modify/write window.
+    await c.env.DB.batch([
+      c.env.DB.prepare(`UPDATE user_devices SET push_tokens = (
+        SELECT json_group_array(value) FROM json_each(CASE WHEN json_valid(push_tokens) THEN push_tokens ELSE '[]' END)
+        WHERE value != ?
+      ) WHERE EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(push_tokens) THEN push_tokens ELSE '[]' END) WHERE value = ?)`)
+        .bind(token, token),
+      c.env.DB.prepare(`UPDATE user_devices
+        SET push_tokens = json_insert(CASE WHEN json_valid(push_tokens) THEN push_tokens ELSE '[]' END, '$[#]', ?),
+          device_info = ?, last_seen = ?
+        WHERE id = (SELECT id FROM user_devices WHERE user_id = ? AND device_type = ? AND is_active = TRUE
+          ORDER BY last_seen DESC, id LIMIT 1)`)
+        .bind(token, JSON.stringify(deviceInfo || {}), now, userId, deviceType),
+      c.env.DB.prepare(`INSERT INTO user_devices (id, user_id, device_type, push_tokens, device_info, is_active, last_seen, created_at)
+        SELECT ?, ?, ?, ?, ?, TRUE, ?, ? WHERE NOT EXISTS (
+          SELECT 1 FROM user_devices WHERE user_id = ? AND device_type = ? AND is_active = TRUE
+        )`).bind(crypto.randomUUID(), userId, deviceType, JSON.stringify([token]), JSON.stringify(deviceInfo || {}), now, now, userId, deviceType),
+    ]);
 
     return jsonSuccess(c, {}, 'Push token registered successfully');
   } catch (error) {
-    console.error('Register push token error:', error);
+    console.error(JSON.stringify({ event: 'push_token_registration_failed' }));
     return jsonError(c, 'Failed to register push token', 'An error occurred while saving the device token', 500);
+  }
+});
+
+/** Idempotent logout cleanup. Another account cannot revoke the current owner. */
+notifications.delete('/push-token', zValidator('json', z.object({ token: pushTokenSchema })), async (c) => {
+  const { token } = c.req.valid('json');
+  try {
+    await c.env.DB.prepare(`UPDATE user_devices SET push_tokens = (
+      SELECT json_group_array(value) FROM json_each(CASE WHEN json_valid(push_tokens) THEN push_tokens ELSE '[]' END) WHERE value != ?
+    ) WHERE user_id = ?`).bind(token, c.get('userId')).run();
+    return jsonSuccess(c, {}, 'Push token unregistered successfully');
+  } catch {
+    console.error(JSON.stringify({ event: 'push_token_unregistration_failed' }));
+    return jsonError(c, 'Failed to unregister push token', 'An error occurred while removing the device token', 500);
   }
 });
 

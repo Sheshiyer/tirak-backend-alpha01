@@ -25,7 +25,8 @@ import {
   createSMSConfig,
   createEmailConfig,
   sendEmail,
-  renderBasicEmail
+  renderBasicEmail,
+  recordEmailOutcome
 } from '../utils/communication';
 import {
   createUser,
@@ -403,8 +404,10 @@ auth.post('/forgot-password', zValidator('json', passwordResetRequestSchema), as
   
   try {
     // Find user by email or phone
-    const user = await getUserByEmail(identifier, c.env.DB) || 
-                 await getUserByPhone(identifier, c.env.DB);
+    const normalizedIdentifier = identifier.trim();
+    const user = normalizedIdentifier.includes('@')
+      ? await getUserByEmail(normalizedIdentifier.toLowerCase(), c.env.DB)
+      : await getUserByPhone(normalizePhone(normalizedIdentifier), c.env.DB);
     
     if (!user) {
       // Don't reveal if user exists or not
@@ -422,34 +425,36 @@ auth.post('/forgot-password', zValidator('json', passwordResetRequestSchema), as
       { expirationTtl: 3600 } // 1 hour
     );
 
+    // App deep link: tirak://auth/new?token (correct scheme)
     const resetLink = `tirak://auth/new?token=${encodeURIComponent(resetToken)}`;
-    const webResetLink = `https://tirak.app/auth/new?token=${encodeURIComponent(resetToken)}`;
-
+    // Browser reset URL: derive from request HOST header (CORS validates caller origins).
+    // Never use raw caller Origin; HOST header is the backend's own request origin.
+    const hostHeader = c.req.header('Host') || '';
+    const proto = hostHeader.includes('localhost') || hostHeader.includes('127.0.0.1') ? 'http' : 'https';
+    const webResetLink = hostHeader
+      ? `${proto}://${hostHeader}/auth/new#token=${encodeURIComponent(resetToken)}`
+      : `tirak://auth/new?token=${encodeURIComponent(resetToken)}`;
+    const requestId = crypto.randomUUID();
     try {
-      const emailConfig = createEmailConfig(c.env);
-      await sendEmail(
-        emailConfig,
-        user.email,
-        'Reset your Tirak password',
-        renderBasicEmail(
-          'Reset your Tirak password',
-          'Use the button below to choose a new password. This link expires in one hour. If you did not request this, you can ignore this email.',
-          { label: 'Reset password', url: resetLink }
-        ) + `\n<!-- Web fallback: ${webResetLink} -->`,
-        'password_reset'
-      );
-    } catch (error) {
-      console.error('Failed to send password reset email:', error);
-      if (c.env.ENVIRONMENT !== 'production') {
-        console.log(`Password reset token for ${user.email}: ${resetToken}`);
-      }
+      const delivery = await sendEmail(createEmailConfig(c.env), user.email, 'Reset your Tirak password',
+        renderBasicEmail('Reset your Tirak password',
+          'Open Tirak to choose a new password. This link expires in one hour. If you did not request this, ignore this email.',
+          { label: 'Open Tirak', url: resetLink }).replace('</main>',
+            `<p>If the app does not open, <a href="${webResetLink}">reset your password securely in your browser</a>.</p></main>`),
+        'password_reset');
+      recordEmailOutcome('password_reset', delivery, requestId);
+      // A timeout cannot cancel a binding send: retain its expiring token in case acceptance arrives late.
+      if (delivery.errorCode !== 'EMAIL_TIMEOUT' && delivery.status !== 'sent' && delivery.status !== 'delivered') await c.env.CACHE.delete(`reset:${resetToken}`);
+    } catch {
+      recordEmailOutcome('password_reset', { id: '', status: 'failed', timestamp: new Date(), errorCode: 'EMAIL_CONFIGURATION' }, requestId);
+      await c.env.CACHE.delete(`reset:${resetToken}`);
     }
 
     return jsonSuccess(c, { sent: true }, 'If an account exists, a reset code will be sent');
 
   } catch (error) {
-    console.error('Password reset request error:', error);
-    return jsonError(c, 'Reset request failed', 'An error occurred while processing reset request', 500);
+    console.error(JSON.stringify({ event: 'password_reset_request_failed', requestId: crypto.randomUUID() }));
+    return jsonSuccess(c, { sent: true }, 'If an account exists, a reset code will be sent');
   }
 });
 
@@ -470,7 +475,7 @@ auth.post('/reset-password', zValidator('json', passwordResetSchema), async (c) 
     const { userId, expiresAt } = JSON.parse(tokenData);
     
     // Check if token has expired
-    if (new Date() > new Date(expiresAt)) {
+    if (!Number.isFinite(Date.parse(expiresAt)) || Date.now() >= Date.parse(expiresAt)) {
       await c.env.CACHE.delete(`reset:${token}`);
       return jsonError(c, 'Token expired', 'Reset token has expired', 400);
     }
@@ -478,30 +483,33 @@ auth.post('/reset-password', zValidator('json', passwordResetSchema), async (c) 
     // Hash new password
     const passwordHash = await hashPassword(newPassword);
 
-    // Update user password
-    await c.env.DB.prepare(
-      'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ).bind(passwordHash, userId).run();
-
-    // Activate invite-created accounts on first password set
-    await c.env.DB.prepare(
-      "UPDATE users SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'"
-    ).bind(userId).run();
-
-    // Delete reset token
-    await c.env.CACHE.delete(`reset:${token}`);
-
-    // Track password reset event
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'password_reset',
-      userId,
-      timestamp: new Date().toISOString()
-    });
+    // KV can return stale data after delete. D1 is the single-use authority, including
+    // tokens issued by the existing admin invitation flow. A batch is one transaction.
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+    const tokenHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+    const now = Date.now();
+    const result = await c.env.DB.batch([
+      c.env.DB.prepare(`UPDATE users SET password_hash = ?,
+        status = CASE WHEN status = 'pending' THEN 'active' ELSE status END,
+        updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND ? > ? AND NOT EXISTS (
+          SELECT 1 FROM password_reset_consumptions WHERE token_hash = ?
+        )`).bind(passwordHash, userId, Date.parse(expiresAt), now, tokenHash),
+      c.env.DB.prepare(`INSERT OR IGNORE INTO password_reset_consumptions (token_hash, user_id, expires_at, consumed_at)
+        SELECT ?, ?, ?, ? WHERE changes() = 1`).bind(tokenHash, userId, Date.parse(expiresAt), now),
+    ]);
+    if (result[0]?.meta.changes !== 1 || result[1]?.meta.changes !== 1) {
+      return jsonError(c, 'Invalid token', 'Reset token is invalid or has expired', 400);
+    }
+    // Best effort only after authoritative consumption. Cleanup/telemetry cannot undo a reset.
+    try { await c.env.CACHE.delete(`reset:${token}`); } catch { /* D1 blocks replay. */ }
+    try { await c.env.ANALYTICS_QUEUE.send({ eventType: 'password_reset', userId, timestamp: new Date().toISOString() }); }
+    catch { console.warn(JSON.stringify({ event: 'password_reset_analytics_unavailable' })); }
 
     return jsonSuccess(c, { reset: true }, 'Password reset successfully');
 
   } catch (error) {
-    console.error('Password reset error:', error);
+    console.error(JSON.stringify({ event: 'password_reset_failed', requestId: crypto.randomUUID() }));
     return jsonError(c, 'Reset failed', 'An error occurred while resetting password', 500);
   }
 });

@@ -2,28 +2,15 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { validateUUID } from '../middleware/validation';
-import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
+import { optionalAuthMiddleware } from '../middleware/auth';
 import { createRateLimit } from '../middleware/rateLimit';
-import { jsonSuccess, jsonError, jsonPaginated, createPagination } from '../utils/response';
+import { jsonSuccess, jsonError, createPagination } from '../utils/response';
 import { firstProfileImage, publicProfileImages } from '../utils/profileImages';
-import { getUserById, updateUser } from '../utils/database';
-import { publicCompanionIdentityFilter } from '../utils/publicCompanionIdentity';
+import { publicIdentity, publicCompanionVisibility } from '../utils/guideVisibility';
+import { registerGuideManagement } from '../utils/guideManagement';
 import type { Env, Variables } from '../index';
 
 const companions = new Hono<{ Bindings: Env; Variables: Variables }>();
-
-const publicIdentity = publicCompanionIdentityFilter();
-const publicCompanionVisibility = `
-  COALESCE(sp.subscription_status, 'active') = 'active'
-  AND sp.verification_status = 'verified'
-  AND u.status = 'active'
-  AND TRIM(COALESCE(sp.display_name, '')) != ''
-  AND EXISTS (
-    SELECT 1 FROM supplier_services visible_service
-    WHERE visible_service.supplier_id = sp.user_id AND visible_service.is_active = TRUE
-  )
-  AND ${publicIdentity.sql}
-`;
 
 // Apply optional authentication and rate limiting
 companions.use('*', optionalAuthMiddleware);
@@ -52,13 +39,7 @@ const companionSearchSchema = z.object({
   sortOrder: z.enum(['asc', 'desc']).default('desc')
 });
 
-const availabilitySaveSchema = z.array(z.object({
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/),
-  isAvailable: z.boolean()
-})).min(1);
+registerGuideManagement(companions);
 
 /**
  * Get companions list (mobile-optimized)
@@ -91,7 +72,7 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
         AVG(ss.duration_hours) as avgDuration
       FROM supplier_profiles sp
       JOIN users u ON sp.user_id = u.id
-      LEFT JOIN supplier_services ss ON sp.user_id = ss.supplier_id AND ss.is_active = TRUE
+      LEFT JOIN supplier_services ss ON sp.user_id = ss.supplier_id AND ss.is_active = TRUE AND ss.archived_at IS NULL
       WHERE ${publicCompanionVisibility}
     `;
 
@@ -249,7 +230,7 @@ companions.get('/', zValidator('query', companionSearchSchema), async (c) => {
       FROM supplier_services ss
       JOIN supplier_profiles sp ON ss.supplier_id = sp.user_id
       JOIN users u ON sp.user_id = u.id
-      WHERE ss.is_active = TRUE 
+      WHERE ss.is_active = TRUE AND ss.archived_at IS NULL
         AND ${publicCompanionVisibility}
     `).bind(...publicIdentity.parameters).first();
 
@@ -306,7 +287,7 @@ companions.get('/:id/services', validateUUID('id'), async (c) => {
     const servicesResult = await c.env.DB.prepare(`
       SELECT id, title, description, price_min, currency, duration_hours
       FROM supplier_services
-      WHERE supplier_id = ? AND is_active = TRUE
+      WHERE supplier_id = ? AND is_active = TRUE AND archived_at IS NULL
       ORDER BY price_min ASC, created_at DESC
     `).bind(companionId).all();
 
@@ -358,7 +339,7 @@ companions.get('/:id', validateUUID('id'), async (c) => {
         ss.*,
         NULL as category_name
       FROM supplier_services ss
-      WHERE ss.supplier_id = ? AND ss.is_active = TRUE
+      WHERE ss.supplier_id = ? AND ss.is_active = TRUE AND ss.archived_at IS NULL
       ORDER BY ss.price_min ASC
     `).bind(companionId).all();
 
@@ -469,203 +450,6 @@ companions.get('/:id', validateUUID('id'), async (c) => {
   } catch (error) {
     console.error('Get companion details error:', error);
     return jsonError(c, 'Failed to retrieve companion', 'An error occurred while fetching companion details', 500);
-  }
-});
-
-/**
- * Get companion availability
- */
-companions.get('/:id/availability', validateUUID('id'), async (c) => {
-  const companionId = c.req.param('id') as string;
-  const startDate = c.req.query('startDate');
-  const endDate = c.req.query('endDate');
-
-  if (!startDate || !endDate) {
-    return jsonError(c, 'Missing parameters', 'startDate and endDate are required', 400);
-  }
-
-  try {
-    // Verify companion exists
-    const companion = await c.env.DB.prepare(`
-      SELECT sp.user_id FROM supplier_profiles sp
-      JOIN users u ON sp.user_id = u.id
-      WHERE sp.user_id = ? AND ${publicCompanionVisibility}
-    `).bind(companionId, ...publicIdentity.parameters).first();
-
-    if (!companion) {
-      return jsonError(c, 'Companion not found', 'The requested companion does not exist', 404);
-    }
-
-    // Get weekly availability
-    const weeklyAvailability = await c.env.DB.prepare(`
-      SELECT day_of_week, start_time, end_time, is_available
-      FROM supplier_availability
-      WHERE supplier_id = ?
-    `).bind(companionId).all();
-
-    // Get existing bookings in the date range
-    const bookings = await c.env.DB.prepare(`
-      SELECT
-        date(scheduled_at) as booking_date,
-        time(scheduled_at) as start_time,
-        time(datetime(scheduled_at, '+' || duration || ' minutes')) as end_time
-      FROM bookings
-      WHERE supplier_id = ?
-        AND date(scheduled_at) BETWEEN ? AND ?
-        AND status IN ('confirmed', 'in_progress')
-    `).bind(companionId, startDate, endDate).all();
-
-    // Generate availability for each day in the range
-    const availability = [];
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-
-    for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-      const dateStr = date.toISOString().split('T')[0];
-      const dayOfWeek = date.getDay();
-
-      // Get weekly schedule for this day
-      const daySchedule = weeklyAvailability.results.filter((avail: any) =>
-        avail.day_of_week === dayOfWeek && avail.is_available
-      );
-
-      // Get bookings for this date
-      const dayBookings = bookings.results.filter((booking: any) =>
-        booking.booking_date === dateStr
-      );
-
-      // Generate time slots
-      const timeSlots: Array<{ start: string; end: string; available: boolean; price: number }> = [];
-
-      if (daySchedule.length > 0) {
-        daySchedule.forEach((schedule: any) => {
-          // Generate hourly slots between start and end time
-          const startHour = parseInt(schedule.start_time.split(':')[0]);
-          const endHour = parseInt(schedule.end_time.split(':')[0]);
-
-          for (let hour = startHour; hour < endHour; hour++) {
-            const slotStart = `${hour.toString().padStart(2, '0')}:00`;
-            const slotEnd = `${(hour + 1).toString().padStart(2, '0')}:00`;
-
-            // Check if this slot conflicts with any booking
-            const isBooked = dayBookings.some((booking: any) => {
-              return (slotStart >= booking.start_time && slotStart < booking.end_time) ||
-                     (slotEnd > booking.start_time && slotEnd <= booking.end_time);
-            });
-
-            timeSlots.push({
-              start: slotStart,
-              end: slotEnd,
-              available: !isBooked,
-              price: 1000 // Default hourly rate
-            });
-          }
-        });
-      }
-
-      availability.push({
-        date: dateStr,
-        available: timeSlots.some(slot => slot.available),
-        timeSlots
-      });
-    }
-
-    return jsonSuccess(c, {
-      availability
-    }, 'Availability retrieved successfully');
-
-  } catch (error) {
-    console.error('Get companion availability error:', error);
-    return jsonError(c, 'Failed to retrieve availability', 'An error occurred while fetching availability', 500);
-  }
-});
-
-/**
- * Save companion availability from the mobile local-guide flow.
- */
-companions.post('/:id/availability', validateUUID('id'), authMiddleware, zValidator('json', availabilitySaveSchema), async (c) => {
-  const companionId = c.req.param('id') as string;
-  const userId = c.get('userId');
-  const userType = c.get('userType');
-  const slots = c.req.valid('json');
-
-  if (userType !== 'admin' && userId !== companionId) {
-    return jsonError(c, 'Access denied', 'You can only update your own availability', 403);
-  }
-
-  try {
-    const companion = await c.env.DB.prepare(`
-      SELECT user_id FROM supplier_profiles
-      WHERE user_id = ?
-        AND COALESCE(subscription_status, 'active') = 'active'
-        AND COALESCE(verification_status, 'pending') != 'rejected'
-    `).bind(companionId).first();
-
-    if (!companion) {
-      return jsonError(c, 'Companion not found', 'The requested companion does not exist', 404);
-    }
-
-    const savedAvailability: Array<{
-      date: string;
-      available: boolean;
-      slots: Array<{ start: string; end: string; available: boolean }>;
-    }> = [];
-
-    for (const slot of slots) {
-      const start = new Date(`${slot.startDate}T00:00:00Z`);
-      const end = new Date(`${slot.endDate}T00:00:00Z`);
-
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
-        return jsonError(c, 'Invalid availability range', 'End date must be on or after start date', 400);
-      }
-
-      for (let cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
-        const date = cursor.toISOString().slice(0, 10);
-        const dayOfWeek = cursor.getUTCDay();
-
-        await c.env.DB.prepare(`
-          INSERT INTO supplier_availability (supplier_id, day_of_week, start_time, end_time, is_available, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-          ON CONFLICT(supplier_id, day_of_week) DO UPDATE SET
-            start_time = excluded.start_time,
-            end_time = excluded.end_time,
-            is_available = excluded.is_available,
-            updated_at = CURRENT_TIMESTAMP
-        `).bind(
-          companionId,
-          dayOfWeek,
-          slot.startTime,
-          slot.endTime,
-          slot.isAvailable ? 1 : 0
-        ).run();
-
-        savedAvailability.push({
-          date,
-          available: slot.isAvailable,
-          slots: [{ start: slot.startTime, end: slot.endTime, available: slot.isAvailable }]
-        });
-      }
-    }
-
-    await c.env.CACHE.delete(`supplier:${companionId}`);
-
-    await c.env.ANALYTICS_QUEUE.send({
-      eventType: 'companion_availability_update',
-      userId: companionId,
-      properties: {
-        ranges: slots.length,
-        days: savedAvailability.length
-      },
-      timestamp: new Date().toISOString()
-    });
-
-    return jsonSuccess(c, {
-      availability: savedAvailability
-    }, 'Availability saved successfully');
-
-  } catch (error) {
-    console.error('Save companion availability error:', error);
-    return jsonError(c, 'Failed to save availability', 'An error occurred while saving availability', 500);
   }
 });
 

@@ -18,9 +18,28 @@ const uploads = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 const PUBLIC_IMAGE_PREFIXES = ['avatars/', 'covers/', 'images/'];
 
+/** Private evidence prefixes that must NEVER be served by public routes. */
+const PRIVATE_PREFIXES = ['private-core-onboarding/', 'private-'];
+
+/** Check if a key targets any private evidence prefix (case-insensitive, encoded). */
+function isPrivateEvidenceKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  // Direct match
+  if (PRIVATE_PREFIXES.some(p => lower.startsWith(p))) return true;
+  // Encoded bypass: decodeURIComponent may reveal private prefix
+  try {
+    const decoded = decodeURIComponent(lower);
+    if (PRIVATE_PREFIXES.some(p => decoded.startsWith(p))) return true;
+  } catch { /* not encoded */ }
+  // Path traversal into private territory
+  if (lower.includes('/private-core-onboarding/') || lower.includes('/private-')) return true;
+  return false;
+}
+
 /** Public marketplace images are served by the Worker so profile media does
  * not depend on a separate, unconfigured R2 custom domain. Documents remain
- * private and never pass this prefix allowlist. */
+ * private and never pass this prefix allowlist. Evidence files are always
+ * private and refused before any R2 fetch. */
 uploads.get('/public/*', async (c) => {
   const marker = '/public/';
   const markerIndex = c.req.path.indexOf(marker);
@@ -30,7 +49,14 @@ uploads.get('/public/*', async (c) => {
   } catch {
     return jsonError(c, 'File not found', 'The requested public image does not exist', 404);
   }
-  if (!key || key.includes('..') || !PUBLIC_IMAGE_PREFIXES.some(prefix => key.startsWith(prefix))) {
+  if (!key || key.includes('..')) {
+    return jsonError(c, 'File not found', 'The requested public image does not exist', 404);
+  }
+  // REFUSE private evidence prefixes BEFORE any R2 fetch
+  if (isPrivateEvidenceKey(key)) {
+    return jsonError(c, 'FORBIDDEN', 'Private evidence files cannot be accessed via public routes.', 403);
+  }
+  if (!PUBLIC_IMAGE_PREFIXES.some(prefix => key.startsWith(prefix))) {
     return jsonError(c, 'File not found', 'The requested public image does not exist', 404);
   }
 
