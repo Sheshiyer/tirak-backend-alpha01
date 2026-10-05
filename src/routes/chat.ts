@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { chatMessageSchema } from '../utils/validation';
+import { findCoreQaCohortRoom } from '../middleware/coreQa';
 import { validateUUID, validatePagination } from '../middleware/validation';
 import { authMiddleware } from '../middleware/auth';
 import { getUserById } from '../utils/database';
@@ -15,11 +16,15 @@ const createChatRoomSchema = z.object({
   bookingId: z.string().uuid('Booking ID must be a valid UUID'),
 });
 
-const eligibleBookingJoin = (roomAlias: string): string => `
+const historicalParticipantJoin = (roomAlias: string): string => `
   INNER JOIN bookings b
     ON b.id = ${roomAlias}.booking_id
    AND b.customer_id = ${roomAlias}.customer_id
    AND b.supplier_id = ${roomAlias}.supplier_id
+`;
+
+const liveBookingJoin = (roomAlias: string): string => `
+  ${historicalParticipantJoin(roomAlias)}
    AND b.status IN ('confirmed', 'in_progress')
 `;
 
@@ -33,16 +38,28 @@ chat.use('*', async (c, next) => {
   const isSocketUpgrade = c.req.method === 'GET'
     && /\/rooms\/[^/]+\/ws$/.test(c.req.path)
     && c.req.header('Upgrade')?.toLowerCase() === 'websocket';
-  const ticket = isSocketUpgrade ? c.req.query('ticket') : undefined;
-  if (ticket && ticket.length <= 100 && !c.req.header('Authorization')) {
+  if (isSocketUpgrade && c.req.query('ticket') && !c.req.header('Authorization')) {
+    const existingUserId = c.get('userId');
+    const existingUser = c.get('user');
+    const existingUserType = c.get('userType');
+    if (existingUserId && existingUser && existingUserType) {
+      return next();
+    }
     try {
       const roomId = c.req.path.split('/').at(-2);
-      const consumed = await c.env.DB.prepare(`DELETE FROM chat_socket_tickets
-        WHERE ticket_hash = ? AND room_id = ? AND expires_at > ? RETURNING user_id`)
-        .bind(await socketTicketHash(ticket), roomId, Date.now()).first<{ user_id: string }>();
-      const user = consumed ? await getUserById(consumed.user_id, c.env.DB) : null;
-      if (!user || user.status !== 'active') return jsonError(c, 'Authentication failed', 'Request a new chat connection ticket.', 401);
-      c.set('user', user); c.set('userId', user.id); c.set('userType', user.userType);
+      const ticket = c.req.query('ticket');
+      const ticketRow = (roomId && ticket)
+        ? await c.env.DB.prepare(`SELECT user_id FROM chat_socket_tickets
+          WHERE ticket_hash = ? AND room_id = ? AND expires_at > ?`)
+          .bind(await socketTicketHash(ticket), roomId, Date.now()).first<{ user_id: string }>()
+        : null;
+      const user = ticketRow ? await getUserById(ticketRow.user_id, c.env.DB) : null;
+      if (!user || user.status !== 'active') {
+        return jsonError(c, 'Authentication failed', 'Request a new chat connection ticket.', 401);
+      }
+      c.set('user', user);
+      c.set('userId', user.id);
+      c.set('userType', user.userType);
       return next();
     } catch {
       return jsonError(c, 'Connection unavailable', 'Please retry your chat connection.', 503);
@@ -66,7 +83,7 @@ chat.get('/rooms', validatePagination(), async (c) => {
     const countResult = await c.env.DB.prepare(`
       SELECT COUNT(*) as total 
       FROM booking_chat_rooms cr
-      ${eligibleBookingJoin('cr')}
+      ${historicalParticipantJoin('cr')}
       WHERE b.customer_id = ? OR b.supplier_id = ?
     `).bind(userId, userId).first();
     
@@ -83,7 +100,7 @@ chat.get('/rooms', validatePagination(), async (c) => {
         cm.content as last_message, cm.message_type as last_message_type,
         cm.created_at as last_message_time
       FROM booking_chat_rooms cr
-      ${eligibleBookingJoin('cr')}
+      ${historicalParticipantJoin('cr')}
       LEFT JOIN customer_profiles cp ON cr.customer_id = cp.user_id
       LEFT JOIN supplier_profiles sp ON cr.supplier_id = sp.user_id
       LEFT JOIN booking_chat_messages cm ON cr.id = cm.room_id
@@ -249,7 +266,7 @@ chat.get('/rooms/:roomId', validateUUID('roomId'), validatePagination(), async (
         cp.display_name as customer_name, cp.profile_image as customer_image,
         sp.display_name as supplier_name, sp.profile_images as supplier_images
       FROM booking_chat_rooms cr
-      ${eligibleBookingJoin('cr')}
+      ${historicalParticipantJoin('cr')}
       LEFT JOIN customer_profiles cp ON cr.customer_id = cp.user_id
       LEFT JOIN supplier_profiles sp ON cr.supplier_id = sp.user_id
       WHERE cr.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)
@@ -332,13 +349,21 @@ chat.get('/rooms/:roomId', validateUUID('roomId'), validatePagination(), async (
  * WebSocket endpoint for real-time chat
  */
 chat.post('/rooms/:roomId/socket-ticket', validateUUID('roomId'), async (c) => {
-  const roomId = c.req.param('roomId');
+  const roomId = c.req.param('roomId') as string;
   const userId = c.get('userId') as string;
   try {
-    const room = await c.env.DB.prepare(`SELECT cr.id FROM booking_chat_rooms cr ${eligibleBookingJoin('cr')}
+    const room = await c.env.DB.prepare(`SELECT cr.id FROM booking_chat_rooms cr ${liveBookingJoin('cr')}
       WHERE cr.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)`)
       .bind(roomId, userId, userId).first();
     if (!room) return jsonError(c, 'Chat room not found', 'Access denied or room does not exist', 404);
+
+    if (c.env.ENVIRONMENT === 'core-qa' && c.env.CORE_QA_MODE === 'cohort') {
+      const qaRoom = await findCoreQaCohortRoom(c.env.DB, roomId, userId);
+      if (!qaRoom) {
+        return jsonError(c, 'Chat room not found', 'Access denied or room does not exist', 404);
+      }
+    }
+
     const ticket = crypto.randomUUID() + crypto.randomUUID();
     const now = Date.now();
     await c.env.DB.batch([
@@ -358,13 +383,26 @@ chat.get('/rooms/:roomId/ws', validateUUID('roomId'), async (c) => {
   }
   const roomId = c.req.param('roomId') as string;
   const userId = c.get('userId') as string;
+  const ticket = c.req.query('ticket');
   
   try {
+    if (ticket) {
+      const consumed = await c.env.DB.prepare(
+        `DELETE FROM chat_socket_tickets
+         WHERE ticket_hash = ? AND room_id = ? AND user_id = ? AND expires_at > ?
+         RETURNING user_id`
+      ).bind(await socketTicketHash(ticket), roomId, userId, Date.now()).first<{ user_id: string }>();
+
+      if (!consumed?.user_id) {
+        return jsonError(c, 'Authentication failed', 'Request a new chat connection ticket.', 401);
+      }
+    }
+
     // Verify user has access to this chat room
     const room = await c.env.DB.prepare(`
       SELECT cr.id, cr.booking_id
       FROM booking_chat_rooms cr
-      ${eligibleBookingJoin('cr')}
+      ${liveBookingJoin('cr')}
       WHERE cr.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)
     `).bind(roomId, userId, userId).first();
 
@@ -416,7 +454,7 @@ chat.post('/rooms/:roomId/messages',
       const room = await c.env.DB.prepare(`
         SELECT cr.id, cr.booking_id, cr.customer_id, cr.supplier_id
         FROM booking_chat_rooms cr
-        ${eligibleBookingJoin('cr')}
+        ${liveBookingJoin('cr')}
         WHERE cr.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)
       `).bind(roomId, userId, userId).first();
 
@@ -492,7 +530,7 @@ chat.post('/rooms/:roomId/read', validateUUID('roomId'), async (c) => {
     const room = await c.env.DB.prepare(`
       SELECT cr.id, cr.booking_id
       FROM booking_chat_rooms cr
-      ${eligibleBookingJoin('cr')}
+      ${historicalParticipantJoin('cr')}
       WHERE cr.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)
     `).bind(roomId, userId, userId).first();
 
@@ -539,7 +577,7 @@ chat.get('/rooms/:roomId/search', validateUUID('roomId'), async (c) => {
     const room = await c.env.DB.prepare(`
       SELECT cr.id, cr.booking_id
       FROM booking_chat_rooms cr
-      ${eligibleBookingJoin('cr')}
+      ${historicalParticipantJoin('cr')}
       WHERE cr.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)
     `).bind(roomId, userId, userId).first();
 
