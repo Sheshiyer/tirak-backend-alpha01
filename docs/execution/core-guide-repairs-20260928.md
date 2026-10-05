@@ -43,3 +43,7 @@ The new SQLite route suite covers pending owner persistence, cross-account/anony
 Final candidate verification: TypeScript passed; 435 tests across 38 files passed, including 11 new SQLite route scenarios. `git diff --check` passed.
 
 Independent review correction: service create/update duration is bounded to30–1439 minutes, matching the supported same-day00:00–23:59 contract. A SQLite route regression creates1439 minutes and books the full interval;1440-minute create/update is rejected. Overnight scheduling is outside this repair.
+
+## PR review follow-up — 2026-10-05
+
+Integrated candidate includes migrations017/019 already applied to the retained Core target and deployed with Resend. Current TypeScript,44files/507tests and static release gate pass. The earlier local-only section describes preparation history. Live verification/reset journeys and physical push remain pending. Owner experience responses are paginated (default50); the current mobile management view consumes the first page, so owners above50 entries need a pagination follow-up.
