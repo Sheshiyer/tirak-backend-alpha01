@@ -33,7 +33,12 @@ async function main() {
     'd1', 'execute', HOSTED_RUNTIME.d1DatabaseName, '--profile', 'tirak', '--config', HOSTED_RUNTIME.wranglerConfigPath,
     '--remote', '--file', sqlPath, '--yes', '--json',
   ], { encoding: 'utf8', timeout: 180_000, maxBuffer: 4 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
-  const cli = JSON.parse(stdout);
+  await writeFile(path.join(outputDir, 'wrangler-import-output.txt'), stdout, { mode: 0o600 });
+  // Profile-aware Wrangler emits a bounded status prefix before its JSON payload.
+  let cli;
+  for (const match of stdout.matchAll(/^\s*\[/gm)) {
+    try { cli = JSON.parse(stdout.slice(match.index)); break; } catch { /* next JSON candidate */ }
+  }
   if (!Array.isArray(cli) || !cli.length || cli.some(entry => entry.success !== true)) throw new Error('QA schema import did not confirm success.');
   const integrity = await adapters.db.prepare('PRAGMA foreign_key_check').all();
   const after = await adapters.db.prepare("SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'").first();
