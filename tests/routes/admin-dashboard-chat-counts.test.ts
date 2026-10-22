@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -81,10 +81,28 @@ describe('Admin dashboard chat statistics', () => {
   let sqlite: ReturnType<typeof buildMigratedDb>['sqlite'];
   let db: ReturnType<typeof buildMigratedDb>['db'];
 
+  const fixtureNow = new Date('2026-10-05T12:00:00Z');
   beforeEach(() => {
+    // Dashboard queries use both JavaScript Date and SQLite datetime('now').
+    // Freeze both clock domains so fixed fixture messages stay genuinely today/recent.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(fixtureNow);
     const built = buildMigratedDb();
     sqlite = built.sqlite;
     db = built.db;
+    sqlite.function('datetime', { varargs: true }, (...args: any[]) => {
+      const [value, modifier] = args;
+      if (value !== 'now' || (modifier !== undefined && modifier !== '-24 hours')) {
+        throw new Error('Unexpected datetime query in dashboard clock fixture');
+      }
+      const instant = fixtureNow.getTime() - (modifier === '-24 hours' ? 24 * 60 * 60 * 1000 : 0);
+      return new Date(instant).toISOString().slice(0, 19).replace('T', ' ');
+    });
+  });
+
+  afterEach(() => {
+    sqlite?.close();
+    vi.useRealTimers();
   });
 
   it('counts persisted booking chat and legacy chat without room collisions while keeping completed booking rooms inactive', async () => {
