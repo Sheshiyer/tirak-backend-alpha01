@@ -45,6 +45,11 @@ describe('password reset browser fallback', () => {
     expect(JSON.parse(transport.mock.calls[0][1].body)).toEqual({ token: 'synthetic-reset-token', newPassword: 'test-password' });
     expect((document.querySelector('#reset-form') as any).hidden).toBe(true);
     expect((document.querySelector('#password') as any).value).toBe('');
+    const returnLink = document.querySelector('#open-app') as any;
+    expect(returnLink.hidden).toBe(false);
+    expect(returnLink.href).toBe('https://app.tirak.app/auth/login');
+    expect(new URL(returnLink.href).search).toBe('');
+    expect(new URL(returnLink.href).hash).toBe('');
     await submit(document);
     expect(transport).toHaveBeenCalledTimes(1);
   });
@@ -59,6 +64,9 @@ describe('password reset browser fallback', () => {
     const missing = await page('https://api.example/auth/new');
     expect((missing.document.querySelector('#submit') as any).disabled).toBe(true);
     expect(missing.transport).not.toHaveBeenCalled();
+    const returnLink = missing.document.querySelector('#open-app') as any;
+    expect(returnLink.hidden).toBe(false);
+    expect(returnLink.href).toBe('https://app.tirak.app/auth/login');
     const mismatch = await page();
     fill(mismatch.document, 'different');
     await submit(mismatch.document);
