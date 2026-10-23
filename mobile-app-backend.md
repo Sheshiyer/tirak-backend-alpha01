@@ -114,38 +114,31 @@ Authorization: Bearer {token}
 }
 ```
 
-### POST /auth/forgot-password
-**Request:**
-```json
-{
-  "email": "string"
-}
-```
+### POST /api/auth/forgot-password
+**Request:** `{ "identifier": "email or phone" }`
 
-**Response:**
-```json
-{
-  "success": boolean,
-  "message": "string"
-}
-```
+The public response is uniform for existing and missing accounts: `data.sent: true`
+means the request was accepted, not that an email reached an inbox. Provider
+acceptance/failure is recorded internally with sanitized codes and correlation IDs.
+The existing selected email provider remains authoritative.
 
-### POST /auth/reset-password
-**Request:**
-```json
-{
-  "token": "string",
-  "password": "string"
-}
-```
+### POST /api/auth/reset-password
+**Request:** `{ "token": "reset token", "newPassword": "new password" }`
 
-**Response:**
-```json
-{
-  "success": boolean,
-  "message": "string"
-}
-```
+The reset link expires after one hour and can change a password only once.
+The native link is `tirak://auth/new?token=...`; the visible browser alternative
+uses the selected Core Worker `/auth/new#token=...` page. The token fragment is
+not sent in HTTP access logs. The browser page must ship with the API release;
+`tirak.app/auth/new` is not currently a supported recovery page.
+
+### POST /api/notifications/push-token
+Authenticated request: `{ "token": "ExpoPushToken[...]", "deviceType": "ios" }`.
+A token belongs to one account at a time. Registration atomically reassigns it.
+
+### DELETE /api/notifications/push-token
+Authenticated request: `{ "token": "ExpoPushToken[...]" }`.
+Removes only the current account's association; invoke before clearing the session.
+Idempotent success does not reveal another account's token ownership.
 
 ## User Profile Endpoints
 

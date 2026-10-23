@@ -126,7 +126,7 @@ export const serviceSchema = z.object({
   priceMin: z.number().min(0, 'Price must be positive'),
   priceMax: z.number().min(0, 'Price must be positive'),
   currency: z.string().length(3, 'Currency must be 3 characters').default('THB'),
-  durationHours: z.number().min(0.5, 'Duration must be at least 30 minutes').max(24, 'Duration cannot exceed 24 hours')
+  durationHours: z.number().min(0.5, 'Duration must be at least 30 minutes').max(1439 / 60, 'Duration must fit within one calendar day')
 }).refine(data => data.priceMax >= data.priceMin, {
   message: 'Maximum price must be greater than or equal to minimum price',
   path: ['priceMax']
