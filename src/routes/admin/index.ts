@@ -12,6 +12,8 @@ import { operationRoutes } from './operations';
 import { adminSupplierOnboardingRoutes } from './supplierOnboarding';
 import { adminPaymentRoutes } from './payments';
 import { adminInterestRoutes } from './interest';
+import { adminSupportRequestRoutes } from './supportRequests';
+import { adminAcquisitionRoutes } from './acquisition';
 import type { Env, Variables } from '../../index';
 
 const admin = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -53,5 +55,7 @@ admin.route('/operations', operationRoutes);
 admin.route('/supplier-onboarding', adminSupplierOnboardingRoutes);
 admin.route('/payments', adminPaymentRoutes);
 admin.route('/interest', adminInterestRoutes);
+admin.route('/support-requests', adminSupportRequestRoutes);
+admin.route('/acquisition', adminAcquisitionRoutes);
 
 export { admin as adminRoutes };
