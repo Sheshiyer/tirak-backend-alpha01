@@ -11,6 +11,7 @@ import { subscriptionRoutes } from './subscriptions';
 import { operationRoutes } from './operations';
 import { adminSupplierOnboardingRoutes } from './supplierOnboarding';
 import { adminPaymentRoutes } from './payments';
+import { adminInterestRoutes } from './interest';
 import type { Env, Variables } from '../../index';
 
 const admin = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -51,5 +52,6 @@ admin.route('/subscriptions', subscriptionRoutes);
 admin.route('/operations', operationRoutes);
 admin.route('/supplier-onboarding', adminSupplierOnboardingRoutes);
 admin.route('/payments', adminPaymentRoutes);
+admin.route('/interest', adminInterestRoutes);
 
 export { admin as adminRoutes };
