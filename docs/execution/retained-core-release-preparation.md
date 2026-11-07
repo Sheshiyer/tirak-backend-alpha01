@@ -37,6 +37,10 @@ creating artifact output. The generated receipt binds the artifact hash to a
 clean tracked Git HEAD and private-contract digest. Preserve prior output by
 selecting a new private artifact directory.
 
+The local build clears inherited Cloudflare/Wrangler overrides and uses an
+explicit empty environment file, so a launcher-selected named environment or
+implicit dotenv file cannot change the validated default target.
+
 The observed five-minute provider trigger is independent of the candidate's
 empty cron declaration. Preparation records
 `triggerDisposition: preserve-existing-disabled-held`. The scheduled handler

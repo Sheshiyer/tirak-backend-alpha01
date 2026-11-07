@@ -55,6 +55,34 @@ describe('retained Core preparation boundary', () => {
     expect(validateRetainedCore(config, contract)).toMatchObject({ status: 'PREPARED_HELD', bindingCount: 23, releaseReady: false, externalMutations: 0, observedCronCount: 1, candidateCrons: [] });
   });
 
+  it('isolates inherited environment selectors and credentials during the local version-upload dry-run', () => {
+    const dir = mkdtempSync(resolve(tmpdir(), 'tirak-retained-env-'));
+    const contractPath = resolve(dir, 'private.json');
+    const outputDir = resolve(dir, 'artifact');
+    writeFileSync(contractPath, JSON.stringify(fixture().contract), { mode: 0o600 });
+    vi.stubEnv('CLOUDFLARE_ENV', 'production');
+    vi.stubEnv('CLOUDFLARE_API_TOKEN', 'synthetic-only');
+    try {
+      const run = vi.fn((command, args, options) => {
+        if (command === process.execPath) {
+          expect(args).toContain('versions');
+          expect(args).toContain('upload');
+          expect(args).toContain('--dry-run');
+          expect(args).not.toContain('--env');
+          expect(options.env.CLOUDFLARE_ENV).toBeUndefined();
+          expect(options.env.CLOUDFLARE_API_TOKEN).toBeUndefined();
+          expect(readFileSync(args[args.indexOf('--env-file') + 1], 'utf8')).toBe('');
+          writeFileSync(resolve(outputDir, 'index.js'), '// synthetic artifact');
+          return { status: 0, stdout: '', stderr: '' };
+        }
+        return { status: 0, stdout: args[0] === 'rev-parse' ? 'a'.repeat(40) : '', stderr: '' };
+      });
+      expect(prepareRetainedCore({ configPath: resolve(root, 'wrangler.toml'), contractPath, outputDir, build: true, run })).toMatchObject({ sourceCommit: 'a'.repeat(40), releaseReady: false, externalMutations: 0 });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('rejects a wrong resource identity even when the supplied live digest was recomputed', () => {
     const { config, contract } = fixture();
     contract.live.bindings.find(b => b.name === 'STORAGE').bucket_name = 'another-product-bucket';

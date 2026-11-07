@@ -113,8 +113,14 @@ export function prepareRetainedCore({ configPath, contractPath, outputDir, build
   assert(!existsSync(output), 'choose a new output directory to preserve existing recovery evidence');
   mkdirSync(output, { recursive: true, mode: 0o700 });
   chmodSync(output, 0o700);
-  const command = run(process.execPath, [resolve('node_modules/wrangler/bin/wrangler.js'), 'versions', 'upload', '--dry-run', '--config', resolve(configPath), '--outdir', output], {
-    cwd, encoding: 'utf8', env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: '1' },
+  const emptyEnv = resolve(output, 'empty.env');
+  writeFileSync(emptyEnv, '', { mode: 0o600 });
+  const buildEnv = { ...process.env };
+  for (const key of Object.keys(buildEnv)) {
+    if (/^(CLOUDFLARE|CF|WRANGLER)_/.test(key)) delete buildEnv[key];
+  }
+  const command = run(process.execPath, [resolve('node_modules/wrangler/bin/wrangler.js'), 'versions', 'upload', '--dry-run', '--config', resolve(configPath), '--env-file', emptyEnv, '--outdir', output], {
+    cwd, encoding: 'utf8', env: { ...buildEnv, WRANGLER_SEND_METRICS: 'false', CI: '1' },
   });
   writeFileSync(resolve(output, 'wrangler-dry-run.log'), `${command.stdout || ''}\n${command.stderr || ''}`, { mode: 0o600 });
   assert(command.status === 0, 'local Wrangler dry-run failed; inspect the private log');
