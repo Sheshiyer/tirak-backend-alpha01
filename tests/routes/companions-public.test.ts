@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
+import { readFileSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 import { companionRoutes } from '@/routes/companions';
 import { createTestEnv } from '@tests/setup';
@@ -38,6 +39,7 @@ describe('public companion discovery uses real profiles and truthful metrics', (
 
   beforeEach(() => {
     db = buildMigrationDb();
+    db.exec(readFileSync('migrations/017_core_guide_management.sql', 'utf8'));
     app = new Hono();
     env = createTestEnv();
     env.DB = {

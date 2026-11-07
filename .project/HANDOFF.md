@@ -89,3 +89,23 @@ confirmed the same D1 binding, `JWT_SECRET` secret binding, and all three
 payment controls disabled. The owner account then signed in through the
 in-app browser; the dashboard's 29-user count matched D1. Device verification
 and any production release decision remain separate.
+
+## Retained Core release preparation — 2026-11-07
+
+Preparation preserves current main's deliberate release-workflow removal.
+`release:prepare:core` validates the retained default service against a private
+complete resource contract and creates only a local production-configured
+dry-run artifact. Named staging/production deployment contracts are unchanged.
+The exact-module replay command uses disposable resources and synthetic secrets.
+Private provider snapshots, rollback bytes and receipts stay outside Git.
+
+The existing provider cron remains an explicit held disposition: preserve the
+trigger while the scheduled handler stays disabled and skips D1. A later owner
+decision and trigger-preserving promotion procedure are required. No migration
+execution is needed for the already-applied Core prerequisites.
+
+Canonical Core application intake rejects explicit Plus mode before persistence.
+The separate shared legacy vendor-application Plus behavior is retained and
+covered with disposable SQLite. Legacy Core retirement still depends on the
+published website redirect and caller inventory. See
+`docs/execution/retained-core-release-preparation.md` for commands and gates.

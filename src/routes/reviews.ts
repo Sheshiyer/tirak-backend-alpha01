@@ -44,9 +44,9 @@ reviews.post('/', zValidator('json', createReviewSchema), async (c) => {
 
     // Validate booking exists and is completed
     const booking = await c.env.DB.prepare(`
-      SELECT id, customer_id, companion_id, status
+      SELECT id, customer_id, supplier_id, status
       FROM bookings
-      WHERE id = ? AND customer_id = ? AND companion_id = ? AND status = 'completed'
+      WHERE id = ? AND customer_id = ? AND supplier_id = ? AND status = 'completed'
     `).bind(reviewData.bookingId, userId, reviewData.companionId).first();
 
     if (!booking) {

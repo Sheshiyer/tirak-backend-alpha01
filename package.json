@@ -16,6 +16,7 @@
     "release:verify": "bun run typecheck && bun run test:run && bun scripts/verify-release-gate.mjs",
     "release:verify:static": "node scripts/verify-release-gate.mjs",
     "release:verify:negative": "node scripts/release-negative-matrix.mjs",
+    "release:prepare:core": "node scripts/prepare-retained-core-release.mjs",
     "staging:discover": "node scripts/staging/collect-staging-ledger.mjs",
     "staging:preflight": "node scripts/staging/preflight-cloudflare-token.mjs",
     "staging:verify": "node scripts/staging/verify-staging-ledger.mjs docs/execution/phase-2/t-025-staging-resource-ledger.json",
@@ -50,6 +51,7 @@
     "bcryptjs": "^3.0.2",
     "hono": "^4.7.11",
     "jsonwebtoken": "^9.0.2",
+    "libphonenumber-js": "1.13.15",
     "zod": "^3.25.56"
   },
   "devDependencies": {
