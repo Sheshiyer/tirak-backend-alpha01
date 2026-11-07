@@ -6,7 +6,7 @@ production environment is a separate release contract. Keep the existing
 staging/production scripts and their identities intact.
 
 Use `npm run release:prepare:core` for the retained service. This command only
-validates a private contract and optionally creates a local Wrangler dry-run
+validates a private contract and optionally creates a local Wrangler version-upload dry-run
 artifact. It contains no deployment, migration, trigger or account mutation.
 
 ```sh
@@ -40,10 +40,12 @@ selecting a new private artifact directory.
 The observed five-minute provider trigger is independent of the candidate's
 empty cron declaration. Preparation records
 `triggerDisposition: preserve-existing-disabled-held`. The scheduled handler
-must stay disabled and skip D1. A later owner-approved promotion must use an
-explicit procedure that preserves the existing trigger, or obtain a separate
-decision to remove it. Do not use a blanket deploy command that silently
-reconciles this mismatch. No trigger change is authorized by preparation.
+must stay disabled and skip D1. Wrangler 4.93 separates version uploads/deployments from `triggers deploy`.
+Preparation uses `versions upload --dry-run`. A later owner-approved versioned
+upload/deployment can preserve the existing trigger by leaving `triggers deploy`
+unexecuted. Removing it requires a separate owner decision. Do not use a blanket
+deploy command that silently reconciles this mismatch. No trigger change is
+authorized by preparation.
 
 Migrations 027–030 and the non-null unique booking-room booking key are
 read-only prerequisites. Their presence does not authorize applying the

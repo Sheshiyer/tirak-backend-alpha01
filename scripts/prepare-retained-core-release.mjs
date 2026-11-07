@@ -98,7 +98,7 @@ export function validateRetainedCore(config, contract) {
     rollbackModuleSha256: live.moduleSha256, observedAt: live.observedAt,
     triggerDisposition: contract.triggerDisposition, candidateCrons: [], observedCronCount: live.crons.length,
     releaseReady: false, externalMutations: 0,
-    heldGates: ['owner promotion approval', 'fresh target/schema/recovery readback', 'replacement local CI receipt', 'trigger-preserving promotion procedure and owner disposition', 'installed-client and live-role acceptance'],
+    heldGates: ['owner promotion approval', 'fresh target/schema/recovery readback', 'replacement local CI receipt', 'owner approval of versioned promotion preserving the retained trigger', 'installed-client and live-role acceptance'],
   };
 }
 
@@ -113,7 +113,7 @@ export function prepareRetainedCore({ configPath, contractPath, outputDir, build
   assert(!existsSync(output), 'choose a new output directory to preserve existing recovery evidence');
   mkdirSync(output, { recursive: true, mode: 0o700 });
   chmodSync(output, 0o700);
-  const command = run(process.execPath, [resolve('node_modules/wrangler/bin/wrangler.js'), 'deploy', '--dry-run', '--config', resolve(configPath), '--outdir', output], {
+  const command = run(process.execPath, [resolve('node_modules/wrangler/bin/wrangler.js'), 'versions', 'upload', '--dry-run', '--config', resolve(configPath), '--outdir', output], {
     cwd, encoding: 'utf8', env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: '1' },
   });
   writeFileSync(resolve(output, 'wrangler-dry-run.log'), `${command.stdout || ''}\n${command.stderr || ''}`, { mode: 0o600 });
@@ -123,7 +123,7 @@ export function prepareRetainedCore({ configPath, contractPath, outputDir, build
   assert(source.status === 0, 'source identity unavailable');
   const dirty = run('git', ['status', '--porcelain', '--untracked-files=no'], { cwd, encoding: 'utf8' });
   assert(dirty.status === 0 && !dirty.stdout.trim(), 'commit the reviewed tracked source before binding the artifact');
-  const receipt = { ...result, sourceCommit: source.stdout.trim(), privateContractSha256: digest(contract), artifactSha256: digest(module), artifactBytes: module.byteLength, preparedAt: new Date().toISOString(), build: 'Wrangler deploy --dry-run with default retained configuration; no --env override' };
+  const receipt = { ...result, sourceCommit: source.stdout.trim(), privateContractSha256: digest(contract), artifactSha256: digest(module), artifactBytes: module.byteLength, preparedAt: new Date().toISOString(), build: 'Wrangler versions upload --dry-run with default retained configuration; no --env override' };
   writeFileSync(resolve(output, 'preparation-receipt.json'), `${JSON.stringify(receipt, null, 2)}\n`, { mode: 0o600 });
   return receipt;
 }
