@@ -4,6 +4,7 @@ import { zValidator } from '@hono/zod-validator';
 import { validatePagination } from '../middleware/validation';
 import { createRateLimit } from '../middleware/rateLimit';
 import { jsonSuccess, jsonError, jsonPaginated, createPagination, cachedResponse } from '../utils/response';
+import { publicIdentity, publicCompanionVisibility } from '../utils/guideVisibility';
 import type { Env, Variables } from '../index';
 
 const publicRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -33,55 +34,64 @@ publicRoutes.use('*', createRateLimit('general'));
  * Get platform statistics
  */
 publicRoutes.get('/stats', async (c) => {
+  c.header('Cache-Control', 'no-store');
   try {
-    // Check cache first
-    const cacheKey = 'public:stats';
-    const cached = await getPublicCache(c.env.CACHE, cacheKey);
-    
-    if (cached) {
-      return cachedResponse(c, cached, 300); // 5 minutes cache
-    }
+    // Guide/service aggregates use the same eligibility predicate as /api/companions.
+    // Customers only exclude explicit review fixtures. Booking totals are history
+    // and intentionally unchanged.
+    // Preserve users.total as active accounts (including approved and pending
+    // account types), rather than silently redefining it as public inventory.
+    const activeUserStats = await c.env.DB.prepare(`
+      SELECT COUNT(*) as total_users
+      FROM users u
+      WHERE u.status = 'active' AND ${publicIdentity.sql}
+    `).bind(...publicIdentity.parameters).first();
 
-    // Get statistics from database
-    const userStats = await c.env.DB.prepare(`
-      SELECT 
-        COUNT(*) as total_users,
-        COUNT(CASE WHEN user_type = 'supplier' THEN 1 END) as total_suppliers,
-        COUNT(CASE WHEN user_type = 'customer' THEN 1 END) as total_customers
-      FROM users 
-      WHERE status = 'active'
-    `).first();
+    const customerStats = await c.env.DB.prepare(`
+      SELECT COUNT(*) as total_customers
+      FROM users u
+      WHERE u.status = 'active'
+        AND u.user_type = 'customer'
+        AND ${publicIdentity.sql}
+    `).bind(...publicIdentity.parameters).first();
 
     const supplierStats = await c.env.DB.prepare(`
-      SELECT 
-        COUNT(*) as verified_suppliers,
-        AVG(rating_average) as avg_rating
-      FROM supplier_profiles 
-      WHERE COALESCE(subscription_status, 'active') = 'active'
-        AND COALESCE(verification_status, 'pending') != 'rejected'
-    `).first();
+      SELECT
+        COUNT(*) as visible_suppliers,
+        AVG(sp.rating_average) as avg_rating
+      FROM supplier_profiles sp
+      JOIN users u ON u.id = sp.user_id
+      WHERE ${publicCompanionVisibility}
+    `).bind(...publicIdentity.parameters).first();
 
     const serviceStats = await c.env.DB.prepare(`
       SELECT COUNT(*) as total_services
-      FROM supplier_services 
-      WHERE is_active = TRUE
-    `).first();
+      FROM supplier_services ss
+      JOIN supplier_profiles sp ON sp.user_id = ss.supplier_id
+      JOIN users u ON u.id = sp.user_id
+      WHERE ss.is_active = TRUE
+        AND ss.archived_at IS NULL
+        AND ${publicCompanionVisibility}
+    `).bind(...publicIdentity.parameters).first();
 
     const bookingStats = await c.env.DB.prepare(`
-      SELECT 
+      SELECT
         COUNT(*) as total_bookings,
         COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_bookings
       FROM bookings
     `).first();
 
+    const visibleSuppliers = Number(supplierStats?.visible_suppliers ?? 0);
+    const totalCustomers = Number(customerStats?.total_customers ?? 0);
+
     const stats = {
       users: {
-        total: userStats?.total_users || 0,
-        suppliers: userStats?.total_suppliers || 0,
-        customers: userStats?.total_customers || 0
+        total: Number(activeUserStats?.total_users ?? 0),
+        suppliers: visibleSuppliers,
+        customers: totalCustomers
       },
       suppliers: {
-        verified: supplierStats?.verified_suppliers || 0,
+        verified: visibleSuppliers,
         averageRating: Math.round(Number(supplierStats?.avg_rating ?? 0) * 10) / 10
       },
       services: {
@@ -93,9 +103,6 @@ publicRoutes.get('/stats', async (c) => {
       },
       lastUpdated: new Date().toISOString()
     };
-
-    // Cache for 5 minutes
-    await putPublicCache(c.env.CACHE, cacheKey, stats, 300);
 
     return jsonSuccess(c, stats, 'Platform statistics retrieved successfully');
 
@@ -233,17 +240,10 @@ publicRoutes.get('/regions', validatePagination(), async (c) => {
  * Get featured suppliers
  */
 publicRoutes.get('/featured-suppliers', validatePagination(), async (c) => {
+  c.header('Cache-Control', 'no-store');
   const { page, limit } = c.get('validatedQuery');
   
   try {
-    // Check cache first
-    const cacheKey = `public:featured:${page}:${limit}`;
-    const cached = await getPublicCache(c.env.CACHE, cacheKey);
-    
-    if (cached) {
-      return cachedResponse(c, cached, 600); // 10 minutes cache
-    }
-
     // Get featured suppliers (top rated, verified, active)
     const offset = (page - 1) * limit;
     const suppliersResult = await c.env.DB.prepare(`
@@ -259,13 +259,13 @@ publicRoutes.get('/featured-suppliers', validatePagination(), async (c) => {
         sp.verification_status,
         sp.created_at
       FROM supplier_profiles sp
-      WHERE COALESCE(sp.verification_status, 'pending') != 'rejected'
-        AND COALESCE(sp.subscription_status, 'active') = 'active'
+      JOIN users u ON u.id = sp.user_id
+      WHERE ${publicCompanionVisibility}
         AND sp.rating_average >= 4.0
         AND sp.rating_count >= 5
-      ORDER BY sp.rating_average DESC, sp.rating_count DESC
+      ORDER BY sp.rating_average DESC, sp.rating_count DESC, sp.user_id ASC
       LIMIT ? OFFSET ?
-    `).bind(limit, offset).all();
+    `).bind(...publicIdentity.parameters, limit, offset).all();
 
     const suppliers = suppliersResult.results?.map((supplier: any) => ({
       id: supplier.id,
@@ -285,22 +285,14 @@ publicRoutes.get('/featured-suppliers', validatePagination(), async (c) => {
     // Get total count for featured suppliers
     const countResult = await c.env.DB.prepare(`
       SELECT COUNT(*) as total
-      FROM supplier_profiles 
-      WHERE COALESCE(verification_status, 'pending') != 'rejected'
-        AND COALESCE(subscription_status, 'active') = 'active'
-        AND rating_average >= 4.0
-        AND rating_count >= 5
-    `).first();
+      FROM supplier_profiles sp
+      JOIN users u ON u.id = sp.user_id
+      WHERE ${publicCompanionVisibility}
+        AND sp.rating_average >= 4.0
+        AND sp.rating_count >= 5
+    `).bind(...publicIdentity.parameters).first();
 
     const total = countResult?.total as number || 0;
-    const response = {
-      suppliers,
-      pagination: createPagination(page, limit, total)
-    };
-
-    // Cache for 10 minutes
-    await putPublicCache(c.env.CACHE, cacheKey, response, 600);
-
     return jsonPaginated(c, suppliers, createPagination(page, limit, total), 'Featured suppliers retrieved successfully');
 
   } catch (error) {
@@ -313,6 +305,7 @@ publicRoutes.get('/featured-suppliers', validatePagination(), async (c) => {
  * Search suggestions (autocomplete)
  */
 publicRoutes.get('/search-suggestions', async (c) => {
+  c.header('Cache-Control', 'no-store');
   const query = c.req.query('q');
   const type = c.req.query('type') || 'all'; // 'suppliers', 'categories', 'regions', 'all'
   
@@ -321,14 +314,6 @@ publicRoutes.get('/search-suggestions', async (c) => {
   }
 
   try {
-    // Check cache first
-    const cacheKey = `suggestions:${type}:${query.toLowerCase()}`;
-    const cached = await getPublicCache(c.env.CACHE, cacheKey);
-    
-    if (cached) {
-      return cachedResponse(c, cached, 300); // 5 minutes cache
-    }
-
     const suggestions: any = {
       suppliers: [],
       categories: [],
@@ -338,14 +323,14 @@ publicRoutes.get('/search-suggestions', async (c) => {
     // Search suppliers
     if (type === 'all' || type === 'suppliers') {
       const supplierResults = await c.env.DB.prepare(`
-        SELECT user_id as id, display_name as name, 'supplier' as type
-        FROM supplier_profiles 
-        WHERE display_name LIKE ? 
-          AND COALESCE(verification_status, 'pending') != 'rejected'
-          AND COALESCE(subscription_status, 'active') = 'active'
-        ORDER BY rating_average DESC
+        SELECT sp.user_id as id, sp.display_name as name, 'supplier' as type
+        FROM supplier_profiles sp
+        JOIN users u ON u.id = sp.user_id
+        WHERE ${publicCompanionVisibility}
+          AND sp.display_name LIKE ?
+        ORDER BY sp.rating_average DESC, sp.user_id ASC
         LIMIT 5
-      `).bind(`%${query}%`).all();
+      `).bind(...publicIdentity.parameters, `%${query}%`).all();
 
       suggestions.suppliers = supplierResults.results || [];
     }
@@ -387,9 +372,6 @@ publicRoutes.get('/search-suggestions', async (c) => {
     } else {
       results = suggestions[type] || [];
     }
-
-    // Cache for 5 minutes
-    await putPublicCache(c.env.CACHE, cacheKey, results, 300);
 
     return jsonSuccess(c, results, 'Search suggestions retrieved successfully');
 

@@ -280,6 +280,23 @@ describe('Booking Routes', () => {
         });
       }
 
+      if (query.includes('FROM bookings b') && query.includes('WHERE b.id = ? AND (b.customer_id = ? OR b.supplier_id = ?)')) {
+        return statement({
+          first: async () => createTestBooking({
+            id: bookingId,
+            customer_id: 'test-customer-id',
+            supplier_id: guide.id,
+            status: 'confirmed',
+            scheduled_at: new Date(Date.now() + 86400000).toISOString(),
+            companion_user_id: guide.id,
+            companion_name: 'Test Companion',
+            customer_user_id: 'test-customer-id',
+            customer_name: 'Test Customer',
+            service_name: 'Old Town Walk',
+          }),
+        });
+      }
+
       return statement({ first: async () => null });
     });
 

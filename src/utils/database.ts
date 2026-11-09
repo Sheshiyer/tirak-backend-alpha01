@@ -7,7 +7,7 @@ export interface DatabaseQueryResult<T = unknown> {
 }
 
 /**
- * Create a new user in the database
+ * Create a new user, or return null if the email or phone is already registered.
  */
 export async function createUser(userData: {
   id: string;
@@ -16,7 +16,7 @@ export async function createUser(userData: {
   passwordHash: string;
   userType: 'customer' | 'supplier';
   preferredLanguage?: string;
-}, db: D1Database): Promise<User> {
+}, db: D1Database): Promise<User | null> {
   const user = {
     id: userData.id,
     email: userData.email,
@@ -31,19 +31,21 @@ export async function createUser(userData: {
     updatedAt: new Date().toISOString(),
   };
 
-  await db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO users (
       id, email, phone, password_hash, user_type, status,
       email_verified, phone_verified, preferred_language,
       created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(email) DO NOTHING
+    ON CONFLICT(phone) DO NOTHING
   `).bind(
     user.id, user.email, user.phone, user.passwordHash, user.userType,
     user.status, user.emailVerified, user.phoneVerified, user.preferredLanguage,
     user.createdAt, user.updatedAt
   ).run();
 
-  return user;
+  return result.meta.changes === 0 ? null : user;
 }
 
 /**

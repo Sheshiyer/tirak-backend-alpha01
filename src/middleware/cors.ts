@@ -1,6 +1,17 @@
 import type { Context, Next } from 'hono';
 import type { Env, Variables } from '../index';
 
+function parseConfiguredOrigins(frontendUrls: string | undefined): string[] {
+  return (frontendUrls || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean);
+}
+
+function isLocalhostOrigin(origin: string | undefined): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin || '');
+}
+
 /**
  * CORS middleware configuration
  */
@@ -167,21 +178,19 @@ function getAllowedOrigin(
 export function tirakCors() {
   return cors({
     origin: (origin: string, c: Context<{ Bindings: Env; Variables: Variables }>) => {
-      // Get allowed origins from environment
-      const allowedOrigins = c.env.FRONTEND_URLS?.split(',') || [];
-      
+      const allowedOrigins = parseConfiguredOrigins(c.env.FRONTEND_URLS);
+
       // Allow localhost for development
-      const localhostPattern = /^https?:\/\/localhost(:\d+)?$/;
       const tirakAppPattern = /^https?:\/\/.*\.tirak\.app$/;
-      
+
       // Check if origin is allowed
-      if (allowedOrigins.includes(origin) || 
-          localhostPattern.test(origin) || 
+      if (allowedOrigins.includes(origin) ||
+          isLocalhostOrigin(origin) ||
           tirakAppPattern.test(origin) ||
           origin?.startsWith('tirak://')) {
         return origin;
       }
-      
+
       return null;
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -193,7 +202,8 @@ export function tirakCors() {
       'X-Session-ID',
       'X-Request-ID',
       'X-Device-ID',
-      'X-App-Version'
+      'X-App-Version',
+      'Idempotency-Key'
     ],
     exposedHeaders: [
       'X-Total-Count',
@@ -215,17 +225,12 @@ export function tirakCors() {
 export function adminCors() {
   return cors({
     origin: (origin: string, c: Context<{ Bindings: Env; Variables: Variables }>) => {
-      // Only allow admin dashboard origins
-      const adminOrigins = [
-        'https://admin.tirak.app',
-        'https://admin-staging.tirak.app'
-      ];
-      
-      // Allow localhost for development
-      if (c.env.ENVIRONMENT === 'development' && origin?.includes('localhost')) {
+      const adminOrigins = parseConfiguredOrigins(c.env.FRONTEND_URLS);
+
+      if (isLocalhostOrigin(origin)) {
         return origin;
       }
-      
+
       return adminOrigins.includes(origin) ? origin : null;
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
@@ -263,14 +268,14 @@ export function apiCors() {
 export function websocketCors() {
   return cors({
     origin: (origin: string, c: Context<{ Bindings: Env; Variables: Variables }>) => {
-      const allowedOrigins = c.env.FRONTEND_URLS?.split(',') || [];
-      
-      if (allowedOrigins.includes(origin) || 
+      const allowedOrigins = parseConfiguredOrigins(c.env.FRONTEND_URLS);
+
+      if (allowedOrigins.includes(origin) ||
           origin?.includes('localhost') ||
           origin?.startsWith('tirak://')) {
         return origin;
       }
-      
+
       return null;
     },
     methods: ['GET'],
@@ -303,7 +308,7 @@ export function devCors() {
 export function prodCors() {
   return cors({
     origin: (origin: string, c: Context<{ Bindings: Env; Variables: Variables }>) => {
-      const allowedOrigins = c.env.FRONTEND_URLS?.split(',') || [];
+      const allowedOrigins = parseConfiguredOrigins(c.env.FRONTEND_URLS);
       return allowedOrigins.includes(origin) ? origin : null;
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
@@ -328,7 +333,7 @@ export function prodCors() {
 export function environmentCors() {
   return (c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) => {
     const environment = c.env.ENVIRONMENT;
-    
+
     switch (environment) {
       case 'development':
         return devCors()(c, next);

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import parsePhoneNumber from 'libphonenumber-js/max';
+import { isValidPhone, normalizePhone } from './auth';
 import { jsonError } from './response';
 import type { Context, Next } from 'hono';
 import type { Env, Variables } from '../index';
@@ -16,6 +18,31 @@ const optionalText = (max: number) => z.preprocess(
   z.string().min(1).max(max).optional()
 );
 
+function normalizeRegistrationPhone(value: string): string | undefined {
+  if (!/^\+?[0-9\s()-]+$/.test(value)) return undefined;
+
+  const compact = value.replace(/[\s()-]/g, '');
+  const international = compact.startsWith('+');
+  if (!international || compact.startsWith('+66')) {
+    const thaiPhone = normalizePhone(compact);
+    if (isValidPhone(thaiPhone) && !thaiPhone.startsWith('+660')) return thaiPhone;
+  }
+
+  if (!international) return undefined;
+  const phone = parsePhoneNumber(value, { extract: false });
+  // E.164 allows 15 digits, plus the leading +.
+  if (phone?.isValid() && phone.number.length <= 16) return phone.number;
+  return undefined;
+}
+
+const registrationPhone = z.string().trim().min(8).max(32).transform((value, ctx) => {
+  const phone = normalizeRegistrationPhone(value);
+  if (phone) return phone;
+
+  ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid phone number' });
+  return z.NEVER;
+});
+
 // User registration schema
 export const registerSchema = z.object({
   display_name: optionalText(100),
@@ -26,10 +53,7 @@ export const registerSchema = z.object({
   first_name: optionalText(100),
   last_name: optionalText(100),
   email: z.string().email('Invalid email format'),
-  phone: z.preprocess(
-    emptyStringToUndefined,
-    z.string().regex(/^[0-9+\-\s()]{8,20}$/, 'Invalid phone number').optional()
-  ),
+  phone: z.preprocess(emptyStringToUndefined, registrationPhone.optional()),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   userType: z.enum(['customer', 'supplier', 'companion'], {
     errorMap: () => ({ message: 'User type must be customer, supplier, or companion' })
@@ -126,7 +150,7 @@ export const serviceSchema = z.object({
   priceMin: z.number().min(0, 'Price must be positive'),
   priceMax: z.number().min(0, 'Price must be positive'),
   currency: z.string().length(3, 'Currency must be 3 characters').default('THB'),
-  durationHours: z.number().min(0.5, 'Duration must be at least 30 minutes').max(24, 'Duration cannot exceed 24 hours')
+  durationHours: z.number().min(0.5, 'Duration must be at least 30 minutes').max(1439 / 60, 'Duration must fit within one calendar day')
 }).refine(data => data.priceMax >= data.priceMin, {
   message: 'Maximum price must be greater than or equal to minimum price',
   path: ['priceMax']

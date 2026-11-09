@@ -10,6 +10,12 @@ import type { Env, Variables } from '../../index';
 
 const dashboard = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+// Keep legacy chat history visible while including the booking-scoped tables
+// used by the live app. Prefix room ids so UNION reports never merge rooms from
+// different tables that happen to share the same raw id.
+const allChatMessages = `(SELECT created_at, sender_id, 'legacy:' || room_id AS room_id FROM chat_messages
+  UNION ALL SELECT created_at, sender_id, 'booking:' || room_id AS room_id FROM booking_chat_messages)`;
+
 type IntegrationStatus = 'connected' | 'unconfigured' | 'error' | 'no_data';
 
 type DashboardIntegration = {
@@ -410,11 +416,17 @@ dashboard.get('/overview', async (c) => {
 
     // Get chat activity
     const chatStats = await c.env.DB.prepare(`
-      SELECT 
-        COUNT(DISTINCT room_id) as active_rooms,
+      SELECT
+        (
+          SELECT COUNT(DISTINCT cr.id)
+          FROM booking_chat_rooms cr
+          INNER JOIN bookings b ON b.id = cr.booking_id
+          WHERE cr.status = 'active'
+            AND b.status IN ('confirmed', 'in_progress')
+        ) as active_rooms,
         COUNT(*) as total_messages,
         COUNT(CASE WHEN DATE(created_at) = ? THEN 1 END) as today_messages
-      FROM chat_messages
+      FROM ${allChatMessages}
       WHERE created_at >= ?
     `).bind(today, thirtyDaysAgo).first();
 
@@ -429,7 +441,7 @@ dashboard.get('/overview', async (c) => {
 
     // Get recent activity (last 24 hours)
     const recentActivity = await c.env.DB.prepare(`
-      SELECT 
+      SELECT
         'user_registration' as type,
         COUNT(*) as count
       FROM users 
@@ -437,7 +449,7 @@ dashboard.get('/overview', async (c) => {
       
       UNION ALL
       
-      SELECT 
+      SELECT
         'booking_created' as type,
         COUNT(*) as count
       FROM bookings 
@@ -445,10 +457,10 @@ dashboard.get('/overview', async (c) => {
       
       UNION ALL
       
-      SELECT 
+      SELECT
         'chat_message' as type,
         COUNT(*) as count
-      FROM chat_messages 
+      FROM ${allChatMessages}
       WHERE created_at >= datetime('now', '-24 hours')
     `).all();
 
@@ -688,11 +700,11 @@ dashboard.get('/metrics', validateDateRange(), async (c) => {
 
     // Chat activity metrics
     const chatMetrics = await c.env.DB.prepare(`
-      SELECT 
+      SELECT
         DATE(created_at) as date,
         COUNT(*) as messages,
         COUNT(DISTINCT room_id) as active_rooms
-      FROM chat_messages 
+      FROM ${allChatMessages}
       WHERE DATE(created_at) BETWEEN ? AND ?
       GROUP BY DATE(created_at)
       ORDER BY date DESC
