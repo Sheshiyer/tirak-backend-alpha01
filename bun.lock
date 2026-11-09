@@ -6,7 +6,6 @@
       "name": "tirak-backend",
       "dependencies": {
         "@hono/zod-validator": "^0.7.0",
-        "@types/bcryptjs": "^2.4.6",
         "@types/jsonwebtoken": "^9.0.9",
         "bcryptjs": "^3.0.2",
         "hono": "^4.7.11",
