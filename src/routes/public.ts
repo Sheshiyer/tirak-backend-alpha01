@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { validatePagination } from '../middleware/validation';
 import { createRateLimit } from '../middleware/rateLimit';
-import { jsonSuccess, jsonError, jsonPaginated, createPagination, cachedResponse } from '../utils/response';
+import { jsonSuccess, jsonError, jsonPaginated, createPagination, cachedResponse, paginatedResponse, successResponse } from '../utils/response';
 import { publicIdentity, publicCompanionVisibility } from '../utils/guideVisibility';
 import type { Env, Variables } from '../index';
 
@@ -120,7 +120,8 @@ publicRoutes.get('/categories', validatePagination(), async (c) => {
   
   try {
     // Check cache first
-    const cacheKey = `public:categories:${page}:${limit}`;
+    // v2 keys hold the canonical { success, data: { items, pagination } } envelope.
+    const cacheKey = `public:v2:categories:${page}:${limit}`;
     const cached = await getPublicCache(c.env.CACHE, cacheKey);
     
     if (cached) {
@@ -160,15 +161,12 @@ publicRoutes.get('/categories', validatePagination(), async (c) => {
       sortOrder: category.sort_order
     })) || [];
 
-    const response = {
-      categories,
-      pagination: createPagination(page, limit, total)
-    };
+    const response = paginatedResponse(categories, createPagination(page, limit, total), 'Categories retrieved successfully');
 
-    // Cache for 30 minutes
+    // Cache the same envelope the miss path returns, for 30 minutes
     await putPublicCache(c.env.CACHE, cacheKey, response, 1800);
 
-    return jsonPaginated(c, categories, createPagination(page, limit, total), 'Categories retrieved successfully');
+    return cachedResponse(c, response, 1800);
 
   } catch (error) {
     console.error('Get categories error:', error);
@@ -184,7 +182,8 @@ publicRoutes.get('/regions', validatePagination(), async (c) => {
   
   try {
     // Check cache first
-    const cacheKey = `public:regions:${page}:${limit}`;
+    // v2 keys hold the canonical { success, data: { items, pagination } } envelope.
+    const cacheKey = `public:v2:regions:${page}:${limit}`;
     const cached = await getPublicCache(c.env.CACHE, cacheKey);
     
     if (cached) {
@@ -220,15 +219,12 @@ publicRoutes.get('/regions', validatePagination(), async (c) => {
       sortOrder: region.sort_order
     })) || [];
 
-    const response = {
-      regions,
-      pagination: createPagination(page, limit, total)
-    };
+    const response = paginatedResponse(regions, createPagination(page, limit, total), 'Regions retrieved successfully');
 
-    // Cache for 30 minutes
+    // Cache the same envelope the miss path returns, for 30 minutes
     await putPublicCache(c.env.CACHE, cacheKey, response, 1800);
 
-    return jsonPaginated(c, regions, createPagination(page, limit, total), 'Regions retrieved successfully');
+    return cachedResponse(c, response, 1800);
 
   } catch (error) {
     console.error('Get regions error:', error);
@@ -387,7 +383,8 @@ publicRoutes.get('/search-suggestions', async (c) => {
 publicRoutes.get('/config', async (c) => {
   try {
     // Check cache first
-    const cacheKey = 'public:config';
+    // v2 key holds the canonical { success, data } envelope.
+    const cacheKey = 'public:v2:config';
     const cached = await getPublicCache(c.env.CACHE, cacheKey);
     
     if (cached) {
@@ -427,10 +424,12 @@ publicRoutes.get('/config', async (c) => {
       }
     };
 
-    // Cache for 1 hour
-    await putPublicCache(c.env.CACHE, cacheKey, config, 3600);
+    const response = successResponse(config, 'Platform configuration retrieved successfully');
 
-    return jsonSuccess(c, config, 'Platform configuration retrieved successfully');
+    // Cache the same envelope the miss path returns, for 1 hour
+    await putPublicCache(c.env.CACHE, cacheKey, response, 3600);
+
+    return cachedResponse(c, response, 3600);
 
   } catch (error) {
     console.error('Get platform config error:', error);

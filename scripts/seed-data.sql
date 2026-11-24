@@ -2,13 +2,14 @@
 -- This script populates the database with initial data for staging environment
 
 -- Insert categories
-INSERT OR IGNORE INTO categories (id, name_en, name_th, description_en, description_th, icon, color, sort_order, is_active) VALUES
-('cat_city_walks', 'City Walks', 'เดินเที่ยวชมเมือง', 'Guided walking routes through local neighborhoods', 'เส้นทางเดินพร้อมไกด์ในย่านท้องถิ่น', 'map-pin', '#3B82F6', 1, TRUE),
-('cat_tour_guide', 'Tour Guide', 'ไกด์นำเที่ยว', 'Local tour guide services', 'บริการไกด์นำเที่ยวท้องถิ่น', 'map', '#10B981', 2, TRUE),
-('cat_translator', 'Translation', 'แปลภาษา', 'Language translation services', 'บริการแปลภาษา', 'globe', '#8B5CF6', 3, TRUE),
-('cat_shopping', 'Shopping Assistant', 'ผู้ช่วยช้อปปิ้ง', 'Personal shopping assistance', 'ผู้ช่วยช้อปปิ้งส่วนตัว', 'shopping-bag', '#F59E0B', 4, TRUE),
-('cat_food_tours', 'Food Tours', 'ทัวร์อาหาร', 'Guided market and local food experiences', 'ประสบการณ์ตลาดและอาหารท้องถิ่นพร้อมไกด์', 'utensils', '#EF4444', 5, TRUE),
-('cat_cultural', 'Cultural Experience', 'ประสบการณ์วัฒนธรรม', 'Cultural and traditional experience guide', 'ไกด์ประสบการณ์วัฒนธรรมและประเพณี', 'star', '#06B6D4', 6, TRUE);
+-- The categories table has no icon/color columns (only icon_url), so none are seeded here.
+INSERT OR IGNORE INTO categories (id, name_en, name_th, description_en, description_th, sort_order, is_active) VALUES
+('cat_city_walks', 'City Walks', 'เดินเที่ยวชมเมือง', 'Guided walking routes through local neighborhoods', 'เส้นทางเดินพร้อมไกด์ในย่านท้องถิ่น', 1, TRUE),
+('cat_tour_guide', 'Tour Guide', 'ไกด์นำเที่ยว', 'Local tour guide services', 'บริการไกด์นำเที่ยวท้องถิ่น', 2, TRUE),
+('cat_translator', 'Translation', 'แปลภาษา', 'Language translation services', 'บริการแปลภาษา', 3, TRUE),
+('cat_shopping', 'Shopping Assistant', 'ผู้ช่วยช้อปปิ้ง', 'Personal shopping assistance', 'ผู้ช่วยช้อปปิ้งส่วนตัว', 4, TRUE),
+('cat_food_tours', 'Food Tours', 'ทัวร์อาหาร', 'Guided market and local food experiences', 'ประสบการณ์ตลาดและอาหารท้องถิ่นพร้อมไกด์', 5, TRUE),
+('cat_cultural', 'Cultural Experience', 'ประสบการณ์วัฒนธรรม', 'Cultural and traditional experience guide', 'ไกด์ประสบการณ์วัฒนธรรมและประเพณี', 6, TRUE);
 
 -- Insert regions
 INSERT OR IGNORE INTO regions (id, name_en, name_th, country_code, sort_order, is_active) VALUES

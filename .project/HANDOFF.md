@@ -109,3 +109,27 @@ The separate shared legacy vendor-application Plus behavior is retained and
 covered with disposable SQLite. Legacy Core retirement still depends on the
 published website redirect and caller inventory. See
 `docs/execution/retained-core-release-preparation.md` for commands and gates.
+
+## Backend gap review — 2026-11-24
+
+Branch `claude/project-thread-d8alqh` (from main `a62c658`), source/docs only.
+No deployment, binding, secret, migration, trigger or provider change.
+
+- Removed never-mounted `src/routes/conversations.ts` (legacy general
+  conversations; superseded by booking-scoped `/api/chat`, and
+  `tests/routes/release-surface.test.ts` already forbids mounting it).
+- SMS stubs (Twilio/AWS SNS in `src/utils/communication.ts`, queue `sendSMS`
+  in `src/background/notifications.ts`) now fail instead of reporting a
+  simulated send; `POST /api/auth/resend-otp` returns 503 when the code was
+  not delivered. Covered by `tests/routes/sms-delivery-honesty.test.ts`.
+- README rewritten to match mounted routes, bindings, CORS and commands;
+  early planning/status docs marked historical.
+- Open: SMS provider choice, AI moderation, payments enablement, and whether
+  PR #30 (now behind main) should be closed as superseded.
+- `/api/public/categories`, `/regions` and `/config` now return the same
+  canonical envelope on KV cache hit and miss; cache keys moved to
+  `public:v2:*` so old-shape entries are never served. Covered by
+  `tests/routes/public-cache-envelope.test.ts`.
+- `scripts/seed-data.sql` category insert used non-existent `icon`/`color`
+  columns and aborted the seed; fixed. No migration populates categories or
+  regions; the seed's later test-user section still fails on current schema.

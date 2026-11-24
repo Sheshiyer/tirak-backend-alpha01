@@ -1,3 +1,5 @@
+> **Historical document (marked 2026-11-24).** This is an early planning or status snapshot kept for history. It does not describe the current API, routes or release state. See `README.md` and `docs/execution/` for current status.
+
 # API Schema Documentation
 
 ## Base Configuration

@@ -383,13 +383,21 @@ auth.post('/resend-otp', async (c) => {
     const otpData = createOTPData();
     await c.env.CACHE.put(`otp:${normalizedPhone}`, JSON.stringify(otpData), { expirationTtl: 600 }); // 10 minutes
 
-    // Send OTP via SMS
+    // Send OTP via SMS. Only report success when the provider accepted it.
+    let delivered = false;
     try {
       const smsConfig = createSMSConfig(c.env);
-      await sendOTPSMS(smsConfig, normalizedPhone, otpData.code);
+      const delivery = await sendOTPSMS(smsConfig, normalizedPhone, otpData.code);
+      delivered = delivery.status !== 'failed';
+      if (!delivered) {
+        console.error('Failed to send OTP SMS:', delivery.error);
+      }
     } catch (error) {
       console.error('Failed to send OTP SMS:', error);
-      // Continue even if SMS fails
+    }
+
+    if (!delivered) {
+      return jsonError(c, 'SMS unavailable', 'Verification code could not be sent by SMS', 503);
     }
 
     return jsonSuccess(c, { sent: true }, 'Verification code sent successfully');

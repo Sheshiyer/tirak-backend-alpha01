@@ -265,7 +265,7 @@ async function sendSMSNotification(job: NotificationJob, env: Env): Promise<Noti
       };
     }
 
-    // Send via SMS service (placeholder for actual implementation)
+    // sendSMS throws until an SMS provider is integrated; the job is then recorded as failed.
     const smsResponse = await sendSMS({
       to: userPhone,
       message: `${job.title}\n${job.message}`
@@ -477,10 +477,10 @@ async function sendEmail(payload: any, env: Env): Promise<{ messageId: string }>
   return { messageId: delivery.id };
 }
 
-async function sendSMS(payload: any, env: Env): Promise<{ messageId: string }> {
-  // Placeholder for SMS service integration (Twilio, AWS SNS, etc.)
-  console.log('Sending SMS:', payload);
-  return { messageId: `sms_${crypto.randomUUID()}` };
+async function sendSMS(_payload: any, _env: Env): Promise<{ messageId: string }> {
+  // No SMS provider is integrated. Fail the job rather than recording a
+  // simulated "sent" result (and never log the recipient or message body).
+  throw new Error('SMS delivery is not configured');
 }
 
 async function renderEmailTemplate(template: string, data: Record<string, any>, env: Env): Promise<{ subject: string; html: string; text: string }> {
