@@ -1,275 +1,114 @@
-# Tirak Backend
+# Tirak Core API
 
-A comprehensive backend API for Tirak's guided-experience marketplace, built with Cloudflare Workers and modern web technologies. Legacy `companion` identifiers remain internal compatibility aliases while public contracts use local-guide and named-experience language.
+Backend for Tirak's guided-experience marketplace: one Cloudflare Worker
+(Hono + TypeScript) that serves the mobile app, the website's supplier
+application form and the admin panel. Legacy `companion` / `supplier` /
+`customer` identifiers remain internal compatibility names; public contracts
+use local-guide and traveler language.
 
-## 🚀 Features
+Start with `PROJECT.md`, `AGENTS.md` and `.project/HANDOFF.md`. Release and
+verification history lives in `docs/execution/`.
 
-- **Authentication & Authorization**: JWT-based auth with role-based access control
-- **Real-time Chat**: WebSocket-powered chat using Durable Objects
-- **File Storage**: Secure file uploads with R2 storage
-- **Search & Discovery**: Advanced supplier search with filtering
-- **Analytics**: Event tracking and business intelligence
-- **Moderation**: Automated content moderation with manual review
-- **Supplier Onboarding Review** (new): Public submit + admin review/approve (creates supplier user + profile + temp creds + reset token + optional email + notif) / reject with reason. Full review columns + status workflow. Integrates D1 + KV + Email.
-- **Multi-language**: Support for English and Thai
-- **Global Scale**: Deployed on Cloudflare's global network
-
-## 🛠 Tech Stack
-
-- **Runtime**: Cloudflare Workers
-- **Framework**: Hono.js
-- **Database**: Cloudflare D1 (SQLite)
-- **Storage**: Cloudflare R2
-- **Cache**: Cloudflare KV
-- **Real-time**: Durable Objects
-- **Queue**: Cloudflare Queues
-- **Language**: TypeScript
-- **Validation**: Zod
-- **Testing**: Vitest
-
-## 📁 Project Structure
-
-```
-tirak-backend/
-├── src/
-│   ├── index.ts                    # Main worker entry point
-│   ├── types/                      # TypeScript type definitions
-│   ├── utils/                      # Utility functions
-│   ├── middleware/                 # Request middleware
-│   ├── routes/                     # API route handlers
-│   ├── durable-objects/            # Real-time services
-│   └── background/                 # Background job processors
-├── migrations/                     # Database migrations
-├── scripts/                        # Deployment and utility scripts
-├── wrangler.toml                   # Cloudflare configuration
-└── package.json                    # Dependencies and scripts
-```
-
-## 🚦 Getting Started
-
-### Prerequisites
-
-- Node.js 18+ 
-- npm or yarn
-- Cloudflare account with Workers enabled
-- Wrangler CLI installed globally
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd tirak-backend
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Set up Cloudflare resources**
-   ```bash
-   # Login to Cloudflare
-   wrangler login
-   
-   # Create D1 database
-   wrangler d1 create tirak-development
-   
-   # Create R2 bucket
-   wrangler r2 bucket create tirak-storage-dev
-   
-   # Create KV namespaces
-   wrangler kv:namespace create "CACHE"
-   wrangler kv:namespace create "SESSIONS"
-   ```
-
-4. **Update wrangler.toml**
-   - Replace placeholder IDs with actual resource IDs from step 3
-
-5. **Run database migrations**
-   ```bash
-   npm run db:migrate
-   ```
-
-6. **Start development server**
-   ```bash
-   npm run dev
-   ```
-
-## 🗄 Database Setup
-
-The project uses Cloudflare D1 (SQLite) with migrations for schema management.
-
-### Running Migrations
+## Local commands
 
 ```bash
-# Development
-npm run db:migrate
-
-# Staging
-npm run db:migrate:staging
-
-# Production
-npm run db:migrate:production
+npm install          # bun.lock is the pinned lockfile; `bun install --frozen-lockfile` reproduces it exactly
+npm run test         # vitest (use `npm run test:run` for a single non-watch run)
+npm run typecheck    # tsc --noEmit
+npm run dev          # wrangler dev (needs JWT_SECRET in an untracked .dev.vars)
 ```
 
-### Seeding Data
+Some tests shell out to the `sqlite3` CLI, so install it locally. There is no
+hosted CI: GitHub Actions were removed on 2026-10-08 for local job migration.
+Deployment, migrations and secrets are owner-gated and out of scope for
+routine changes. Do not run the `deploy:*` or `db:migrate:*` scripts without
+a separately approved release.
 
-```bash
-npm run db:seed
-```
+## Runtime bindings (`src/index.ts` `Env`, `wrangler.toml`)
 
-## 🚀 Deployment
+| Binding | Kind | Purpose |
+|---|---|---|
+| `DB` | D1 | All relational data (migrations in `migrations/`) |
+| `STORAGE` | R2 | Uploads, avatars, onboarding evidence |
+| `CACHE`, `SESSIONS` | KV | Cache, OTP codes, rate limits, sessions |
+| `PAYMENT_CONFIG_KV` | KV (staging only) | Runtime payment-policy override |
+| `MODERATION_QUEUE`, `ANALYTICS_QUEUE`, `NOTIFICATION_QUEUE` | Queues | Background jobs (`src/background/`) |
+| `CHAT_ROOM` | Durable Object `ChatRoom` | Booking chat WebSocket rooms |
+| `NOTIFICATION_SERVICE` | Durable Object `NotificationService` | In-app real-time notifications |
+| `EMAIL` | Cloudflare email binding | Transactional email (provider chosen by `EMAIL_PROVIDER`) |
 
-### Staging Deployment
+Key vars: `ENVIRONMENT`, `FRONTEND_URLS` (CORS allow-list), `PAYMENT_MODE`,
+`PROMPTPAY_ENABLED`, `PAYMENT_PRODUCTION_POLICY_WRITES_ENABLED`,
+`EMAIL_PROVIDER`, `SUPPORT_NOTIFICATIONS_ENABLED`, `CORE_QA_MODE`. Secrets
+(`JWT_SECRET`, provider keys) are Worker secrets and never belong in Git.
 
-```bash
-npm run deploy:staging
-```
+The default Worker (`tirak-backend`) is the live target: `ENVIRONMENT` is
+`production` but it keeps the retained `tirak-development` D1 and
+`tirak-storage-dev` R2 so existing users are preserved. `env.staging` and
+`env.production` are separate, not-yet-live targets.
 
-### Production Deployment
+## CORS
 
-```bash
-npm run deploy:production
-```
+Allowed origins are `FRONTEND_URLS` (comma-separated), any
+`http(s)://localhost` / `127.0.0.1` port, and the `tirak://` app scheme.
+Allowed headers: `Content-Type`, `Authorization`, `Idempotency-Key`.
+`/api/admin/*` additionally applies an admin CORS layer (same
+`FRONTEND_URLS` plus localhost, credentials allowed).
 
-## 📊 Monitoring
+## Mounted routes
 
-### View Logs
+`/health` is public. Unless noted, `/api/*` groups require a bearer JWT. In
+`ENVIRONMENT=core-qa` with `CORE_QA_MODE=cohort`, `src/middleware/coreQa.ts`
+additionally restricts every API route to the QA cohort.
 
-```bash
-# Development
-npm run logs
+| Mount | Source | Notes |
+|---|---|---|
+| `/api/auth` | `routes/auth.ts` | register, login, logout, email verification, phone OTP, password reset (public) |
+| `/auth` | `routes/passwordResetPage.ts` | browser password-reset page (public) |
+| `/api/public` | `routes/public.ts` | stats, categories, regions, featured suppliers, config, health, vendor application (public) |
+| `/api/supplier-onboarding` | `routes/supplierOnboarding.ts`, `routes/evidence.ts` | application submit/status (public), evidence upload (status token) |
+| `/api/support-requests` | `routes/supportRequests.ts` | public support form |
+| `/api/interest` | `routes/interest.ts` | public interest/waitlist capture |
+| `/api/users` | `routes/users.ts` | profile, settings, consents, avatar, account deletion |
+| `/api/suppliers` | `routes/suppliers.ts` | guide profile, services, stats |
+| `/api/customers` | `routes/customers.ts` | traveler profile, bookings, favourites |
+| `/api/uploads` | `routes/uploads.ts` | image/document upload, public file reads |
+| `/api/chat` | `routes/chat.ts` | booking-scoped rooms, messages, socket ticket, WebSocket |
+| `/api/bookings` | `routes/bookings.ts` | create (Idempotency-Key), list, detail, status |
+| `/api/reviews` | `routes/reviews.ts` | create, list by guide |
+| `/api/payments` | `routes/payments.ts` | Omise charges and webhook; disabled while `PAYMENT_MODE=disabled` |
+| `/api/notifications` | `routes/notifications.ts` | list/read/delete, preferences, Expo push token |
+| `/api/companions` | `routes/companions.ts` | guide discovery and detail |
+| `/api/search` | `routes/search.ts` | suggestions, categories, locations, popular, tracking |
+| `/api/referrals` | `routes/referrals.ts` | own code, apply |
+| `/api/admin` | `routes/admin/` | admin role only: dashboard, users, moderation, analytics, subscriptions, operations, supplier-onboarding, payments provider policy, interest, support-requests, acquisition |
 
-# Staging
-npm run logs:staging
+`routes/paymentIntentsV2.ts` is source-only and deliberately unmounted until a
+separate payment review. `tests/routes/release-surface.test.ts` pins that no
+legacy general-conversation (`/api/conversations`) or unscoped `/ws` route is
+mounted.
 
-# Production
-npm run logs:production
-```
+## Current gaps
 
-## 🧪 Testing
+- **Payments:** Omise PromptPay source exists but every environment ships with
+  `PAYMENT_MODE=disabled`; bookings are non-payment today.
+- **SMS:** no provider is integrated. Phone OTP resend and SMS notification
+  jobs report failure rather than a simulated send.
+- **Push:** delivered through the Expo Push service from the notification
+  queue. The `NotificationService` Durable Object's own FCM/APNS path is a
+  placeholder and nothing registers device tokens with it.
+- **Moderation:** queue jobs use keyword heuristics; no AI moderation service
+  is wired.
+- **Scheduled jobs:** `scheduled()` processes support notifications only when
+  `SUPPORT_NOTIFICATIONS_ENABLED=true` (default `false`). `wrangler.toml`
+  declares no cron; the live Worker keeps an existing five-minute provider
+  trigger that is held as-is (see
+  `docs/execution/retained-core-release-preparation.md`).
 
-```bash
-# Run tests
-npm test
+## Historical documents
 
-# Run tests with coverage
-npm run test:coverage
-
-# Type checking
-npm run typecheck
-```
-
-## 🔧 Configuration
-
-### Environment Variables
-
-Set these via `wrangler secret put`:
-
-```bash
-wrangler secret put JWT_SECRET
-wrangler secret put SMS_API_KEY
-wrangler secret put OPENAI_API_KEY
-```
-
-### Wrangler Configuration
-
-The `wrangler.toml` file contains environment-specific configurations:
-
-- **Development**: Local development with dev resources
-- **Staging**: Pre-production testing environment  
-- **Production**: Live production environment
-
-## 📚 API Documentation
-
-### Authentication Endpoints
-
-- `POST /api/auth/register` - User registration
-- `POST /api/auth/login` - User login
-- `POST /api/auth/verify-phone` - Phone verification
-- `POST /api/auth/refresh` - Token refresh
-
-### User Management
-
-- `GET /api/users/profile` - Get user profile
-- `PUT /api/users/profile` - Update user profile
-- `POST /api/users/upload-avatar` - Upload profile image
-
-### Supplier Discovery
-
-- `GET /api/suppliers/search` - Search suppliers
-- `GET /api/suppliers/:id` - Get supplier details
-
-### Chat System
-
-- `GET /api/chat/rooms` - Get chat rooms
-- `POST /api/chat/rooms` - Create chat room
-- `WebSocket /api/chat/ws` - Real-time messaging
-
-## 🔒 Security
-
-- JWT-based authentication
-- Role-based authorization
-- Rate limiting
-- Input validation with Zod
-- CORS protection
-- Content Security Policy
-- Automated content moderation
-
-## 🌍 Internationalization
-
-The platform supports multiple languages:
-
-- English (en)
-- Thai (th)
-
-Language detection is based on user preferences and Accept-Language headers.
-
-## 📈 Analytics
-
-The platform tracks various events for business intelligence:
-
-- User registration and login
-- Supplier searches and views
-- Chat interactions
-- Booking activities
-- Performance metrics
-
-## 🛡 Content Moderation
-
-Automated moderation includes:
-
-- Text analysis for inappropriate content
-- Image analysis for explicit content
-- Spam detection
-- Manual review workflow
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🆘 Support
-
-For support and questions:
-
-- Create an issue in the repository
-- Contact the development team
-- Check the documentation
-
-## 🗺 Roadmap
-
-- [ ] Payment processing integration
-- [ ] Advanced analytics dashboard
-- [ ] Mobile push notifications
-- [ ] Machine learning recommendations
-- [ ] Multi-region deployment
-- [ ] Advanced search with Elasticsearch
+`IMPLEMENTATION_COMPLETE_SUMMARY.md`, `PHASE3_COMPLETION_SUMMARY.md`,
+`done.md`, `todo-backend.md`, `mobile-app-backend.md`,
+`tirak_implementation_guide.md`, `webapp-admin-implementation.md` and
+`_PROJECT-STATUS.md` are early planning and status snapshots. They are kept
+for history and do not describe the current API.

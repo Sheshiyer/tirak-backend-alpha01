@@ -1,3 +1,5 @@
+> **Historical document (marked 2026-11-24).** This is an early planning or status snapshot kept for history. It does not describe the current API, routes or release state. See `README.md` and `docs/execution/` for current status.
+
 Backend Integration Requirements Document
 This document provides a comprehensive overview of all screens, features, modals, notifications, and UI components in the Tirak admin dashboard that require backend integration and live data implementation.
 

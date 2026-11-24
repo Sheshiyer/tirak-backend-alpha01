@@ -1,3 +1,5 @@
+> **Historical document (marked 2026-11-24).** This is an early planning or status snapshot kept for history. It does not describe the current API, routes or release state. See `README.md` and `docs/execution/` for current status.
+
 # Backend Route And Schema Inventory
 
 Date: 2026-05-18
@@ -31,7 +33,7 @@ This inventory supports INT-001. It maps the current backend surface before Muse
 | `/api/payments` | `src/routes/payments.ts` | protected | `payment_methods`, bookings/payments views | Must remain behind payment compliance gate. |
 | `/api/notifications` | `src/routes/notifications.ts` | protected | `notifications`, user preferences | Uses mobile notification assumptions. |
 | `/api/companions` | `src/routes/companions.ts` | optional auth | `supplier_profiles`, `supplier_services`, `supplier_availability`, `reviews` | Product-facing companion API exists but still depends on ratings/reviews. |
-| `/api/conversations` | `src/routes/conversations.ts` | protected | `chat_rooms`, `chat_messages` | Useful for Muse-to-inquiry handoff and admin monitoring. |
+| `/api/conversations` | removed (was `src/routes/conversations.ts`) | — | `chat_rooms`, `chat_messages` | Never mounted; superseded by booking-scoped `/api/chat`. Source removed 2026-11-24. |
 | `/api/search` | `src/routes/search.ts` | optional auth | `supplier_profiles`, `supplier_services`, `regions`, `categories`, `analytics_events`, `CACHE` | Search suggestions and discovery support. |
 | `/api/admin` | `src/routes/admin/index.ts` | admin | admin subroutes | Production admin API baseline. |
 

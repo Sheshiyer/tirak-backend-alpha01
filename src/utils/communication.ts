@@ -359,24 +359,13 @@ async function sendTwilioSMS(
   message: string,
   deliveryId: string
 ): Promise<DeliveryStatus> {
-  // In a real implementation, you would use the Twilio SDK
-  // For now, we'll simulate the API call
-  
   if (!config.accountSid || !config.authToken || !config.fromNumber) {
     throw new Error('Missing Twilio configuration');
   }
 
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 100));
-  
-  // For development, we'll always return success
-  // In production, replace with actual Twilio API call
-  return {
-    id: deliveryId,
-    status: 'sent',
-    timestamp: new Date(),
-    provider: 'twilio'
-  };
+  // No Twilio API call is implemented. Report failure instead of a simulated
+  // success so callers never tell a user that a code was sent when it was not.
+  throw new Error('Twilio SMS delivery is not implemented');
 }
 
 // AWS SNS SMS implementation
@@ -386,24 +375,13 @@ async function sendAWSSMS(
   message: string,
   deliveryId: string
 ): Promise<DeliveryStatus> {
-  // In a real implementation, you would use the AWS SDK
-  // For now, we'll simulate the API call
-  
   if (!config.accessKeyId || !config.secretAccessKey || !config.region) {
     throw new Error('Missing AWS SNS configuration');
   }
 
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 100));
-  
-  // For development, we'll always return success
-  // In production, replace with actual AWS SNS API call
-  return {
-    id: deliveryId,
-    status: 'sent',
-    timestamp: new Date(),
-    provider: 'aws-sns'
-  };
+  // No AWS SNS API call is implemented. Report failure instead of a simulated
+  // success so callers never tell a user that a code was sent when it was not.
+  throw new Error('AWS SNS SMS delivery is not implemented');
 }
 
 // SendGrid email implementation
