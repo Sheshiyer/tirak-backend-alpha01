@@ -126,3 +126,10 @@ No deployment, binding, secret, migration, trigger or provider change.
   early planning/status docs marked historical.
 - Open: SMS provider choice, AI moderation, payments enablement, and whether
   PR #30 (now behind main) should be closed as superseded.
+- `/api/public/categories`, `/regions` and `/config` now return the same
+  canonical envelope on KV cache hit and miss; cache keys moved to
+  `public:v2:*` so old-shape entries are never served. Covered by
+  `tests/routes/public-cache-envelope.test.ts`.
+- `scripts/seed-data.sql` category insert used non-existent `icon`/`color`
+  columns and aborted the seed; fixed. No migration populates categories or
+  regions; the seed's later test-user section still fails on current schema.
